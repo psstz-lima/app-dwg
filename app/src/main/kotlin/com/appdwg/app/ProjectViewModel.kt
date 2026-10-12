@@ -24,6 +24,11 @@ import com.appdwg.core.RandomInput
 import com.appdwg.core.Raster
 import com.appdwg.core.TiffReader
 import com.appdwg.core.WorldFile
+import com.appdwg.core.Placement
+import com.appdwg.core.Surface
+import com.appdwg.core.SurfaceCompare
+import com.appdwg.core.SurfaceDifference
+import com.appdwg.core.XrefDrawing
 import com.appdwg.core.Xrefs
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -40,6 +45,9 @@ sealed interface ProjectState {
 }
 
 private const val HEAD_SIZE = 64
+
+/** Placement that leaves a drawing where it is. */
+private val IDENTITY = Placement(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, "0")
 
 /** Picture laid over the surfaces ("imagem sobre a superfície"), placed at [bounds] in plan. */
 class Drape(val name: String, val bounds: Bounds, val image: ImageBitmap, val placement: String)
@@ -137,6 +145,102 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun overlaps(a: Bounds, b: Bounds) = a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY
+
+    // ---- Files added to the open project and surface comparison ----
+
+    /** Other files laid over the open one (name shown, read project), in the order added. */
+    var addedFiles by mutableStateOf<List<Pair<String, LandXmlProject>>>(emptyList())
+        private set
+    var addedFileUris: List<Uri> = emptyList()
+        private set
+    var compareMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** B − A of the last comparison and its color picture, shown while [differenceVisible]. */
+    var difference by mutableStateOf<SurfaceDifference?>(null)
+        private set
+    var differenceImage by mutableStateOf<TerrainImage?>(null)
+        private set
+    var differenceVisible by mutableStateOf(true)
+
+    /** Reads another file and lays it over the open project; its surfaces are named after the file. */
+    fun addFile(uri: Uri) {
+        runCatching {
+            getApplication<Application>().contentResolver
+                .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        compareMessage = null
+        val name = displayName(uri)
+        viewModelScope.launch {
+            try {
+                val drawing = tracked("Adicionando $name") { t -> withContext(Dispatchers.IO) { read(uri, t) } }
+                if (drawing.surfaces.isEmpty() && drawing.alignments.isEmpty() && drawing.cgPoints.isEmpty() && drawing.polylines.isEmpty()) {
+                    compareMessage = "$name não tem superfície, alinhamento, ponto nem linha."
+                    return@launch
+                }
+                // Unique label, so the same file name added twice still reads apart.
+                var label = name.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
+                var k = 2
+                while (addedFiles.any { it.first == label }) label = name.substringBeforeLast('.') + " ($k)".also { k++ }
+                addedFiles = addedFiles + (label to drawing)
+                addedFileUris = addedFileUris + uri
+                refreshProject()
+                compareMessage = "$name adicionado: " + listOfNotNull(
+                    drawing.surfaces.size.takeIf { it > 0 }?.let { "$it superfície(s)" },
+                    drawing.alignments.size.takeIf { it > 0 }?.let { "$it alinhamento(s)" },
+                    drawing.cgPoints.size.takeIf { it > 0 }?.let { "$it ponto(s)" },
+                    drawing.polylines.size.takeIf { it > 0 }?.let { "${it} linha(s)" },
+                ).joinToString(", ") + "."
+            } catch (e: OutOfMemoryError) {
+                compareMessage = "Arquivo grande demais para a memória deste aparelho."
+            } catch (e: Exception) {
+                compareMessage = "Não foi possível ler $name: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    fun removeFile(label: String) {
+        val i = addedFiles.indexOfFirst { it.first == label }
+        if (i < 0) return
+        addedFiles = addedFiles.filterIndexed { j, _ -> j != i }
+        addedFileUris = addedFileUris.filterIndexed { j, _ -> j != i }
+        val d = difference
+        if (d != null && (d.baseName.startsWith("$label|") || d.otherName.startsWith("$label|"))) clearDifference()
+        refreshProject()
+    }
+
+    fun clearDifference() {
+        difference = null
+        differenceImage = null
+    }
+
+    /** Compares surface [other] (B) against [base] (A): colored B − A and cut/fill volumes. */
+    fun compare(base: String, other: String) {
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val a = project.surfaces.firstOrNull { it.name == base } ?: return
+        val b = project.surfaces.firstOrNull { it.name == other } ?: return
+        compareMessage = null
+        viewModelScope.launch {
+            try {
+                val result = tracked("Comparando superfícies") { t ->
+                    withContext(Dispatchers.Default) {
+                        t.step("Calculando diferença e volumes")
+                        SurfaceCompare.difference(a, b)?.let { it to DifferenceImage.of(it) }
+                    }
+                }
+                if (result == null) {
+                    compareMessage = "As duas superfícies não se sobrepõem."
+                    clearDifference()
+                } else {
+                    difference = result.first
+                    differenceImage = result.second
+                    differenceVisible = true
+                }
+            } catch (e: OutOfMemoryError) {
+                compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+            }
+        }
+    }
 
     /** Why the last picture could not be loaded, for the images dialog. */
     var rasterError by mutableStateOf<String?>(null)
@@ -242,6 +346,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 for (x in p.xrefs) {
                     if (x.name in unloaded) continue
                     xrefDrawings[x.name]?.let { p = Xrefs.attach(p, x, it) }
+                }
+                // Added files sit where they are: an identity placement names their layers and
+                // surfaces "file|name".
+                for ((label, drawing) in addedFiles) {
+                    p = Xrefs.attach(p, XrefDrawing(label, label, listOf(IDENTITY), overlay = true), drawing)
+                    // A surface named like its file (point caches) reads better as just the file name.
+                    p = p.copy(
+                        alignments = p.alignments + drawing.alignments,
+                        surfaces = p.surfaces.map { s ->
+                            if (s.name == "$label|$label") Surface(label, s.xs, s.ys, s.zs, s.triangles) else s
+                        },
+                    )
                 }
                 val extra = p.surfaces.filter { s -> baseTerrain.none { it.name == s.name } }
                 extra.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
@@ -357,6 +473,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     detached = emptySet()
                     pathEdits = emptyMap()
                     referenceMessage = null
+                    addedFiles = emptyList()
+                    addedFileUris = emptyList()
+                    compareMessage = null
+                    clearDifference()
                     restoreRasters(project)
                     restoreXrefs(project)
                     ProjectState.Loaded(name, project, terrain)

@@ -31,6 +31,10 @@ exporta com os dados reais de projeto.
 - Seção transversal (botão "Seção"): escolha a estaca digitando ("12+5,40"), com −20/+20 ou tocando
   na planta; mostra todas as superfícies na largura escolhida (±10 a ±100 m), o greide no eixo e o
   corte ou aterro. Arraste no gráfico para ler as cotas em qualquer afastamento.
+- Comparar (botão "Comparar"): adicione outros arquivos (DXF, LandXML, .aecc.pnt) ao projeto aberto,
+  todos sobrepostos, com as superfícies nomeadas pelo arquivo. Escolha a superfície A (base) e a B e
+  veja o mapa colorido de B − A com legenda, a diferença no ponto tocado e os volumes de corte e
+  aterro na área comum (malha de até 2 milhões de células). A seção mostra todas as superfícies.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

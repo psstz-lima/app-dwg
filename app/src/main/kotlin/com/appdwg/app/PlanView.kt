@@ -105,6 +105,8 @@ fun PlanView(
     snap: Boolean = false,
     /** Ends of the cross section being shown, drawn across the alignment. */
     sectionLine: Pair<Point2, Point2>? = null,
+    /** Colored picture drawn over the terrain, such as the difference between two surfaces. */
+    overlay: TerrainImage? = null,
 ) {
     val bounds = project.bounds ?: return
     val origin = bounds.center
@@ -211,6 +213,7 @@ fun PlanView(
             drawTerrain(TerrainImage(drape.name, drape.bounds, drape.image), BlendMode.SrcAtop) { toScreen(it, cam) }
             drawContext.canvas.restore()
         }
+        if (overlay != null) drawTerrain(overlay, alpha = 0.9f) { toScreen(it, cam) }
 
         withTransform({
             translate(size.width / 2f, size.height / 2f)
@@ -300,7 +303,7 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: P
 }
 
 /** Draws only the part of the terrain image that is on screen, so deep zoom stays cheap. */
-private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendMode.SrcOver, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendMode.SrcOver, alpha: Float = 1f, toScreen: (Point2) -> Offset) {
     val topLeft = toScreen(Point2(t.bounds.minX, t.bounds.maxY))
     val bottomRight = toScreen(Point2(t.bounds.maxX, t.bounds.minY))
     val pxW = (bottomRight.x - topLeft.x) / t.image.width
@@ -321,6 +324,7 @@ private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendM
             ((bottom - top) * pxH).roundToInt().coerceAtLeast(1),
         ),
         blendMode = blendMode,
+        alpha = alpha,
     )
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.appdwg.core.Bounds
 import com.appdwg.core.ElevationGrid
 import com.appdwg.core.Surface
+import com.appdwg.core.SurfaceDifference
 import kotlin.math.sqrt
 
 /** Shaded elevation image of the surface [name], positioned by [bounds] in plan coordinates. */
@@ -85,4 +86,39 @@ class TerrainImage(val name: String, val bounds: Bounds, val image: ImageBitmap)
             return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
         }
     }
+}
+
+/** Colored map of B − A: red where B is below A (cut), blue where above (fill), white near zero. */
+object DifferenceImage {
+    /** Difference shown at full color, in metres: the typical range, never under 5 cm. */
+    fun scale(d: SurfaceDifference) = maxOf(d.typicalRange, 0.05)
+
+    fun of(d: SurfaceDifference): TerrainImage {
+        val g = d.grid
+        val s = scale(d).toFloat()
+        val pixels = IntArray(g.cols * g.rows)
+        for (i in pixels.indices) {
+            val v = g.values[i]
+            if (v.isNaN()) continue
+            pixels[i] = color((v / s).coerceIn(-1f, 1f))
+        }
+        val bitmap = Bitmap.createBitmap(pixels, g.cols, g.rows, Bitmap.Config.ARGB_8888)
+        return TerrainImage("${d.otherName} − ${d.baseName}", g.bounds, bitmap.asImageBitmap())
+    }
+
+    /** Color for a difference scaled to −1 (full cut) .. +1 (full fill). */
+    fun color(t: Float): Int {
+        val end = if (t < 0) CUT else FILL
+        val f = kotlin.math.abs(t)
+        fun ch(shift: Int): Int {
+            val w = (NEUTRAL shr shift) and 0xFF
+            val e = (end shr shift) and 0xFF
+            return (w + (e - w) * f).toInt()
+        }
+        return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+    }
+
+    const val CUT = 0xD32F2F
+    const val FILL = 0x1565C0
+    private const val NEUTRAL = 0xF5F5F5
 }

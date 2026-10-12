@@ -67,6 +67,7 @@ import com.appdwg.core.Point2
 import com.appdwg.core.PointInfo
 import com.appdwg.core.PointQuery
 import com.appdwg.core.StationFormat
+import com.appdwg.core.SurfaceDifference
 import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
@@ -182,6 +183,15 @@ private fun ProjectScreen(
         }
     }
     val drape = vm.drape?.takeIf { vm.drapeVisible }
+    // Files laid over this one and the two surfaces compared.
+    var showCompare by remember(fileName) { mutableStateOf(false) }
+    var compareBase by rememberSaveable(fileName) { mutableStateOf<String?>(null) }
+    var compareOther by rememberSaveable(fileName) { mutableStateOf<String?>(null) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.addFile(uri)
+    }
+    val difference = vm.difference
+    val differenceOverlay = vm.differenceImage?.takeIf { vm.differenceVisible }
     val rasters = vm.rasters.filterKeys { it !in vm.unloaded }
     // The tapped position survives rotation; the info shown is recomputed from it.
     var tapped by rememberSaveable(fileName, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
@@ -276,6 +286,7 @@ private fun ProjectScreen(
             measure = if (measuring) measurePoints else emptyList(),
             snap = measuring,
             sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) },
+            overlay = differenceOverlay,
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
@@ -310,6 +321,7 @@ private fun ProjectScreen(
                             Text("Imagem")
                         }
                     }
+                    TextButton(onClick = { showCompare = true }) { Text("Comparar") }
                     if (vm.hasReferences) {
                         TextButton(onClick = { showReferences = true }) { Text("Referências") }
                     }
@@ -317,6 +329,9 @@ private fun ProjectScreen(
                         TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos")) }
                     }
                 }
+            }
+            if (differenceOverlay != null && difference != null && !show3d) {
+                DifferenceLegend(difference, Modifier.padding(top = 8.dp))
             }
         }
 
@@ -357,13 +372,26 @@ private fun ProjectScreen(
             )
         } else {
             // Capped so the card stays readable instead of stretching across a tablet in landscape.
-            InfoCard(current, Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
+            InfoCard(current, differenceAt(project, difference, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
         BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(8.dp).widthIn(max = 360.dp))
     }
 
     if (showDrape) {
         DrapeDialog(vm, onPick = { drapePicker.launch(arrayOf("*/*")) }, onDismiss = { showDrape = false })
+    }
+
+    if (showCompare) {
+        CompareDialog(
+            vm = vm,
+            project = project,
+            base = compareBase,
+            other = compareOther,
+            onBase = { compareBase = it },
+            onOther = { compareOther = it },
+            onAddFile = { filePicker.launch(arrayOf("*/*")) },
+            onDismiss = { showCompare = false },
+        )
     }
 
     if (showReferences) {
@@ -439,7 +467,7 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
 }
 
 @Composable
-private fun InfoCard(info: PointInfo, modifier: Modifier) {
+private fun InfoCard(info: PointInfo, difference: String?, modifier: Modifier) {
     Card(modifier) {
         Column(Modifier.padding(12.dp)) {
             val a = info.alignment
@@ -455,9 +483,24 @@ private fun InfoCard(info: PointInfo, modifier: Modifier) {
                     Line(if (it >= 0) "Aterro" else "Corte", StationFormat.decimal(abs(it), 3) + " m")
                 }
             }
+            difference?.let { Line("B − A no ponto", it) }
             Line("Terreno no ponto", info.terrainElevation?.let { StationFormat.decimal(it, 3) + " m" } ?: "fora da superfície")
             Line("E / N", StationFormat.decimal(info.position.x, 3) + " / " + StationFormat.decimal(info.position.y, 3))
         }
+    }
+}
+
+/** B − A at [p] with the surfaces of the last comparison, as "+0,250 m (aterro)"; null without one. */
+private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Point2): String? {
+    d ?: return null
+    val za = project.surfaces.firstOrNull { it.name == d.baseName }?.elevationAt(p)
+    val zb = project.surfaces.firstOrNull { it.name == d.otherName }?.elevationAt(p)
+    if (za == null || zb == null) return "fora de uma das superfícies"
+    val v = zb - za
+    return signed(v, 3) + " m" + when {
+        v > 0.0005 -> " (aterro)"
+        v < -0.0005 -> " (corte)"
+        else -> ""
     }
 }
 
