@@ -23,9 +23,9 @@ object StationFormat {
     fun decimal(value: Double, digits: Int = 2): String =
         String.format(PT_BR, "%.${digits}f", value)
 
-    /** Offset with side: "3,25 D" (right) or "3,25 E" (left). */
+    /** Offset in metres with side: "3,25 m D" (right) or "3,25 m E" (left). */
     fun offset(value: Double): String =
-        decimal(abs(value)) + if (value >= 0) " D" else " E"
+        decimal(abs(value)) + if (value >= 0) " m D" else " m E"
 
     private val PT_BR = Locale.forLanguageTag("pt-BR")
 }

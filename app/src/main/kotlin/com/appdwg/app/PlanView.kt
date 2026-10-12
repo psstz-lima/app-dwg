@@ -6,9 +6,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -55,6 +58,11 @@ data class PlanColors(
  */
 private class Camera(var centerX: Double, var centerY: Double, var scale: Double)
 
+private val CameraSaver = Saver<MutableState<Camera?>, DoubleArray>(
+    save = { state -> state.value?.let { doubleArrayOf(it.centerX, it.centerY, it.scale) } },
+    restore = { mutableStateOf(Camera(it[0], it[1], it[2])) },
+)
+
 @Composable
 fun PlanView(
     project: LandXmlProject,
@@ -69,7 +77,8 @@ fun PlanView(
     val origin = bounds.center
     val scene = remember(project) { Scene.build(project, origin) }
     var size by remember { mutableStateOf(IntSize.Zero) }
-    var camera by remember(project) { mutableStateOf<Camera?>(null) }
+    // Saved so rotating the device keeps the current zoom and position.
+    var camera by rememberSaveable(project, saver = CameraSaver) { mutableStateOf<Camera?>(null) }
     // Bumped on every gesture so the Canvas redraws; the camera itself is mutated in place.
     var frame by remember { mutableStateOf(0) }
 

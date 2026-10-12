@@ -42,7 +42,7 @@ class GeometryTest {
         assertEquals("12 + 5,40", StationFormat.estaca(245.4))
         assertEquals("0 + 0,00", StationFormat.estaca(0.0))
         assertEquals("1 + 0,00", StationFormat.estaca(19.999))
-        assertEquals("3,25 E", StationFormat.offset(-3.25))
-        assertEquals("3,25 D", StationFormat.offset(3.25))
+        assertEquals("3,25 m E", StationFormat.offset(-3.25))
+        assertEquals("3,25 m D", StationFormat.offset(3.25))
     }
 }

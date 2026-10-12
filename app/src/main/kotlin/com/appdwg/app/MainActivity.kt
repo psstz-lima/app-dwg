@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -36,6 +37,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.LandXmlProject
+import com.appdwg.core.Point2
 import com.appdwg.core.PointInfo
 import com.appdwg.core.PointQuery
 import com.appdwg.core.StationFormat
@@ -146,7 +150,9 @@ private fun Message(text: String, openFile: () -> Unit) {
 
 @Composable
 private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) {
-    var info by remember(project) { mutableStateOf<PointInfo?>(null) }
+    // The tapped position survives rotation; the info shown is recomputed from it.
+    var tapped by rememberSaveable(project, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
+    val info = remember(project, tapped) { tapped?.let { PointQuery.at(project, it) } }
     var showWarnings by remember(project) { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     val colors = PlanColors(
@@ -165,7 +171,7 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             colors = colors,
             marker = info?.position,
             markerOnAxis = info?.alignment?.stationOffset?.pointOnAlignment,
-            onTap = { info = PointQuery.at(project, it) },
+            onTap = { tapped = it },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -188,7 +194,8 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
                 style = MaterialTheme.typography.labelMedium,
             )
         } else {
-            InfoCard(current, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(8.dp))
+            // Capped so the card stays readable instead of stretching across a tablet in landscape.
+            InfoCard(current, Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
     }
 
@@ -215,7 +222,7 @@ private fun InfoCard(info: PointInfo, modifier: Modifier) {
                 Text(a.name, style = MaterialTheme.typography.titleSmall)
                 Line("Estaca", StationFormat.estaca(a.stationOffset.station) +
                     "  (${StationFormat.decimal(a.stationOffset.station)} m)")
-                Line("Afastamento", StationFormat.offset(a.stationOffset.offset) + " m" +
+                Line("Afastamento", StationFormat.offset(a.stationOffset.offset) +
                     if (a.stationOffset.outside) "  (fora do eixo)" else "")
                 a.designElevation?.let { Line("Greide no eixo", StationFormat.decimal(it, 3) + " m") }
                 a.terrainOnAxis?.let { Line("Terreno no eixo", StationFormat.decimal(it, 3) + " m") }
@@ -243,5 +250,10 @@ private fun summary(p: LandXmlProject): String = buildList {
     if (p.cgPoints.isNotEmpty()) add(plural(p.cgPoints.size, "ponto", "pontos"))
     p.coordinateSystem?.epsgCode?.let { add("EPSG $it") }
 }.joinToString(" · ")
+
+private val Point2Saver = Saver<Point2?, DoubleArray>(
+    save = { p -> p?.let { doubleArrayOf(it.x, it.y) } },
+    restore = { Point2(it[0], it[1]) },
+)
 
 private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
