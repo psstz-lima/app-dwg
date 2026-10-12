@@ -21,6 +21,7 @@ import com.appdwg.core.LandXmlReader
 import com.appdwg.core.RandomInput
 import com.appdwg.core.Raster
 import com.appdwg.core.TiffReader
+import com.appdwg.core.Xrefs
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +55,121 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private val prefs = app.getSharedPreferences("rasters", Context.MODE_PRIVATE)
+
+    // ---- External references (images and xref drawings) ----
+
+    private var sourceUri: Uri? = null
+    private var base: LandXmlProject? = null
+    private var baseTerrain: List<TerrainImage> = emptyList()
+    private var xrefDrawings: Map<String, LandXmlProject> = emptyMap()
+
+    /** References turned off ("descarregadas") or removed ("desanexadas"), by name or image path. */
+    var unloaded by mutableStateOf<Set<String>>(emptySet())
+        private set
+    var detached by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** New paths typed for the references (original path to new one), for saving a DXF copy. */
+    var pathEdits by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    /** Names of the xref drawings loaded, and a message about the last reference action. */
+    var loadedXrefs by mutableStateOf<Set<String>>(emptySet())
+        private set
+    var referenceMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** True when the open drawing has images or xrefs, detached ones included. */
+    val hasReferences get() = base?.let { it.images.isNotEmpty() || it.xrefs.isNotEmpty() } ?: false
+
+    /** All references of the open drawing, detached ones included, for the references dialog. */
+    val allImages get() = base?.images.orEmpty()
+    val allXrefs get() = base?.xrefs.orEmpty()
+
+    fun editPath(original: String, newPath: String) {
+        pathEdits = if (newPath == original) pathEdits - original else pathEdits + (original to newPath)
+    }
+
+    fun setUnloaded(key: String, value: Boolean) {
+        unloaded = if (value) unloaded + key else unloaded - key
+        refreshProject()
+    }
+
+    fun setDetached(key: String, value: Boolean) {
+        detached = if (value) detached + key else detached - key
+        refreshProject()
+    }
+
+    /** Reads the DXF chosen for xref [name] and draws it at its placements. */
+    fun loadXref(name: String, path: String, uri: Uri) {
+        runCatching {
+            getApplication<Application>().contentResolver
+                .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        referenceMessage = null
+        viewModelScope.launch {
+            try {
+                val drawing = withContext(Dispatchers.IO) { read(uri) }
+                xrefDrawings = xrefDrawings + (name to drawing)
+                prefs.edit().putString("xref:$path", uri.toString()).apply()
+                refreshProject()
+            } catch (e: OutOfMemoryError) {
+                referenceMessage = "Desenho grande demais para a memória deste aparelho."
+            } catch (e: Exception) {
+                referenceMessage = "Não foi possível ler ${displayName(uri)}: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /** Writes a copy of the open DXF with the edited reference paths to [target]. */
+    fun saveDxfCopy(target: Uri) {
+        val source = sourceUri ?: return
+        val resolver = getApplication<Application>().contentResolver
+        viewModelScope.launch {
+            referenceMessage = try {
+                withContext(Dispatchers.IO) {
+                    val input = resolver.openInputStream(source) ?: error("arquivo original indisponível")
+                    val output = resolver.openOutputStream(target, "wt") ?: error("destino indisponível")
+                    input.bufferedReader(Charsets.UTF_8).use { r ->
+                        output.bufferedWriter(Charsets.UTF_8).use { w -> Xrefs.rewritePaths(r, w, pathEdits) }
+                    }
+                }
+                "Cópia salva em ${displayName(target)} com ${pathEdits.size} caminho(s) alterado(s)."
+            } catch (e: Exception) {
+                "Não foi possível salvar: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /** Rebuilds the shown project from the base drawing and the loaded, attached xrefs. */
+    private fun refreshProject() {
+        val b = base ?: return
+        val current = state as? ProjectState.Loaded ?: return
+        viewModelScope.launch {
+            val (project, terrain) = withContext(Dispatchers.Default) {
+                var p = b.copy(
+                    images = b.images.filter { it.file !in detached },
+                    xrefs = b.xrefs.filter { it.name !in detached },
+                )
+                for (x in p.xrefs) {
+                    if (x.name in unloaded) continue
+                    xrefDrawings[x.name]?.let { p = Xrefs.attach(p, x, it) }
+                }
+                val extra = p.surfaces.filter { s -> baseTerrain.none { it.name == s.name } }
+                extra.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
+                p to baseTerrain + extra.mapNotNull { TerrainImage.of(it) }
+            }
+            loadedXrefs = xrefDrawings.keys
+            state = current.copy(project = project, terrain = terrain)
+        }
+    }
+
+    private fun restoreXrefs(project: LandXmlProject) {
+        for (x in project.xrefs) {
+            val uri = prefs.getString("xref:${x.path}", null)?.let(Uri::parse) ?: continue
+            loadXref(x.name, x.path, uri)
+        }
+    }
 
     /** Loads the picture for the drawing's image [file] and remembers the choice for next time. */
     fun loadRaster(file: String, uri: Uri) {
@@ -133,7 +249,17 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML ou DXF?")
                 } else {
                     rasters = emptyMap()
+                    sourceUri = uri
+                    base = project
+                    baseTerrain = terrain
+                    xrefDrawings = emptyMap()
+                    loadedXrefs = emptySet()
+                    unloaded = emptySet()
+                    detached = emptySet()
+                    pathEdits = emptyMap()
+                    referenceMessage = null
                     restoreRasters(project)
+                    restoreXrefs(project)
                     ProjectState.Loaded(name, project, terrain)
                 }
             } catch (e: OutOfMemoryError) {

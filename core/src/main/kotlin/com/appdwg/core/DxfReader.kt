@@ -48,6 +48,8 @@ class DxfReader(private val input: BufferedReader) {
     /** IMAGEDEF objects by handle: the path of the raster file. */
     private val imageFiles = HashMap<String, String>()
 
+    private val xrefPlacements = LinkedHashMap<String, ArrayList<Placement>>()
+
     private val modelSpace = ArrayList<Entity>()
     private val blocks = HashMap<String, Block>()
 
@@ -72,7 +74,12 @@ class DxfReader(private val input: BufferedReader) {
             when (section) {
                 "TABLES" -> if (e.type == "LAYER") addLayer(e)
                 "BLOCKS" -> when (e.type) {
-                    "BLOCK" -> block = Block(e.d(10), e.d(20)).also { b -> e.s(2)?.let { blocks[it] = b } }
+                    "BLOCK" -> {
+                        // Flag 4 marks an external reference (xref); its drawing is another file.
+                        val xref = if (e.i(70) and 4 != 0) e.s(1) ?: "" else null
+                        block = Block(e.d(10), e.d(20), xref, e.i(70) and 8 != 0)
+                            .also { b -> e.s(2)?.let { blocks[it] = b } }
+                    }
                     "ENDBLK" -> block = null
                     else -> block?.entities?.add(e)
                 }
@@ -224,7 +231,8 @@ class DxfReader(private val input: BufferedReader) {
     }
 
     private fun readInsert(e: Entity, xf: Xf, ctx: Context, depth: Int) {
-        val block = blocks[e.s(2)] ?: return
+        val name = e.s(2) ?: return
+        val block = blocks[name] ?: return
         if (depth > 8) return
         val sx = e.s(41)?.toDoubleOrNull() ?: 1.0
         val sy = e.s(42)?.toDoubleOrNull() ?: 1.0
@@ -241,7 +249,13 @@ class DxfReader(private val input: BufferedReader) {
                 .times(Xf.rotate(rot))
                 .times(Xf.scale(sx, sy, sz))
                 .times(Xf.translate(-block.baseX, -block.baseY, 0.0))
-            draw(block.entities, xf.times(ocs.asXf()).times(local), ctx, depth + 1)
+            val total = xf.times(ocs.asXf()).times(local)
+            if (block.xrefPath != null) {
+                xrefPlacements.getOrPut(name) { ArrayList() } +=
+                    Placement(total.a, total.b, total.c, total.d, total.e, total.f, total.tz, ctx.layer)
+            } else {
+                draw(block.entities, total, ctx, depth + 1)
+            }
         }
     }
 
@@ -485,6 +499,9 @@ class DxfReader(private val input: BufferedReader) {
             polylines = polylines,
             texts = texts,
             images = images,
+            xrefs = blocks.mapNotNull { (name, b) ->
+                b.xrefPath?.let { XrefDrawing(name, it, xrefPlacements[name].orEmpty(), b.overlay) }
+            }.sortedBy { it.name },
             hatches = hatches,
             layersOff = layersOff,
             layersFrozen = layersFrozen,
@@ -506,7 +523,7 @@ class DxfReader(private val input: BufferedReader) {
         return Surface(layer, xs.toDoubleArray(), ys.toDoubleArray(), zs.toDoubleArray(), triangles)
     }
 
-    private class Block(val baseX: Double, val baseY: Double) {
+    private class Block(val baseX: Double, val baseY: Double, val xrefPath: String? = null, val overlay: Boolean = false) {
         val entities = ArrayList<Entity>()
     }
 

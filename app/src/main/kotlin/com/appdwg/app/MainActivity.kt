@@ -43,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -122,9 +123,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     CircularProgressIndicator()
                 }
                 is ProjectState.Failed -> Message(state.message, openFile)
-                is ProjectState.Loaded -> ProjectScreen(
-                    state.project, state.terrain, viewModel.rasters, viewModel.rasterError, viewModel::loadRaster,
-                )
+                is ProjectState.Loaded -> ProjectScreen(state.fileName, state.project, state.terrain, viewModel)
             }
         }
     }
@@ -163,26 +162,31 @@ private fun Message(text: String, openFile: () -> Unit) {
 
 @Composable
 private fun ProjectScreen(
+    fileName: String,
     project: LandXmlProject,
     terrain: List<TerrainImage>,
-    rasters: Map<String, ImageBitmap>,
-    rasterError: String?,
-    onLoadRaster: (file: String, uri: Uri) -> Unit,
+    vm: ProjectViewModel,
 ) {
-    var showImages by remember(project) { mutableStateOf(false) }
-    var pickingFor by remember { mutableStateOf<String?>(null) }
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val file = pickingFor
-        if (uri != null && file != null) onLoadRaster(file, uri)
-    }
+    var showReferences by remember(fileName) { mutableStateOf(false) }
+    val rasters = vm.rasters.filterKeys { it !in vm.unloaded }
     // The tapped position survives rotation; the info shown is recomputed from it.
-    var tapped by rememberSaveable(project, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
-    var showWarnings by remember(project) { mutableStateOf(false) }
-    var showLayers by remember(project) { mutableStateOf(false) }
+    var tapped by rememberSaveable(fileName, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
+    var showWarnings by remember(fileName) { mutableStateOf(false) }
+    var showLayers by remember(fileName) { mutableStateOf(false) }
     // Layer settings start from the drawing and survive rotation.
-    var offLayers by rememberSaveable(project) { mutableStateOf(ArrayList(project.layersOff)) }
-    var frozenLayers by rememberSaveable(project) { mutableStateOf(ArrayList(project.layersFrozen)) }
-    var colorOverrides by rememberSaveable(project) { mutableStateOf(HashMap<String, Int>()) }
+    var offLayers by rememberSaveable(fileName) { mutableStateOf(ArrayList(project.layersOff)) }
+    var frozenLayers by rememberSaveable(fileName) { mutableStateOf(ArrayList(project.layersFrozen)) }
+    // Layers that appear later (an xref loaded) start as their drawing saved them.
+    var knownLayers by rememberSaveable(fileName) { mutableStateOf(ArrayList(project.layers)) }
+    LaunchedEffect(project) {
+        val new = project.layers.filter { it !in knownLayers }
+        if (new.isNotEmpty()) {
+            offLayers = ArrayList(offLayers + new.filter { it in project.layersOff })
+            frozenLayers = ArrayList(frozenLayers + new.filter { it in project.layersFrozen })
+            knownLayers = ArrayList(knownLayers + new)
+        }
+    }
+    var colorOverrides by rememberSaveable(fileName) { mutableStateOf(HashMap<String, Int>()) }
     val hidden = remember(offLayers, frozenLayers) { offLayers.toSet() + frozenLayers }
     val layerColor: (String) -> Int? = { layer ->
         colorOverrides[layer]?.let { if (it == FOREGROUND) null else it } ?: project.layerColors[layer]
@@ -202,8 +206,8 @@ private fun ProjectScreen(
         marker = Color(0xFFFF9800),
     )
 
-    var show3d by rememberSaveable(project) { mutableStateOf(false) }
-    var exaggeration by rememberSaveable(project) { mutableStateOf(1) }
+    var show3d by rememberSaveable(fileName) { mutableStateOf(false) }
+    var exaggeration by rememberSaveable(fileName) { mutableStateOf(1) }
     val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } }
 
     Box(Modifier.fillMaxSize()) {
@@ -244,8 +248,8 @@ private fun ProjectScreen(
                     if (project.layers.isNotEmpty()) {
                         TextButton(onClick = { showLayers = true }) { Text("Camadas") }
                     }
-                    if (project.images.isNotEmpty()) {
-                        TextButton(onClick = { showImages = true }) { Text("Imagens") }
+                    if (vm.hasReferences) {
+                        TextButton(onClick = { showReferences = true }) { Text("Referências") }
                     }
                     if (project.warnings.isNotEmpty()) {
                         TextButton(onClick = { showWarnings = true }) { Text("${project.warnings.size} avisos") }
@@ -273,40 +277,8 @@ private fun ProjectScreen(
         }
     }
 
-    if (showImages) {
-        AlertDialog(
-            onDismissRequest = { showImages = false },
-            confirmButton = { TextButton(onClick = { showImages = false }) { Text("Fechar") } },
-            title = { Text("Imagens do desenho") },
-            text = {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text(
-                        "O DXF guarda só o caminho da imagem. Escolha o arquivo no aparelho: TIFF/GeoTIFF, JPG, " +
-                            "PNG ou WebP. ECW não é aceito (formato fechado): converta para TIFF. O app lembra a escolha.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    rasterError?.let {
-                        Text(it, Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                    project.images.forEach { img ->
-                        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(img.fileName, maxLines = 2)
-                                Text(
-                                    "${img.widthPx} × ${img.heightPx} px · " + if (img.file in rasters) "carregada" else "não carregada",
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                            TextButton(onClick = {
-                                pickingFor = img.file
-                                // Any type: file managers often label TIFF and ECW as unknown binaries.
-                                imagePicker.launch(arrayOf("*/*"))
-                            }) { Text("Escolher") }
-                        }
-                    }
-                }
-            },
-        )
+    if (showReferences) {
+        ReferencesDialog(vm, onDismiss = { showReferences = false })
     }
 
     if (showLayers) {

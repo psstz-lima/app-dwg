@@ -116,6 +116,8 @@ data class LandXmlProject(
     val texts: List<PlanText> = emptyList(),
     val hatches: List<Hatch> = emptyList(),
     val images: List<PlanImage> = emptyList(),
+    /** Drawings referenced from other files (xrefs), with where they are placed. */
+    val xrefs: List<XrefDrawing> = emptyList(),
     /** Layer states and colors (ARGB, null for the foreground color) from the drawing. */
     val layersOff: Set<String> = emptySet(),
     val layersFrozen: Set<String> = emptySet(),
