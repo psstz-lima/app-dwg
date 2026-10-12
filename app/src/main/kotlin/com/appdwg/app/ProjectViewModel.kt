@@ -3,6 +3,7 @@ package com.appdwg.app
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -17,6 +18,11 @@ import androidx.lifecycle.viewModelScope
 import com.appdwg.core.DxfReader
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.LandXmlReader
+import com.appdwg.core.RandomInput
+import com.appdwg.core.Raster
+import com.appdwg.core.TiffReader
+import java.io.FileInputStream
+import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,6 +49,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     var rasters by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set
 
+    /** Why the last picture could not be loaded, for the images dialog. */
+    var rasterError by mutableStateOf<String?>(null)
+        private set
+
     private val prefs = app.getSharedPreferences("rasters", Context.MODE_PRIVATE)
 
     /** Loads the picture for the drawing's image [file] and remembers the choice for next time. */
@@ -51,10 +61,21 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             getApplication<Application>().contentResolver
                 .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        prefs.edit().putString(file, uri.toString()).apply()
+        rasterError = null
         viewModelScope.launch {
-            val bitmap = withContext(Dispatchers.IO) { decodeRaster(uri) }
-            if (bitmap != null) rasters = rasters + (file to bitmap)
+            try {
+                val bitmap = withContext(Dispatchers.IO) { decodeRaster(uri) }
+                if (bitmap != null) {
+                    rasters = rasters + (file to bitmap)
+                    prefs.edit().putString(file, uri.toString()).apply()
+                } else {
+                    rasterError = "Formato de imagem não reconhecido."
+                }
+            } catch (e: OutOfMemoryError) {
+                rasterError = "Imagem grande demais para a memória deste aparelho."
+            } catch (e: Exception) {
+                rasterError = "Não foi possível ler a imagem: ${e.message ?: e.javaClass.simpleName}"
+            }
         }
     }
 
@@ -69,9 +90,23 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Decodes a picture, halving its size until the longer side is at most [MAX_RASTER] pixels. */
+    /**
+     * Decodes a picture to at most [MAX_RASTER] pixels per side. TIFF goes through the app's own
+     * reader (Android has none); JPEG, PNG and WebP through the platform.
+     */
     private fun decodeRaster(uri: Uri): ImageBitmap? {
         val resolver = getApplication<Application>().contentResolver
+        val head = ByteArray(8)
+        resolver.openInputStream(uri)?.use { it.read(head) }
+        val text = String(head, Charsets.ISO_8859_1)
+        when {
+            text.startsWith("II*\u0000") || text.startsWith("MM\u0000*") || text.startsWith("II+\u0000") || text.startsWith("MM\u0000+") ->
+                return decodeTiff(uri)
+            displayName(uri).endsWith(".ecw", ignoreCase = true) ->
+                error("ECW é um formato fechado (Hexagon) sem leitor livre para Android. Converta para TIFF ou JPG no QGIS (Exportar > Salvar como)")
+            displayName(uri).endsWith(".jp2", ignoreCase = true) ->
+                error("JPEG 2000 não é suportado. Converta para TIFF ou JPG")
+        }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0) return null
@@ -128,6 +163,35 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
             parser.setInput(stream, null)
             LandXmlReader(parser).read()
+        }
+    }
+
+    private fun decodeTiff(uri: Uri): ImageBitmap {
+        val resolver = getApplication<Application>().contentResolver
+        val fd = resolver.openFileDescriptor(uri, "r") ?: error("arquivo indisponível")
+        return fd.use {
+            FileInputStream(it.fileDescriptor).channel.use { channel ->
+                val input = object : RandomInput {
+                    override val size = channel.size()
+                    override fun read(position: Long, buffer: ByteArray, offset: Int, length: Int) {
+                        val bb = ByteBuffer.wrap(buffer, offset, length)
+                        var pos = position
+                        while (bb.hasRemaining()) {
+                            val n = channel.read(bb, pos)
+                            if (n < 0) error("fim inesperado do arquivo")
+                            pos += n
+                        }
+                    }
+                }
+                val raster = TiffReader(input) { bytes ->
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { b ->
+                        val px = IntArray(b.width * b.height)
+                        b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
+                        Raster(b.width, b.height, px).also { b.recycle() }
+                    }
+                }.read(MAX_RASTER)
+                Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888).asImageBitmap()
+            }
         }
     }
 

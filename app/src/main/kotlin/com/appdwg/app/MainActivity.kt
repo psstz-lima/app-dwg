@@ -122,7 +122,9 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     CircularProgressIndicator()
                 }
                 is ProjectState.Failed -> Message(state.message, openFile)
-                is ProjectState.Loaded -> ProjectScreen(state.project, state.terrain, viewModel.rasters, viewModel::loadRaster)
+                is ProjectState.Loaded -> ProjectScreen(
+                    state.project, state.terrain, viewModel.rasters, viewModel.rasterError, viewModel::loadRaster,
+                )
             }
         }
     }
@@ -164,6 +166,7 @@ private fun ProjectScreen(
     project: LandXmlProject,
     terrain: List<TerrainImage>,
     rasters: Map<String, ImageBitmap>,
+    rasterError: String?,
     onLoadRaster: (file: String, uri: Uri) -> Unit,
 ) {
     var showImages by remember(project) { mutableStateOf(false) }
@@ -278,10 +281,13 @@ private fun ProjectScreen(
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     Text(
-                        "O DXF guarda só o caminho da imagem. Escolha o arquivo no aparelho (JPG, PNG ou WebP; " +
-                            "TIFF não é aceito pelo Android: converta antes). O app lembra a escolha.",
+                        "O DXF guarda só o caminho da imagem. Escolha o arquivo no aparelho: TIFF/GeoTIFF, JPG, " +
+                            "PNG ou WebP. ECW não é aceito (formato fechado): converta para TIFF. O app lembra a escolha.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    rasterError?.let {
+                        Text(it, Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
                     project.images.forEach { img ->
                         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -293,7 +299,8 @@ private fun ProjectScreen(
                             }
                             TextButton(onClick = {
                                 pickingFor = img.file
-                                imagePicker.launch(arrayOf("image/*"))
+                                // Any type: file managers often label TIFF and ECW as unknown binaries.
+                                imagePicker.launch(arrayOf("*/*"))
                             }) { Text("Escolher") }
                         }
                     }

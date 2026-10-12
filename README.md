@@ -11,6 +11,8 @@ exporta com os dados reais de projeto.
 - DXF: faces 3D (`3DFACE`) e malhas viram superfície com cotas; linhas, polilinhas (inclusive 3D),
   círculos, arcos, elipses, splines, textos (`TEXT`/`MTEXT`), hachuras (preenchimento translúcido)
   e blocos (`INSERT`) são desenhados nas cores do CAD.
+- Imagens do DXF (ortofotos): escolha o arquivo em "Imagens"; lê TIFF/GeoTIFF (inclusive BigTIFF, LZW,
+  Deflate, JPEG, tiles e overviews), JPG, PNG e WebP. ECW não (formato fechado): converta para TIFF.
 - Vista 3D (botão "3D") com OpenGL ES: terreno sombreado e linhas 3D do DXF. Um dedo gira (orbit),
   dois dedos movem (pan), pinça aproxima; "Z ×1/×2/×3" exagera a altura.
 - Painel de camadas: ligar/desligar, congelar (também tira a camada da consulta de cotas), ver e
