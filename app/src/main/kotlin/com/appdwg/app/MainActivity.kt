@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.CrossSection
+import com.appdwg.core.CogoPoint
+import com.appdwg.core.PointFile
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.Measure
 import com.appdwg.core.Measurement
@@ -190,6 +192,17 @@ private fun ProjectScreen(
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.addFile(uri)
     }
+    // COGO points: dialog, tapped point, point being edited or created, and the "create" mode.
+    var showPoints by remember(fileName) { mutableStateOf(false) }
+    var selectedPoint by remember(fileName) { mutableStateOf<CogoPoint?>(null) }
+    var editingPoint by remember(fileName) { mutableStateOf<Pair<CogoPoint?, CogoPoint>?>(null) }
+    var addingPoints by remember(fileName) { mutableStateOf(false) }
+    val pointImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importPoints(uri)
+    }
+    val pointExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) vm.exportPoints(uri)
+    }
     val difference = vm.difference
     val differenceOverlay = vm.differenceImage?.takeIf { vm.differenceVisible }
     val rasters = vm.rasters.filterKeys { it !in vm.unloaded }
@@ -276,10 +289,14 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    addingPoints -> {
+                        val z = PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation ?: Double.NaN
+                        editingPoint = null to CogoPoint(PointFile.nextNumber(vm.userPoints), "", it.x, it.y, z)
+                    }
                     measuring -> if (it != measurePoints.lastOrNull()) measurePoints = measurePoints + it
                     // With the section open, a tap picks the station on the chosen alignment.
                     showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
-                    else -> tapped = it
+                    else -> { tapped = it; selectedPoint = null }
                 }
             },
             modifier = Modifier.fillMaxSize(),
@@ -287,12 +304,15 @@ private fun ProjectScreen(
             snap = measuring,
             sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) },
             overlay = differenceOverlay,
+            points = vm.userPoints,
+            onPointTap = if (measuring || addingPoints) null else { pt -> selectedPoint = pt; tapped = null },
+            selectedPoint = selectedPoint,
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
             Card {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(summary(project), style = MaterialTheme.typography.labelMedium)
+                    Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelMedium)
                     if (has3d) {
                         TextButton(onClick = { show3d = !show3d }) { Text(if (show3d) "Planta" else "3D") }
                     }
@@ -313,7 +333,7 @@ private fun ProjectScreen(
                             Text(if (measuring) "Sair da medição" else "Medir")
                         }
                     }
-                    if (project.layers.isNotEmpty()) {
+                    if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) {
                         TextButton(onClick = { showLayers = true }) { Text("Camadas") }
                     }
                     if (project.surfaces.isNotEmpty()) {
@@ -322,6 +342,7 @@ private fun ProjectScreen(
                         }
                     }
                     TextButton(onClick = { showCompare = true }) { Text("Comparar") }
+                    TextButton(onClick = { showPoints = true }) { Text("Pontos") }
                     if (vm.hasReferences) {
                         TextButton(onClick = { showReferences = true }) { Text("Referências") }
                     }
@@ -341,6 +362,22 @@ private fun ProjectScreen(
                 "1 dedo gira · 2 dedos movem · pinça aproxima",
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
+            )
+        } else if (addingPoints) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toque na planta para criar um ponto (cota da superfície).", style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { addingPoints = false }) { Text("Concluir") }
+                }
+            }
+        } else if (selectedPoint != null) {
+            val pt = selectedPoint!!
+            val q = remember(project, pt, frozenLayers) { PointQuery.at(project, Point2(pt.x, pt.y), frozenLayers.toSet()) }
+            PointCard(
+                pt, q.alignment?.takeIf { !it.stationOffset.outside }, q.terrainElevation,
+                onEdit = { editingPoint = pt to pt },
+                onClose = { selectedPoint = null },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth(),
             )
         } else if (showSection && sectionAxis != null) {
             SectionPanel(
@@ -381,6 +418,28 @@ private fun ProjectScreen(
         DrapeDialog(vm, onPick = { drapePicker.launch(arrayOf("*/*")) }, onDismiss = { showDrape = false })
     }
 
+    if (showPoints) {
+        PointsDialog(
+            vm,
+            onImport = { pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) },
+            onExport = { pointExporter.launch("pontos.txt") },
+            onCreate = { addingPoints = true; measuring = false; showSection = false; showPoints = false },
+            onDismiss = { showPoints = false },
+        )
+    }
+
+    editingPoint?.let { (old, initial) ->
+        key(initial) {
+            PointEditDialog(
+                old = old,
+                initial = initial,
+                onSave = { p -> vm.savePoint(old, p); if (selectedPoint == old && old != null) selectedPoint = p; editingPoint = null },
+                onDelete = old?.let { o -> { vm.deletePoint(o); if (selectedPoint == o) selectedPoint = null; editingPoint = null } },
+                onDismiss = { editingPoint = null },
+            )
+        }
+    }
+
     if (showCompare) {
         CompareDialog(
             vm = vm,
@@ -400,7 +459,7 @@ private fun ProjectScreen(
 
     if (showLayers) {
         LayersDialog(
-            project = project,
+            project = if (vm.userPoints.isEmpty()) project else project.copy(points = vm.userPoints),
             off = offLayers.toSet(),
             frozen = frozenLayers.toSet(),
             colorOf = layerColor,
@@ -561,6 +620,7 @@ private fun summary(p: LandXmlProject): String = buildList {
     if (p.surfaces.isNotEmpty()) add(plural(p.surfaces.size, "superfície", "superfícies"))
     if (p.alignments.isNotEmpty()) add(plural(p.alignments.size, "alinhamento", "alinhamentos"))
     if (p.cgPoints.isNotEmpty()) add(plural(p.cgPoints.size, "ponto", "pontos"))
+    if (p.points.isNotEmpty()) add(plural(p.points.size, "ponto _POINTS", "pontos _POINTS"))
     if (p.polylines.isNotEmpty()) add(plural(p.polylines.size, "linha", "linhas"))
     if (p.texts.isNotEmpty()) add(plural(p.texts.size, "texto", "textos"))
     p.coordinateSystem?.epsgCode?.let { add("EPSG $it") }

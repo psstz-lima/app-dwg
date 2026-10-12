@@ -101,6 +101,12 @@ class PlanImage(
 
 data class CgPoint(val name: String, val code: String?, val position: Point3)
 
+/** Field/COGO point the user imported or created, kept on the "_POINTS" layer. [z] is NaN when unknown. */
+data class CogoPoint(val number: String, val description: String, val x: Double, val y: Double, val z: Double)
+
+/** Layer of the user's COGO points. */
+const val POINTS_LAYER = "_POINTS"
+
 data class CoordinateSystemInfo(val name: String?, val epsgCode: String?, val horizontalDatum: String?)
 
 data class LandXmlProject(
@@ -122,11 +128,14 @@ data class LandXmlProject(
     val layersOff: Set<String> = emptySet(),
     val layersFrozen: Set<String> = emptySet(),
     val layerColors: Map<String, Int?> = emptyMap(),
+    /** COGO points imported or created by the user, on [POINTS_LAYER]. */
+    val points: List<CogoPoint> = emptyList(),
 ) {
     /** CAD layers that hold something to show, sorted by name. */
     val layers: List<String> by lazy {
         (polylines.map { it.layer } + texts.map { it.layer } + hatches.map { it.layer } + images.map { it.layer } +
-            if (polylines.isEmpty() && texts.isEmpty()) emptyList() else surfaces.map { it.name })
+            (if (polylines.isEmpty() && texts.isEmpty()) emptyList() else surfaces.map { it.name }) +
+            (if (points.isEmpty()) emptyList() else listOf(POINTS_LAYER)))
             .distinct().sortedBy { it.lowercase() }
     }
 
@@ -140,6 +149,7 @@ data class LandXmlProject(
             images.forEach { i -> i.boundary.bounds?.let { b = it.union(b) } }
             Bounds.of(texts.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
             Bounds.of(cgPoints.asSequence().map { Point2(it.position.x, it.position.y) })?.let { b = it.union(b) }
+            Bounds.of(points.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
             return b
         }
 }

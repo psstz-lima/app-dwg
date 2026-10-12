@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.appdwg.core.Alignment
 import com.appdwg.core.Bounds
+import com.appdwg.core.CogoPoint
+import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.PlanImage
 import com.appdwg.core.PlanText
@@ -107,6 +109,12 @@ fun PlanView(
     sectionLine: Pair<Point2, Point2>? = null,
     /** Colored picture drawn over the terrain, such as the difference between two surfaces. */
     overlay: TerrainImage? = null,
+    /** User COGO points (layer _POINTS). */
+    points: List<CogoPoint> = emptyList(),
+    /** Called instead of [onTap] when a tap lands on one of [points]; not while snapping. */
+    onPointTap: ((CogoPoint) -> Unit)? = null,
+    /** Point highlighted as selected. */
+    selectedPoint: CogoPoint? = null,
 ) {
     val bounds = project.bounds ?: return
     val origin = bounds.center
@@ -176,7 +184,7 @@ fun PlanView(
                     frame++
                 }
             }
-            .pointerInput(project, snap, hiddenLayers) {
+            .pointerInput(project, snap, hiddenLayers, points, onPointTap != null) {
                 detectTapGestures(
                     // Double tap zooms in 2x around the finger, handy with one hand.
                     onDoubleTap = { offset ->
@@ -191,7 +199,14 @@ fun PlanView(
                         val cam = camera ?: return@detectTapGestures
                         val local = toLocal(offset, cam)
                         val world = Point2(local.x + origin.x, local.y + origin.y)
-                        onTap(if (snap) snapTarget(project, world, SNAP_DP * density / cam.scale, hiddenLayers) ?: world else world)
+                        val radius = SNAP_DP * density / cam.scale
+                        val showPoints = POINTS_LAYER !in hiddenLayers
+                        val hit = if (!snap && onPointTap != null && showPoints) nearestPoint(points, world, radius) else null
+                        when {
+                            hit != null -> onPointTap!!(hit)
+                            snap -> onTap(snapTarget(project, if (showPoints) points else emptyList(), world, radius, hiddenLayers) ?: world)
+                            else -> onTap(world)
+                        }
                     },
                 )
             },
@@ -237,6 +252,7 @@ fun PlanView(
         drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors) { toScreen(it, cam) }
+        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors) { toScreen(it, cam) }
 
         if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
         if (sectionLine != null) {
@@ -500,7 +516,7 @@ private val SECTION_LINE_COLOR = Color(0xFFFFD600)
  * Nearest COGO point, drawing vertex or alignment vertex within [radius] metres of [p], or null.
  * Hidden layers are skipped.
  */
-private fun snapTarget(project: LandXmlProject, p: Point2, radius: Double, hiddenLayers: Set<String>): Point2? {
+private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2, radius: Double, hiddenLayers: Set<String>): Point2? {
     var best: Point2? = null
     var bestD = radius
     fun consider(x: Double, y: Double) {
@@ -511,6 +527,7 @@ private fun snapTarget(project: LandXmlProject, p: Point2, radius: Double, hidde
         }
     }
     for (pt in project.cgPoints) consider(pt.position.x, pt.position.y)
+    for (pt in cogo) consider(pt.x, pt.y)
     for (l in project.polylines) {
         if (l.layer in hiddenLayers) continue
         for (i in l.xs.indices) consider(l.xs[i], l.ys[i])
@@ -550,5 +567,46 @@ private fun DrawScope.drawMeasure(points: List<Point2>, toScreen: (Point2) -> Of
         drawCircle(Color.White, radius = 6.sp.toPx(), center = sp)
         drawCircle(MEASURE_COLOR, radius = 6.sp.toPx(), center = sp, style = Stroke(width = 3f))
         if (i == 0) drawCircle(MEASURE_COLOR, radius = 3.sp.toPx(), center = sp)
+    }
+}
+
+private fun nearestPoint(points: List<CogoPoint>, p: Point2, radius: Double): CogoPoint? =
+    points.minByOrNull { hypot(it.x - p.x, it.y - p.y) }?.takeIf { hypot(it.x - p.x, it.y - p.y) <= radius }
+
+private val COGO_COLOR = Color(0xFFFFA000)
+
+/** COGO points as a cross in a circle, labelled with number, description and elevation when zoomed in. */
+private fun DrawScope.drawCogoPoints(
+    points: List<CogoPoint>,
+    selected: CogoPoint?,
+    layerColor: Int?,
+    cam: Camera,
+    colors: PlanColors,
+    toScreen: (Point2) -> Offset,
+) {
+    if (points.isEmpty()) return
+    val color = layerColor?.let { Color(it) } ?: COGO_COLOR
+    val labels = points.size <= 3000 && cam.scale > 0.4
+    val paint = Paint().apply {
+        isAntiAlias = true
+        textSize = 11.sp.toPx()
+        this.color = color.toArgb()
+        setShadowLayer(3f, 0f, 0f, colors.background.toArgb())
+    }
+    val r = 5.sp.toPx()
+    val canvas = drawContext.canvas.nativeCanvas
+    for (pt in points) {
+        val sp = toScreen(Point2(pt.x, pt.y))
+        if (sp.x < -100f || sp.y < -60f || sp.x > size.width + 20f || sp.y > size.height + 60f) continue
+        drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f))
+        drawLine(color, sp - Offset(r * 1.6f, 0f), sp + Offset(r * 1.6f, 0f), strokeWidth = 1.5f)
+        drawLine(color, sp - Offset(0f, r * 1.6f), sp + Offset(0f, r * 1.6f), strokeWidth = 1.5f)
+        if (pt == selected) drawCircle(colors.marker, radius = r * 2.2f, center = sp, style = Stroke(width = 3f))
+        if (labels) {
+            val x = sp.x + r * 1.8f
+            canvas.drawText(pt.number, x, sp.y - r * 0.6f, paint)
+            val line2 = listOfNotNull(pt.description.takeIf { it.isNotEmpty() }, pt.z.takeIf { !it.isNaN() }?.let { StationFormat.decimal(it, 3) })
+            if (line2.isNotEmpty()) canvas.drawText(line2.joinToString("  "), x, sp.y + paint.textSize, paint)
+        }
     }
 }

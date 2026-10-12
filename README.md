@@ -35,6 +35,10 @@ exporta com os dados reais de projeto.
   todos sobrepostos, com as superfícies nomeadas pelo arquivo. Escolha a superfície A (base) e a B e
   veja o mapa colorido de B − A com legenda, a diferença no ponto tocado e os volumes de corte e
   aterro na área comum (malha de até 2 milhões de células). A seção mostra todas as superfícies.
+- Pontos (botão "Pontos"), camada `_POINTS`: importa TXT/CSV do Civil 3D no formato PDENZ (número,
+  descrição, E, N, cota; separador vírgula, ponto e vírgula, tab ou espaço), cria ponto tocando na
+  planta (número automático, cota da superfície), edita, apaga e exporta em PDENZ. Tocar no ponto
+  mostra os dados com 3 casas; medir encaixa nos pontos; "Gerar superfície" triangula os pontos.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

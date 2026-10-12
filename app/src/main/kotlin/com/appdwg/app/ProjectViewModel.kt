@@ -26,6 +26,9 @@ import com.appdwg.core.TiffReader
 import com.appdwg.core.WorldFile
 import com.appdwg.core.Placement
 import com.appdwg.core.Surface
+import com.appdwg.core.CogoPoint
+import com.appdwg.core.POINTS_LAYER
+import com.appdwg.core.PointFile
 import com.appdwg.core.SurfaceCompare
 import com.appdwg.core.SurfaceDifference
 import com.appdwg.core.XrefDrawing
@@ -45,6 +48,9 @@ sealed interface ProjectState {
 }
 
 private const val HEAD_SIZE = 64
+
+/** File laid over the open project; [uri] is null for a surface the app generated. */
+data class AddedFile(val label: String, val project: LandXmlProject, val uri: Uri?)
 
 /** Placement that leaves a drawing where it is. */
 private val IDENTITY = Placement(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, "0")
@@ -149,9 +155,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Files added to the open project and surface comparison ----
 
     /** Other files laid over the open one (name shown, read project), in the order added. */
-    var addedFiles by mutableStateOf<List<Pair<String, LandXmlProject>>>(emptyList())
-        private set
-    var addedFileUris: List<Uri> = emptyList()
+    var addedFiles by mutableStateOf<List<AddedFile>>(emptyList())
         private set
     var compareMessage by mutableStateOf<String?>(null)
         private set
@@ -181,9 +185,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 // Unique label, so the same file name added twice still reads apart.
                 var label = name.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
                 var k = 2
-                while (addedFiles.any { it.first == label }) label = name.substringBeforeLast('.') + " ($k)".also { k++ }
-                addedFiles = addedFiles + (label to drawing)
-                addedFileUris = addedFileUris + uri
+                while (addedFiles.any { it.label == label }) label = name.substringBeforeLast('.') + " ($k)".also { k++ }
+                addedFiles = addedFiles + AddedFile(label, drawing, uri)
                 refreshProject()
                 compareMessage = "$name adicionado: " + listOfNotNull(
                     drawing.surfaces.size.takeIf { it > 0 }?.let { "$it superfície(s)" },
@@ -200,10 +203,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun removeFile(label: String) {
-        val i = addedFiles.indexOfFirst { it.first == label }
-        if (i < 0) return
-        addedFiles = addedFiles.filterIndexed { j, _ -> j != i }
-        addedFileUris = addedFileUris.filterIndexed { j, _ -> j != i }
+        if (addedFiles.none { it.label == label }) return
+        addedFiles = addedFiles.filter { it.label != label }
         val d = difference
         if (d != null && (d.baseName.startsWith("$label|") || d.otherName.startsWith("$label|"))) clearDifference()
         refreshProject()
@@ -238,6 +239,98 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: OutOfMemoryError) {
                 compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+            }
+        }
+    }
+
+    // ---- COGO points (layer _POINTS) ----
+
+    /** Points imported from PDENZ files or created on the plan. */
+    var userPoints by mutableStateOf<List<CogoPoint>>(emptyList())
+        private set
+    var pointsMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** Reads a PDENZ point file; a point whose number is already in use replaces the old one. */
+    fun importPoints(uri: Uri) {
+        val name = displayName(uri)
+        pointsMessage = null
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) {
+                    val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error("arquivo indisponível")
+                    // Civil 3D writes ANSI on Windows; UTF-8 when the bytes are valid UTF-8.
+                    val text = runCatching {
+                        Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+                    }.getOrElse { String(bytes, Charsets.ISO_8859_1) }
+                    PointFile.read(text)
+                }
+                val byNumber = LinkedHashMap<String, CogoPoint>()
+                userPoints.forEach { byNumber[it.number] = it }
+                result.points.forEach { byNumber[it.number] = it }
+                userPoints = byNumber.values.toList()
+                val skipped = result.skipped
+                pointsMessage = "$name: ${result.points.size} ponto(s) importado(s)." + if (skipped.isEmpty()) "" else
+                    " ${skipped.size} linha(s) ignorada(s) por não estarem no formato número, descrição, E, N, cota: " +
+                        skipped.take(8).joinToString(", ") { "linha ${it.first}" } + if (skipped.size > 8) "…" else ""
+            } catch (e: Exception) {
+                pointsMessage = "Não foi possível ler $name: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /** Writes the points as PDENZ (comma separated, 3 decimals) to [target]. */
+    fun exportPoints(target: Uri) {
+        val points = userPoints
+        viewModelScope.launch {
+            pointsMessage = try {
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(target, "wt")?.use {
+                        it.write(PointFile.write(points).toByteArray(Charsets.UTF_8))
+                    } ?: error("destino indisponível")
+                }
+                "${points.size} ponto(s) exportado(s) para ${displayName(target)}."
+            } catch (e: Exception) {
+                "Não foi possível exportar: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /** Adds [point], or replaces [old] with it when editing. */
+    fun savePoint(old: CogoPoint?, point: CogoPoint) {
+        val rest = userPoints.filter { it != old && it.number != point.number }
+        val i = old?.let { userPoints.indexOf(it) } ?: -1
+        userPoints = if (i >= 0) rest.toMutableList().apply { add(i.coerceAtMost(size), point) } else rest + point
+    }
+
+    fun deletePoint(point: CogoPoint) {
+        userPoints = userPoints - point
+    }
+
+    /** Triangulates the points that have an elevation into a surface laid over the project. */
+    fun surfaceFromPoints() {
+        val pts = userPoints.filter { !it.z.isNaN() }
+        if (pts.size < 3) {
+            pointsMessage = "São precisos 3 pontos com cota para gerar uma superfície."
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val label = "$POINTS_LAYER superfície"
+                val surface = withContext(Dispatchers.Default) {
+                    // Named like its entry, so it shows as just the label.
+                    AeccPointCache.triangulate(
+                        label,
+                        DoubleArray(pts.size) { pts[it].x }, DoubleArray(pts.size) { pts[it].y }, DoubleArray(pts.size) { pts[it].z },
+                    )
+                }
+                addedFiles = addedFiles.filter { it.label != label } +
+                    AddedFile(label, LandXmlProject(null, null, listOf(surface), emptyList(), emptyList(), emptyList()), null)
+                refreshProject()
+                pointsMessage = "Superfície \"$label\" gerada com ${pts.size} pontos (${surface.triangleCount} triângulos)."
+            } catch (e: Exception) {
+                pointsMessage = "Não foi possível gerar a superfície: ${e.message ?: e.javaClass.simpleName}"
             }
         }
     }
@@ -474,7 +567,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     pathEdits = emptyMap()
                     referenceMessage = null
                     addedFiles = emptyList()
-                    addedFileUris = emptyList()
+                    userPoints = emptyList()
+                    pointsMessage = null
                     compareMessage = null
                     clearDifference()
                     restoreRasters(project)
