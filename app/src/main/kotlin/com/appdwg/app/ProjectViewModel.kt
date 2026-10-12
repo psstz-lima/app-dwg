@@ -1,6 +1,11 @@
 package com.appdwg.app
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Xml
@@ -26,10 +31,55 @@ sealed interface ProjectState {
 
 private const val HEAD_SIZE = 64
 
+/** Longest side of a loaded raster image; larger pictures are downsampled to save memory. */
+private const val MAX_RASTER = 4096
+
 class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     var state by mutableStateOf<ProjectState>(ProjectState.Empty)
         private set
+
+    /** Raster files loaded for DXF images, by the path the drawing stores. */
+    var rasters by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
+        private set
+
+    private val prefs = app.getSharedPreferences("rasters", Context.MODE_PRIVATE)
+
+    /** Loads the picture for the drawing's image [file] and remembers the choice for next time. */
+    fun loadRaster(file: String, uri: Uri) {
+        runCatching {
+            getApplication<Application>().contentResolver
+                .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        prefs.edit().putString(file, uri.toString()).apply()
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) { decodeRaster(uri) }
+            if (bitmap != null) rasters = rasters + (file to bitmap)
+        }
+    }
+
+    /** Reloads pictures chosen earlier for the images of [project]. */
+    private fun restoreRasters(project: LandXmlProject) {
+        for (image in project.images) {
+            val uri = prefs.getString(image.file, null)?.let(Uri::parse) ?: continue
+            viewModelScope.launch {
+                val bitmap = withContext(Dispatchers.IO) { runCatching { decodeRaster(uri) }.getOrNull() }
+                if (bitmap != null) rasters = rasters + (image.file to bitmap)
+            }
+        }
+    }
+
+    /** Decodes a picture, halving its size until the longer side is at most [MAX_RASTER] pixels. */
+    private fun decodeRaster(uri: Uri): ImageBitmap? {
+        val resolver = getApplication<Application>().contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) return null
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }?.asImageBitmap()
+    }
 
     fun open(uri: Uri) {
         val name = displayName(uri)
@@ -47,6 +97,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 ) {
                     ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML ou DXF?")
                 } else {
+                    rasters = emptyMap()
+                    restoreRasters(project)
                     ProjectState.Loaded(name, project, terrain)
                 }
             } catch (e: OutOfMemoryError) {

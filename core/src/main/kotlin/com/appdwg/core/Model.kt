@@ -78,6 +78,27 @@ class PlanText(
 /** Filled area from a CAD hatch: its boundary loops, filled even-odd so islands stay open. */
 class Hatch(val layer: String, val color: Int?, val byLayer: Boolean, val loops: List<Polyline>)
 
+/**
+ * Raster image placed in the drawing (an orthophoto, for example). The pixels are in [file], outside
+ * the drawing. Image pixel (0, 0) is the upper-left corner; the lower-left corner is at
+ * ([originX], [originY]), and [pixelU] / [pixelV] are one pixel along the width / height.
+ * [boundary] is the visible (clipped) outline in plan coordinates.
+ */
+class PlanImage(
+    val layer: String,
+    val file: String,
+    val originX: Double,
+    val originY: Double,
+    val pixelU: Point2,
+    val pixelV: Point2,
+    val widthPx: Int,
+    val heightPx: Int,
+    val boundary: Polyline,
+) {
+    /** File name without folders (DXF stores Windows paths). */
+    val fileName get() = file.substringAfterLast('\\').substringAfterLast('/')
+}
+
 data class CgPoint(val name: String, val code: String?, val position: Point3)
 
 data class CoordinateSystemInfo(val name: String?, val epsgCode: String?, val horizontalDatum: String?)
@@ -94,6 +115,7 @@ data class LandXmlProject(
     val polylines: List<Polyline> = emptyList(),
     val texts: List<PlanText> = emptyList(),
     val hatches: List<Hatch> = emptyList(),
+    val images: List<PlanImage> = emptyList(),
     /** Layer states and colors (ARGB, null for the foreground color) from the drawing. */
     val layersOff: Set<String> = emptySet(),
     val layersFrozen: Set<String> = emptySet(),
@@ -101,7 +123,7 @@ data class LandXmlProject(
 ) {
     /** CAD layers that hold something to show, sorted by name. */
     val layers: List<String> by lazy {
-        (polylines.map { it.layer } + texts.map { it.layer } + hatches.map { it.layer } +
+        (polylines.map { it.layer } + texts.map { it.layer } + hatches.map { it.layer } + images.map { it.layer } +
             if (polylines.isEmpty() && texts.isEmpty()) emptyList() else surfaces.map { it.name })
             .distinct().sortedBy { it.lowercase() }
     }
@@ -113,6 +135,7 @@ data class LandXmlProject(
             alignments.forEach { a -> a.bounds?.let { b = it.union(b) } }
             polylines.forEach { l -> l.bounds?.let { b = it.union(b) } }
             hatches.forEach { h -> h.loops.forEach { l -> l.bounds?.let { b = it.union(b) } } }
+            images.forEach { i -> i.boundary.bounds?.let { b = it.union(b) } }
             Bounds.of(texts.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
             Bounds.of(cgPoints.asSequence().map { Point2(it.position.x, it.position.y) })?.let { b = it.union(b) }
             return b

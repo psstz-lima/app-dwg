@@ -180,8 +180,37 @@ class DxfReaderTest {
 
     @Test
     fun listsSkippedEntities() {
-        val p = read(dxf("0\nDIMENSION\n8\n0", "0\nDIMENSION\n8\n0", "0\nVIEWPORT\n8\n0", "0\nINSERT\n8\n0\n2\nSEM_BLOCO"))
-        assertEquals(listOf("Não exibidos: 2 cotas (DIMENSION)"), p.warnings)
+        val p = read(dxf("0\nLEADER\n8\n0", "0\nLEADER\n8\n0", "0\nVIEWPORT\n8\n0", "0\nINSERT\n8\n0\n2\nSEM_BLOCO"))
+        assertEquals(listOf("Não exibidos: 2 chamadas (LEADER)"), p.warnings)
+    }
+
+    @Test
+    fun dimensionsDrawTheirBlockOrFallBackToPointsAndText() {
+        val blocks = "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n8\n0\n2\n*D1\n10\n0\n20\n0\n" +
+            "0\nLINE\n8\n0\n10\n0\n20\n0\n11\n10\n21\n0\n" +
+            "0\nMTEXT\n8\n0\n10\n5\n20\n1\n40\n1\n1\n10,00\n" +
+            "0\nENDBLK\n0\nENDSEC\n"
+        val text = dxf(
+            "0\nDIMENSION\n8\nCOTAS\n2\n*D1",
+            "0\nDIMENSION\n8\nCOTAS\n2\n*SEM\n11\n5\n21\n9\n13\n0\n23\n8\n14\n10\n24\n8\n42\n10.0",
+        ).replace("0\nSECTION\n2\nENTITIES", blocks + "0\nSECTION\n2\nENTITIES")
+        val p = read(text)
+        assertEquals(listOf("COTAS", "COTAS"), p.polylines.map { it.layer })
+        assertEquals(listOf("10,00", "10,00"), p.texts.map { it.text })
+        assertEquals(listOf("COTAS", "COTAS"), p.texts.map { it.layer })
+    }
+
+    @Test
+    fun readsImageFrameAndFile() {
+        val objects = "0\nSECTION\n2\nOBJECTS\n0\nIMAGEDEF\n5\n1C\n1\n..\\IMG\\orto.tif\n0\nENDSEC\n"
+        val text = dxf(
+            "0\nIMAGE\n8\nCAD-IMG\n10\n100\n20\n200\n11\n0.5\n21\n0\n12\n0\n22\n0.5\n13\n20\n23\n10\n340\n1C\n70\n7\n71\n1\n91\n2\n14\n-0.5\n24\n-0.5\n14\n19.5\n24\n9.5",
+        ).replace("0\nEOF", objects + "0\nEOF")
+        val img = read(text).images.single()
+        assertEquals("orto.tif", img.fileName)
+        assertEquals(20, img.widthPx)
+        // 20 x 10 pixels of 0.5 m from (100, 200): the clip covers the whole image.
+        assertEquals(Bounds(100.0, 200.0, 110.0, 205.0), img.boundary.bounds)
     }
 
     @Test

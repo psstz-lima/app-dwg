@@ -16,8 +16,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.appdwg.core.Alignment
 import com.appdwg.core.LandXmlProject
+import com.appdwg.core.PlanImage
 import com.appdwg.core.PlanText
 import com.appdwg.core.Point2
 import com.appdwg.core.Polyline
@@ -78,6 +81,8 @@ fun PlanView(
     hiddenLayers: Set<String>,
     /** Current color of a CAD layer (ARGB, null for the foreground color). */
     layerColor: (String) -> Int?,
+    /** Pictures loaded for the drawing's images, by file path. */
+    rasters: Map<String, ImageBitmap>,
     onTap: (Point2) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -136,6 +141,9 @@ fun PlanView(
         val cam = camera ?: return@Canvas
         val s = cam.scale.toFloat()
 
+        for (img in project.images) {
+            if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], colors) { toScreen(it, cam) }
+        }
         for (t in terrain) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
 
         withTransform({
@@ -170,6 +178,50 @@ fun PlanView(
             drawLine(colors.marker, m - Offset(14f, 0f), m + Offset(14f, 0f), strokeWidth = 2f)
             drawLine(colors.marker, m - Offset(0f, 14f), m + Offset(0f, 14f), strokeWidth = 2f)
         }
+    }
+}
+
+/**
+ * Draws a drawing image: the picture, when loaded, mapped onto its plan position and clipped to its
+ * boundary; otherwise a dashed outline with the file name.
+ */
+private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: PlanColors, toScreen: (Point2) -> Offset) {
+    val outline = android.graphics.Path()
+    val b = img.boundary
+    for (i in b.xs.indices) {
+        val p = toScreen(Point2(b.xs[i], b.ys[i]))
+        if (i == 0) outline.moveTo(p.x, p.y) else outline.lineTo(p.x, p.y)
+    }
+    outline.close()
+    val canvas = drawContext.canvas.nativeCanvas
+    if (bitmap != null) {
+        // Picture corners: upper-left, upper-right and lower-left of the full image in plan.
+        val w = img.widthPx.toDouble()
+        val h = img.heightPx.toDouble()
+        fun corner(px: Double, py: Double) = toScreen(Point2(
+            img.originX + img.pixelU.x * px + img.pixelV.x * (h - py),
+            img.originY + img.pixelU.y * px + img.pixelV.y * (h - py),
+        ))
+        val tl = corner(0.0, 0.0); val tr = corner(w, 0.0); val bl = corner(0.0, h)
+        val matrix = android.graphics.Matrix()
+        val bw = bitmap.width.toFloat(); val bh = bitmap.height.toFloat()
+        matrix.setPolyToPoly(floatArrayOf(0f, 0f, bw, 0f, 0f, bh), 0, floatArrayOf(tl.x, tl.y, tr.x, tr.y, bl.x, bl.y), 0, 3)
+        canvas.save()
+        canvas.clipPath(outline)
+        canvas.drawBitmap(bitmap.asAndroidBitmap(), matrix, Paint(Paint.FILTER_BITMAP_FLAG))
+        canvas.restore()
+    } else {
+        val paint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            color = colors.drawing.copy(alpha = 0.6f).toArgb()
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(16f, 10f), 0f)
+        }
+        canvas.drawPath(outline, paint)
+        val first = toScreen(Point2(b.xs[0], b.ys[0]))
+        val label = Paint().apply { isAntiAlias = true; textSize = 12.sp.toPx(); color = paint.color }
+        canvas.drawText("Imagem: ${img.fileName}", first.x + 8f, first.y - 8f, label)
     }
 }
 

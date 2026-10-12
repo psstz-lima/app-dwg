@@ -1,6 +1,7 @@
 package com.appdwg.app
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -52,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.LandXmlProject
@@ -120,7 +122,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     CircularProgressIndicator()
                 }
                 is ProjectState.Failed -> Message(state.message, openFile)
-                is ProjectState.Loaded -> ProjectScreen(state.project, state.terrain)
+                is ProjectState.Loaded -> ProjectScreen(state.project, state.terrain, viewModel.rasters, viewModel::loadRaster)
             }
         }
     }
@@ -158,7 +160,18 @@ private fun Message(text: String, openFile: () -> Unit) {
 }
 
 @Composable
-private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) {
+private fun ProjectScreen(
+    project: LandXmlProject,
+    terrain: List<TerrainImage>,
+    rasters: Map<String, ImageBitmap>,
+    onLoadRaster: (file: String, uri: Uri) -> Unit,
+) {
+    var showImages by remember(project) { mutableStateOf(false) }
+    var pickingFor by remember { mutableStateOf<String?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val file = pickingFor
+        if (uri != null && file != null) onLoadRaster(file, uri)
+    }
     // The tapped position survives rotation; the info shown is recomputed from it.
     var tapped by rememberSaveable(project, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
     var showWarnings by remember(project) { mutableStateOf(false) }
@@ -209,6 +222,7 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             markerOnAxis = info?.alignment?.stationOffset?.pointOnAlignment,
             hiddenLayers = hidden,
             layerColor = layerColor,
+            rasters = rasters,
             onTap = { tapped = it },
             modifier = Modifier.fillMaxSize(),
         )
@@ -226,6 +240,9 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
                     }
                     if (project.layers.isNotEmpty()) {
                         TextButton(onClick = { showLayers = true }) { Text("Camadas") }
+                    }
+                    if (project.images.isNotEmpty()) {
+                        TextButton(onClick = { showImages = true }) { Text("Imagens") }
                     }
                     if (project.warnings.isNotEmpty()) {
                         TextButton(onClick = { showWarnings = true }) { Text("${project.warnings.size} avisos") }
@@ -251,6 +268,38 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             // Capped so the card stays readable instead of stretching across a tablet in landscape.
             InfoCard(current, Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
+    }
+
+    if (showImages) {
+        AlertDialog(
+            onDismissRequest = { showImages = false },
+            confirmButton = { TextButton(onClick = { showImages = false }) { Text("Fechar") } },
+            title = { Text("Imagens do desenho") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "O DXF guarda só o caminho da imagem. Escolha o arquivo no aparelho (JPG, PNG ou WebP; " +
+                            "TIFF não é aceito pelo Android: converta antes). O app lembra a escolha.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    project.images.forEach { img ->
+                        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(img.fileName, maxLines = 2)
+                                Text(
+                                    "${img.widthPx} × ${img.heightPx} px · " + if (img.file in rasters) "carregada" else "não carregada",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            TextButton(onClick = {
+                                pickingFor = img.file
+                                imagePicker.launch(arrayOf("image/*"))
+                            }) { Text("Escolher") }
+                        }
+                    }
+                }
+            },
+        )
     }
 
     if (showLayers) {

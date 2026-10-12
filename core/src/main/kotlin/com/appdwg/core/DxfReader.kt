@@ -20,7 +20,9 @@ import kotlin.math.sqrt
  *   gives terrain elevations. Faces that are all at one elevation (frames, legends) are drawn as lines.
  * - LINE, LWPOLYLINE, POLYLINE, CIRCLE, ARC, ELLIPSE and SPLINE become plan lines.
  * - TEXT and MTEXT become texts; HATCH becomes a filled area; POINT becomes a point.
- * - INSERT draws its block, moved, scaled and rotated.
+ * - INSERT draws its block, moved, scaled and rotated; DIMENSION draws its block (lines, arrows, text).
+ * - IMAGE becomes a georeferenced frame; the raster file itself is outside the DXF, so the app asks
+ *   for it.
  *
  * Everything keeps its CAD layer and color (entity color, else the layer's). Layer states (off,
  * frozen) and colors are returned too, so the app starts with the drawing's layer settings.
@@ -41,6 +43,10 @@ class DxfReader(private val input: BufferedReader) {
     private val layerColors = HashMap<String, Int?>()
     private val layersOff = LinkedHashSet<String>()
     private val layersFrozen = LinkedHashSet<String>()
+
+    private val images = ArrayList<PlanImage>()
+    /** IMAGEDEF objects by handle: the path of the raster file. */
+    private val imageFiles = HashMap<String, String>()
 
     private val modelSpace = ArrayList<Entity>()
     private val blocks = HashMap<String, Block>()
@@ -72,6 +78,7 @@ class DxfReader(private val input: BufferedReader) {
                 }
                 // Group 67 = 1 marks paper space (layouts), which is not part of the plan.
                 "ENTITIES" -> if (e.i(67) != 1) modelSpace += e
+                "OBJECTS" -> if (e.type == "IMAGEDEF") e.s(5)?.let { h -> imageFiles[h] = e.s(1) ?: "" }
             }
         }
 
@@ -93,12 +100,12 @@ class DxfReader(private val input: BufferedReader) {
                     "SECTION" -> expectSectionName = true
                     "ENDSEC" -> section = null
                     "EOF" -> break
-                    else -> if (section == "ENTITIES" || section == "TABLES" || section == "BLOCKS") pending = Entity(value)
+                    else -> if (section in READ_SECTIONS) pending = Entity(value)
                 }
                 continue
             }
             when (section) {
-                "ENTITIES", "TABLES", "BLOCKS" -> pending?.add(code, value)
+                "ENTITIES", "TABLES", "BLOCKS", "OBJECTS" -> pending?.add(code, value)
                 "HEADER" -> when {
                     code == 9 -> headerVariable = value
                     headerVariable == "\$INSUNITS" && code == 70 -> linearUnit = INSUNITS[value.toIntOrNull()]
@@ -154,10 +161,66 @@ class DxfReader(private val input: BufferedReader) {
                 "MTEXT" -> readMText(e, out)
                 "HATCH" -> readHatch(e, out)
                 "INSERT" -> readInsert(e, xf, Context(layer, color, byLayer), depth)
+                "DIMENSION" -> readDimension(e, out, xf, Context(layer, color, byLayer), depth)
+                "IMAGE" -> readImage(e, layer, xf)
                 "VERTEX", "SEQEND", "VIEWPORT" -> {}
                 else -> skipped.merge(e.type, 1, Int::plus)
             }
         }
+    }
+
+    /**
+     * A dimension's look (extension lines, arrows, text) is stored as an anonymous block in world
+     * coordinates. Without it, the measured points and the text are drawn.
+     */
+    private fun readDimension(e: Entity, out: Out, xf: Xf, ctx: Context, depth: Int) {
+        val block = blocks[e.s(2)]
+        if (block != null && depth <= 8) {
+            draw(block.entities, xf, ctx, depth + 1)
+            return
+        }
+        out.line(listOf(Point2(e.d(13), e.d(23)), Point2(e.d(14), e.d(24))), false)
+        val measured = e.s(42)?.toDoubleOrNull()
+        val text = e.s(1)?.takeIf { it.isNotEmpty() && it != "<>" }?.let { decodeMText(it) }
+            ?: measured?.let { StationFormat.decimal(it) } ?: return
+        out.text(Point2(e.d(11), e.d(21)), 2.5, 0.0, text, 1, PlanText.MIDDLE)
+    }
+
+    /**
+     * Raster image frame. The insertion point is the lower-left corner; U and V are one pixel along
+     * the width and the height. Clip boundaries are in pixels from the upper-left corner.
+     */
+    private fun readImage(e: Entity, layer: String, xf: Xf) {
+        val w = e.d(13)
+        val h = e.d(23)
+        if (w <= 0 || h <= 0) return
+        val ux = e.d(11); val uy = e.d(21)
+        val vx = e.d(12); val vy = e.d(22)
+        val ox = e.d(10) + ux * 0.5 - vx * 0.5
+        val oy = e.d(20) + uy * 0.5 - vy * 0.5
+        fun world(px: Double, py: Double) = xf.apply(Point2(ox + ux * px + vx * (h - py), oy + uy * px + vy * (h - py)))
+        val clipped = e.i(70) and 4 != 0
+        val pts = e.points(14, 24)
+        val boundary = when {
+            !clipped || pts.size < 2 -> listOf(Point2(-0.5, -0.5), Point2(w - 0.5, -0.5), Point2(w - 0.5, h - 0.5), Point2(-0.5, h - 0.5))
+            e.i(71) == 1 -> {
+                val (a, b) = pts
+                listOf(a, Point2(b.x, a.y), b, Point2(a.x, b.y))
+            }
+            else -> pts
+        }.map { world(it.x, it.y) }
+        val corner = xf.apply(Point2(e.d(10), e.d(20)))
+        val u = xf.apply(Point2(e.d(10) + ux, e.d(20) + uy))
+        val v = xf.apply(Point2(e.d(10) + vx, e.d(20) + vy))
+        images += PlanImage(
+            layer = layer,
+            file = imageFiles[e.s(340)] ?: "",
+            originX = corner.x, originY = corner.y,
+            pixelU = Point2(u.x - corner.x, u.y - corner.y),
+            pixelV = Point2(v.x - corner.x, v.y - corner.y),
+            widthPx = w.toInt(), heightPx = h.toInt(),
+            boundary = Polyline(layer, DoubleArray(boundary.size) { boundary[it].x }, DoubleArray(boundary.size) { boundary[it].y }, true),
+        )
     }
 
     private fun readInsert(e: Entity, xf: Xf, ctx: Context, depth: Int) {
@@ -421,6 +484,7 @@ class DxfReader(private val input: BufferedReader) {
             warnings = warnings,
             polylines = polylines,
             texts = texts,
+            images = images,
             hatches = hatches,
             layersOff = layersOff,
             layersFrozen = layersFrozen,
@@ -557,11 +621,11 @@ class DxfReader(private val input: BufferedReader) {
         /** Arc segments are at most this many radians, about 5 degrees. */
         private const val ARC_STEP = PI / 36
 
+        private val READ_SECTIONS = setOf("ENTITIES", "TABLES", "BLOCKS", "OBJECTS")
+
         private val INSUNITS = mapOf(1 to "inch", 2 to "foot", 4 to "millimeter", 5 to "centimeter", 6 to "meter", 7 to "kilometer")
 
         private val SKIPPED_NAMES = mapOf(
-            "DIMENSION" to "cotas (DIMENSION)",
-            "IMAGE" to "imagens (IMAGE)",
             "LEADER" to "chamadas (LEADER)",
             "MULTILEADER" to "chamadas (MULTILEADER)",
         )
