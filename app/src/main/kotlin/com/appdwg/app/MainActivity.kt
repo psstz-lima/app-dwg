@@ -187,6 +187,7 @@ private fun ProjectScreen(
     val drape = vm.drape?.takeIf { vm.drapeVisible }
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
+    var showCross by remember(fileName) { mutableStateOf(false) }
     var compareBase by rememberSaveable(fileName) { mutableStateOf<String?>(null) }
     var compareOther by rememberSaveable(fileName) { mutableStateOf<String?>(null) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -409,7 +410,7 @@ private fun ProjectScreen(
             )
         } else {
             // Capped so the card stays readable instead of stretching across a tablet in landscape.
-            InfoCard(current, differenceAt(project, difference, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
+            InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
         BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(8.dp).widthIn(max = 360.dp))
     }
@@ -449,8 +450,13 @@ private fun ProjectScreen(
             onBase = { compareBase = it },
             onOther = { compareOther = it },
             onAddFile = { filePicker.launch(arrayOf("*/*")) },
+            onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
         )
+    }
+
+    if (showCross) {
+        CrossCompareDialog(vm, project, onShown = { showCross = false }, onDismiss = { showCross = false })
     }
 
     if (showReferences) {
@@ -526,7 +532,7 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
 }
 
 @Composable
-private fun InfoCard(info: PointInfo, difference: String?, modifier: Modifier) {
+private fun InfoCard(info: PointInfo, difference: String?, marked: List<Pair<String, String>>, modifier: Modifier) {
     Card(modifier) {
         Column(Modifier.padding(12.dp)) {
             val a = info.alignment
@@ -543,11 +549,17 @@ private fun InfoCard(info: PointInfo, difference: String?, modifier: Modifier) {
                 }
             }
             difference?.let { Line("B − A no ponto", it) }
+            marked.forEach { (name, z) -> Line(name.substringAfterLast('|'), z) }
             Line("Terreno no ponto", info.terrainElevation?.let { StationFormat.decimal(it, 3) + " m" } ?: "fora da superfície")
             Line("E / N", StationFormat.decimal(info.position.x, 3) + " / " + StationFormat.decimal(info.position.y, 3))
         }
     }
 }
+
+/** Elevation at [p] of each surface marked for the cross comparison. */
+private fun markedElevations(project: LandXmlProject, marked: List<String>, p: Point2): List<Pair<String, String>> =
+    marked.mapNotNull { n -> project.surfaces.firstOrNull { it.name == n } }
+        .map { s -> s.name to (s.elevationAt(p)?.let { StationFormat.decimal(it, 3) + " m" } ?: "fora") }
 
 /** B − A at [p] with the surfaces of the last comparison, as "+0,250 m (aterro)"; null without one. */
 private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Point2): String? {

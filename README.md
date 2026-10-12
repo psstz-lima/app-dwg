@@ -39,6 +39,11 @@ exporta com os dados reais de projeto.
   descrição, E, N, cota; separador vírgula, ponto e vírgula, tab ou espaço), cria ponto tocando na
   planta (número automático, cota da superfície), edita, apaga e exporta em PDENZ. Tocar no ponto
   mostra os dados com 3 casas; medir encaixa nos pontos; "Gerar superfície" triangula os pontos.
+- Comparação cruzada e por etapas ("Comparar" > "Comparação cruzada e por etapas…"): marque várias
+  superfícies na ordem (terreno original, levantamentos, projeto). A matriz mostra corte, aterro e
+  saldo de cada par (linha − coluna) e um toque na célula leva o mapa para a planta; as etapas
+  mostram o volume de cada período, o executado, o que falta até o projeto e o % concluído. O cartão
+  do ponto lista a cota de cada superfície marcada.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

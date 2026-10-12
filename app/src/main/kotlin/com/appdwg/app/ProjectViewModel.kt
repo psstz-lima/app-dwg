@@ -31,6 +31,7 @@ import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.PointFile
 import com.appdwg.core.SurfaceCompare
 import com.appdwg.core.SurfaceDifference
+import com.appdwg.core.StageProgress
 import com.appdwg.core.XrefDrawing
 import com.appdwg.core.Xrefs
 import java.io.FileInputStream
@@ -205,14 +206,99 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFile(label: String) {
         if (addedFiles.none { it.label == label }) return
         addedFiles = addedFiles.filter { it.label != label }
+        fun fromFile(n: String) = n == label || n.startsWith("$label|")
+        crossSelected = crossSelected.filterNot(::fromFile)
+        matrix = matrix.filterKeys { (a, b) -> !fromFile(a) && !fromFile(b) }
+        stageProgress = null
         val d = difference
-        if (d != null && (d.baseName.startsWith("$label|") || d.otherName.startsWith("$label|"))) clearDifference()
+        if (d != null && (fromFile(d.baseName) || fromFile(d.otherName))) clearDifference()
         refreshProject()
     }
 
     fun clearDifference() {
         difference = null
         differenceImage = null
+    }
+
+    // ---- Cross comparison of several surfaces ----
+
+    /** Surfaces marked for the cross comparison, in stage order (original ground first, design last). */
+    var crossSelected by mutableStateOf<List<String>>(emptyList())
+        private set
+    /** B − A for every pair of marked surfaces, keyed (A, B) with A before B in [crossSelected]. */
+    var matrix by mutableStateOf<Map<Pair<String, String>, SurfaceDifference>>(emptyMap())
+        private set
+    var stageProgress by mutableStateOf<StageProgress?>(null)
+        private set
+
+    fun toggleCross(name: String) {
+        crossSelected = if (name in crossSelected) crossSelected - name else crossSelected + name
+    }
+
+    /** Moves a marked surface [delta] places in the stage order. */
+    fun moveCross(name: String, delta: Int) {
+        val i = crossSelected.indexOf(name)
+        val j = (i + delta).coerceIn(0, crossSelected.size - 1)
+        if (i < 0 || i == j) return
+        crossSelected = crossSelected.toMutableList().apply { add(j, removeAt(i)) }
+    }
+
+    /** Compares every pair of marked surfaces, on a coarser grid so many pairs stay quick. */
+    fun computeMatrix() {
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val names = crossSelected
+        val surfaces = names.mapNotNull { n -> project.surfaces.firstOrNull { it.name == n } }
+        compareMessage = null
+        viewModelScope.launch {
+            try {
+                matrix = tracked("Comparação cruzada") { t ->
+                    withContext(Dispatchers.Default) {
+                        val out = LinkedHashMap<Pair<String, String>, SurfaceDifference>()
+                        val pairs = surfaces.size * (surfaces.size - 1) / 2
+                        var k = 0
+                        for (i in surfaces.indices) for (j in i + 1 until surfaces.size) {
+                            t.step("Par ${++k} de $pairs", k.toFloat() / pairs)
+                            SurfaceCompare.difference(surfaces[i], surfaces[j], maxCells = 500_000)
+                                ?.let { out[surfaces[i].name to surfaces[j].name] = it }
+                        }
+                        out
+                    }
+                }
+            } catch (e: OutOfMemoryError) {
+                compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+            }
+        }
+    }
+
+    /** row − column of the matrix, or null when the two do not overlap. */
+    fun matrixCell(row: String, column: String): SurfaceDifference? =
+        matrix[column to row] ?: matrix[row to column]?.inverted()
+
+    /** Shows on the plan the B − A map of a matrix cell (B = [row], A = [column]). */
+    fun showCell(row: String, column: String) {
+        val d = matrixCell(row, column) ?: return
+        viewModelScope.launch {
+            differenceImage = withContext(Dispatchers.Default) { DifferenceImage.of(d) }
+            difference = d
+            differenceVisible = true
+        }
+    }
+
+    /** Volumes per period through the marked surfaces in order, and what is left to the last one. */
+    fun computeStages() {
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val surfaces = crossSelected.mapNotNull { n -> project.surfaces.firstOrNull { it.name == n } }
+        if (surfaces.size < 2) return
+        compareMessage = null
+        viewModelScope.launch {
+            try {
+                val p = tracked("Comparação por etapas") { withContext(Dispatchers.Default) { SurfaceCompare.stages(surfaces) } }
+                stageProgress = p
+                if (p == null) compareMessage = "Há etapas que não se sobrepõem."
+            } catch (e: OutOfMemoryError) {
+                compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+            }
+        }
     }
 
     /** Compares surface [other] (B) against [base] (A): colored B − A and cut/fill volumes. */
@@ -571,6 +657,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     pointsMessage = null
                     compareMessage = null
                     clearDifference()
+                    crossSelected = emptyList()
+                    matrix = emptyMap()
+                    stageProgress = null
                     restoreRasters(project)
                     restoreXrefs(project)
                     ProjectState.Loaded(name, project, terrain)

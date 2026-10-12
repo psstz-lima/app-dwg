@@ -27,6 +27,35 @@ class SurfaceDifference(
 ) {
     val cellSize get() = grid.cellSize
     val netVolume get() = fillVolume - cutVolume
+
+    /** The same comparison read the other way, A − B: cut and fill swap. */
+    fun inverted(): SurfaceDifference {
+        val v = grid.values
+        val neg = FloatArray(v.size) { -v[it] }
+        return SurfaceDifference(otherName, baseName, ElevationGrid(grid.bounds, grid.cols, grid.rows, neg),
+            fillVolume, cutVolume, fillArea, cutArea, -maxDifference, -minDifference, typicalRange)
+    }
+}
+
+/** Volumes of one period between two surveys, from [from] to [to]. */
+class StagePeriod(val from: String, val to: String, val cut: Double, val fill: Double)
+
+/** Earthwork progress from the original ground through surveys to the design. */
+class StageProgress(
+    val periods: List<StagePeriod>,
+    /** Cut and fill still needed from the last survey to the design. */
+    val remainingCut: Double,
+    val remainingFill: Double,
+    /** Cut and fill from the original ground to the design. */
+    val totalCut: Double,
+    val totalFill: Double,
+) {
+    /** Share of the total earthwork already done, 0 to 1, by moved volume (cut + fill). */
+    val done: Double
+        get() {
+            val total = totalCut + totalFill
+            return if (total <= 0) 1.0 else (1 - (remainingCut + remainingFill) / total).coerceIn(0.0, 1.0)
+        }
 }
 
 object SurfaceCompare {
@@ -74,6 +103,23 @@ object SurfaceCompare {
         while (bin < HISTOGRAM_BINS - 1 && acc + histogram[bin] < count * 0.98) acc += histogram[bin++]
         val typical = if (maxAbs > 0) maxAbs * (bin + 1) / HISTOGRAM_BINS else 0.0
         return SurfaceDifference(a.name, b.name, ElevationGrid(r, cols, rows, diff), cut, fill, cutA, fillA, lo, hi, typical)
+    }
+
+    /**
+     * Progress through [stages], in order: original ground first, design last, surveys between.
+     * Null when two consecutive stages, or the first and last, do not overlap.
+     */
+    fun stages(stages: List<Surface>, maxCells: Int = 1_000_000, cancelled: () -> Boolean = { false }): StageProgress? {
+        require(stages.size >= 2)
+        val periods = ArrayList<StagePeriod>()
+        for (i in 1 until stages.size - 1) {
+            val d = difference(stages[i - 1], stages[i], maxCells, cancelled) ?: return null
+            periods += StagePeriod(stages[i - 1].name, stages[i].name, d.cutVolume, d.fillVolume)
+        }
+        val design = stages.last()
+        val remaining = difference(stages[stages.size - 2], design, maxCells, cancelled) ?: return null
+        val total = if (stages.size == 2) remaining else difference(stages.first(), design, maxCells, cancelled) ?: return null
+        return StageProgress(periods, remaining.cutVolume, remaining.fillVolume, total.cutVolume, total.fillVolume)
     }
 
     private const val HISTOGRAM_BINS = 1000

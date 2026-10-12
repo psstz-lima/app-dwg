@@ -43,4 +43,28 @@ class SurfaceCompareTest {
         assertEquals(5000.0, d.fillVolume, 60.0)
         assertNull(SurfaceCompare.difference(a, square("C", 500.0, 10.0) { _, _ -> 0.0 }))
     }
+
+    @Test
+    fun invertedSwapsCutAndFill() {
+        val a = square("A", 0.0, 100.0) { _, _ -> 100.0 }
+        val b = square("B", 0.0, 100.0) { _, _ -> 102.0 }
+        val d = SurfaceCompare.difference(a, b, maxCells = 10_000)!!.inverted()
+        assertEquals("B", d.baseName)
+        assertEquals(20_000.0, d.cutVolume, 1.0)
+        assertEquals(-2.0, d.minDifference, 1e-4)
+    }
+
+    @Test
+    fun stagesTrackProgressToTheDesign() {
+        // Ground at 100, survey at 101, design at 104: a quarter of the 4 m fill is done.
+        val ground = square("T", 0.0, 100.0) { _, _ -> 100.0 }
+        val survey = square("L1", 0.0, 100.0) { _, _ -> 101.0 }
+        val design = square("P", 0.0, 100.0) { _, _ -> 104.0 }
+        val p = SurfaceCompare.stages(listOf(ground, survey, design), maxCells = 10_000)!!
+        assertEquals(1, p.periods.size)
+        assertEquals(10_000.0, p.periods[0].fill, 1.0)
+        assertEquals(30_000.0, p.remainingFill, 1.0)
+        assertEquals(40_000.0, p.totalFill, 1.0)
+        assertEquals(0.25, p.done, 1e-6)
+    }
 }

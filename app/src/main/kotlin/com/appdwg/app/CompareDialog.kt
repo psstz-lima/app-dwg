@@ -49,6 +49,7 @@ fun CompareDialog(
     onBase: (String) -> Unit,
     onOther: (String) -> Unit,
     onAddFile: () -> Unit,
+    onCross: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val names = project.surfaces.map { it.name }
@@ -93,6 +94,7 @@ fun CompareDialog(
                         ) { Text("Calcular B − A") }
                         if (vm.difference != null) TextButton(onClick = { vm.clearDifference() }) { Text("Limpar") }
                     }
+                    TextButton(onClick = onCross) { Text("Comparação cruzada e por etapas…") }
                 }
                 vm.difference?.let { d ->
                     Spacer(Modifier.height(8.dp))
