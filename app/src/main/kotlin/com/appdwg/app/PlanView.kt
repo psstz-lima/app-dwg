@@ -31,12 +31,17 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.appdwg.core.Alignment
+import com.appdwg.core.Bounds
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.PlanImage
 import com.appdwg.core.PlanText
 import com.appdwg.core.Point2
 import com.appdwg.core.Polyline
 import com.appdwg.core.StationFormat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.job
+import kotlinx.coroutines.withContext
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.hypot
@@ -45,6 +50,11 @@ import kotlin.math.roundToInt
 
 /** Above this many triangles the mesh is not drawn, to keep panning smooth. */
 const val MAX_DRAWN_TRIANGLES = 150_000
+
+/** Detail image: wait after a gesture, extra area around the view, and largest side in pixels. */
+private const val DETAIL_DELAY_MS = 250L
+private const val DETAIL_MARGIN = 1.3
+private const val DETAIL_MAX_PX = 3072
 
 /** Pixels per metre from which the triangle mesh is drawn over the terrain. */
 private const val MESH_MIN_SCALE = 1.5
@@ -95,6 +105,32 @@ fun PlanView(
     // Bumped on every gesture so the Canvas redraws; the camera itself is mutated in place.
     var frame by remember { mutableStateOf(0) }
 
+    // Sharper terrain for the visible area once zoomed past the overview image's resolution.
+    var detail by remember(project) { mutableStateOf<List<TerrainImage>>(emptyList()) }
+    LaunchedEffect(project, frame, size, hiddenLayers) {
+        val cam = camera ?: return@LaunchedEffect
+        if (size.width <= 0 || terrain.isEmpty()) return@LaunchedEffect
+        delay(DETAIL_DELAY_MS) // waits for the gesture to settle
+        val overviewPx = terrain.minOf { it.bounds.width / it.image.width }
+        if (overviewPx * cam.scale < 1.5) {
+            detail = emptyList()
+            return@LaunchedEffect
+        }
+        // Visible area plus a margin, so short pans stay sharp.
+        val halfW = size.width / cam.scale / 2 * DETAIL_MARGIN
+        val halfH = size.height / cam.scale / 2 * DETAIL_MARGIN
+        val cx = cam.centerX + origin.x
+        val cy = cam.centerY + origin.y
+        val region = Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+        val cols = (size.width * DETAIL_MARGIN).toInt().coerceAtMost(DETAIL_MAX_PX)
+        val rows = (size.height * DETAIL_MARGIN).toInt().coerceAtMost(DETAIL_MAX_PX)
+        val job = coroutineContext.job
+        detail = withContext(Dispatchers.Default) {
+            project.surfaces.filter { it.name !in hiddenLayers }
+                .mapNotNull { TerrainImage.detail(it, region, cols, rows) { !job.isActive } }
+        }
+    }
+
     LaunchedEffect(project, size) {
         if (camera == null && size.width > 0 && size.height > 0) {
             val w = maxOf(bounds.width, 1.0)
@@ -129,11 +165,22 @@ fun PlanView(
                 }
             }
             .pointerInput(project) {
-                detectTapGestures { offset ->
-                    val cam = camera ?: return@detectTapGestures
-                    val local = toLocal(offset, cam)
-                    onTap(Point2(local.x + origin.x, local.y + origin.y))
-                }
+                detectTapGestures(
+                    // Double tap zooms in 2x around the finger, handy with one hand.
+                    onDoubleTap = { offset ->
+                        val cam = camera ?: return@detectTapGestures
+                        val before = toLocal(offset, cam)
+                        cam.scale = (cam.scale * 2).coerceIn(1e-4, 1e4)
+                        cam.centerX = before.x - (offset.x - size.width / 2.0) / cam.scale
+                        cam.centerY = before.y + (offset.y - size.height / 2.0) / cam.scale
+                        frame++
+                    },
+                    onTap = { offset ->
+                        val cam = camera ?: return@detectTapGestures
+                        val local = toLocal(offset, cam)
+                        onTap(Point2(local.x + origin.x, local.y + origin.y))
+                    },
+                )
             },
     ) {
         frame // read so gestures trigger a redraw
@@ -145,6 +192,7 @@ fun PlanView(
             if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], colors) { toScreen(it, cam) }
         }
         for (t in terrain) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
+        for (t in detail) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
 
         withTransform({
             translate(size.width / 2f, size.height / 2f)

@@ -75,6 +75,47 @@ class Surface(
         return ElevationGrid(Bounds(b.minX, b.maxY - rows * cellSize, b.minX + cols * cellSize, b.maxY), cols, rows, values)
     }
 
+    /**
+     * Samples the part of the surface inside [region] on a [cols] x [rows] grid, for a detailed
+     * picture of a zoomed-in view. Only triangles near the region are visited. Stops early, returning
+     * null, when [cancelled] turns true.
+     */
+    fun rasterize(region: Bounds, cols: Int, rows: Int, cancelled: () -> Boolean = { false }): ElevationGrid? {
+        val g = grid ?: return null
+        if (cols <= 0 || rows <= 0 || region.width <= 0 || region.height <= 0) return null
+        val cellW = region.width / cols
+        val cellH = region.height / rows
+        val values = FloatArray(cols * rows) { Float.NaN }
+        val seen = BooleanArray(triangleCount)
+        var visited = 0
+        val ok = g.forEachTriangleIn(region) { t ->
+            if (seen[t]) return@forEachTriangleIn true
+            seen[t] = true
+            if (++visited % 4096 == 0 && cancelled()) return@forEachTriangleIn false
+            var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
+            var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
+            for (k in 0..2) {
+                val i = triangles[3 * t + k]
+                minX = min(minX, xs[i]); maxX = max(maxX, xs[i])
+                minY = min(minY, ys[i]); maxY = max(maxY, ys[i])
+            }
+            val c0 = max(0, ceil((minX - region.minX) / cellW - 0.5).toInt())
+            val c1 = min(cols - 1, floor((maxX - region.minX) / cellW - 0.5).toInt())
+            val r0 = max(0, ceil((region.maxY - maxY) / cellH - 0.5).toInt())
+            val r1 = min(rows - 1, floor((region.maxY - minY) / cellH - 0.5).toInt())
+            for (r in r0..r1) {
+                val y = region.maxY - (r + 0.5) * cellH
+                for (c in c0..c1) {
+                    val x = region.minX + (c + 0.5) * cellW
+                    val z = interpolate(t, x, y) ?: continue
+                    values[r * cols + c] = z.toFloat()
+                }
+            }
+            true
+        }
+        return if (ok) ElevationGrid(region, cols, rows, values) else null
+    }
+
     internal fun interpolate(t: Int, x: Double, y: Double): Double? {
         val i0 = triangles[3 * t]
         val i1 = triangles[3 * t + 1]
@@ -144,6 +185,19 @@ private class TriangleGrid(private val s: Surface, private val b: Bounds) {
 
     private fun col(x: Double) = floor((x - b.minX) / cellW).toInt().coerceIn(0, cols - 1)
     private fun row(y: Double) = floor((y - b.minY) / cellH).toInt().coerceIn(0, rows - 1)
+
+    /**
+     * Calls [action] for the triangles in the cells overlapping [region] (a triangle can come more
+     * than once) until it returns false; returns false when stopped that way.
+     */
+    inline fun forEachTriangleIn(region: Bounds, action: (Int) -> Boolean): Boolean {
+        if (region.maxX < b.minX || region.minX > b.maxX || region.maxY < b.minY || region.minY > b.maxY) return true
+        for (cy in row(region.minY)..row(region.maxY)) for (cx in col(region.minX)..col(region.maxX)) {
+            val cell = cy * cols + cx
+            for (i in cellStart[cell] until cellStart[cell + 1]) if (!action(items[i])) return false
+        }
+        return true
+    }
 
     /** Calls [action] for each triangle near (x, y) until it returns false. */
     inline fun forEachCandidate(x: Double, y: Double, action: (Int) -> Boolean) {

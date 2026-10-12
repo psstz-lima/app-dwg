@@ -13,16 +13,30 @@ class TerrainImage(val name: String, val bounds: Bounds, val image: ImageBitmap)
     companion object {
         fun of(surface: Surface, maxSize: Int = 1024): TerrainImage? {
             val grid = surface.rasterize(maxSize) ?: return null
-            return TerrainImage(surface.name, grid.bounds, render(grid).asImageBitmap())
+            return TerrainImage(surface.name, grid.bounds, render(grid, surface).asImageBitmap())
         }
 
-        private fun render(g: ElevationGrid): Bitmap {
-            var min = Float.POSITIVE_INFINITY
-            var max = Float.NEGATIVE_INFINITY
-            for (v in g.values) if (!v.isNaN()) {
-                if (v < min) min = v
-                if (v > max) max = v
-            }
+        /**
+         * Detailed image of the part of [surface] inside [region], [cols] x [rows] pixels, for a
+         * zoomed-in view. Null when there is nothing there or [cancelled] stops it.
+         */
+        fun detail(surface: Surface, region: Bounds, cols: Int, rows: Int, cancelled: () -> Boolean): TerrainImage? {
+            val clipped = surface.bounds?.let { b ->
+                Bounds(maxOf(b.minX, region.minX), maxOf(b.minY, region.minY), minOf(b.maxX, region.maxX), minOf(b.maxY, region.maxY))
+            } ?: return null
+            if (clipped.width <= 0 || clipped.height <= 0) return null
+            // Keeps the pixel size of the requested region for the clipped part.
+            val c = maxOf(1, (cols * clipped.width / region.width).toInt())
+            val r = maxOf(1, (rows * clipped.height / region.height).toInt())
+            val grid = surface.rasterize(clipped, c, r, cancelled) ?: return null
+            if (cancelled()) return null
+            return TerrainImage(surface.name, grid.bounds, render(grid, surface).asImageBitmap())
+        }
+
+        /** Colors by the whole surface's elevation range, so detail and overview images match. */
+        private fun render(g: ElevationGrid, surface: Surface): Bitmap {
+            val min = surface.minElevation?.toFloat() ?: 0f
+            val max = surface.maxElevation?.toFloat() ?: 1f
             val range = (max - min).takeIf { it > 0f } ?: 1f
             val cell = g.cellSize.toFloat()
             val pixels = IntArray(g.cols * g.rows)
