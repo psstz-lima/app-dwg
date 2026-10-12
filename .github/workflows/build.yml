@@ -22,10 +22,6 @@ jobs:
       - name: Testes do leitor LandXML
         run: ./gradlew -p core test
 
-      - name: Gerar APK
+      # Only checks that the app compiles; the APK for the phone is built locally.
+      - name: Compilar o app
         run: ./gradlew :app:assembleDebug
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-dwg-debug-apk
-          path: app/build/outputs/apk/debug/*.apk

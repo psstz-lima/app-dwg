@@ -22,8 +22,9 @@ Atenção: o arquivo `*.xml.aecc.pnt` que aparece ao lado é um cache interno do
 
 ## Como instalar
 
-Cada push gera um APK em **Actions > Build > (execução) > Artifacts > app-dwg-debug-apk**.
-Baixe, descompacte e instale no Android (é preciso permitir apps de fontes desconhecidas).
+Compile no PC com o Android Studio (ou `./gradlew :app:assembleDebug`) e instale o APK de
+`app/build/outputs/apk/debug/`, ou ligue o celular no USB e use *Run*. O GitHub Actions só confere
+que os testes passam e que o app compila.
 
 ## Limites conhecidos
 
