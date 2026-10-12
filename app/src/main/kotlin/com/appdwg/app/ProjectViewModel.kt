@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.appdwg.core.AeccPointCache
 import com.appdwg.core.DxfReader
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.LandXmlReader
@@ -246,7 +247,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
                     project.polylines.isEmpty()
                 ) {
-                    ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML ou DXF?")
+                    ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?")
                 } else {
                     rasters = emptyMap()
                     sourceUri = uri
@@ -284,6 +285,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 text.startsWith("AC10") -> error("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML")
                 text.startsWith("AutoCAD Binary DXF") -> error("DXF binário. Salve o DXF no formato ASCII")
                 DxfReader.looksLikeDxf(text) -> return@use DxfReader(stream.reader(Charsets.UTF_8).buffered(1 shl 16)).read()
+                AeccPointCache.looksLikePointCache(head, fileSize(uri)) ->
+                    return@use AeccPointCache.read(stream, fileSize(uri), displayName(uri).substringBefore('.'))
             }
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
@@ -330,6 +333,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
         return total
     }
+
+    private fun fileSize(uri: Uri): Long =
+        runCatching { getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } }
+            .getOrNull() ?: -1L
 
     private fun displayName(uri: Uri): String {
         val resolver = getApplication<Application>().contentResolver

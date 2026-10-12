@@ -6,7 +6,8 @@ exporta com os dados reais de projeto.
 
 ## O que a versão 0.1 faz
 
-- Abre arquivos LandXML (`.xml`) e DXF ASCII (`.dxf`) do aparelho ou de outros apps (e-mail,
+- Abre arquivos LandXML (`.xml`), DXF ASCII (`.dxf`) e caches de pontos do Civil 3D
+  (`*.xml.aecc.pnt`, triangulados em superfície) do aparelho ou de outros apps (e-mail,
   gerenciador de arquivos).
 - DXF: faces 3D (`3DFACE`) e malhas viram superfície com cotas; linhas, polilinhas (inclusive 3D),
   círculos, arcos, elipses, splines, textos (`TEXT`/`MTEXT`), hachuras (preenchimento translúcido)
@@ -32,6 +33,7 @@ exporta com os dados reais de projeto.
 copie o `.xml` gerado para o celular.
 
 Atenção: o arquivo `*.xml.aecc.pnt` que aparece ao lado é um cache interno do Civil 3D, não o LandXML.
+O app abre esse cache como superfície (Delaunay dos pontos), mas sem linhas de quebra nem contornos.
 
 ## Como instalar
 

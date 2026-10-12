@@ -252,7 +252,7 @@ private fun ProjectScreen(
                         TextButton(onClick = { showReferences = true }) { Text("Referências") }
                     }
                     if (project.warnings.isNotEmpty()) {
-                        TextButton(onClick = { showWarnings = true }) { Text("${project.warnings.size} avisos") }
+                        TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos")) }
                     }
                 }
             }
