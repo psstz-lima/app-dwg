@@ -28,6 +28,9 @@ exporta com os dados reais de projeto.
 - Medir (botão "Medir"): toque pontos na planta para ver distância, azimute, desnível e inclinação de
   cada trecho, comprimento total (horizontal e inclinado) e, a partir de 3 pontos, área e perímetro.
   O toque encaixa em pontos COGO e vértices de linhas e alinhamentos próximos.
+- Seção transversal (botão "Seção"): escolha a estaca digitando ("12+5,40"), com −20/+20 ou tocando
+  na planta; mostra todas as superfícies na largura escolhida (±10 a ±100 m), o greide no eixo e o
+  corte ou aterro. Arraste no gráfico para ler as cotas em qualquer afastamento.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

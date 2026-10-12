@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.appdwg.core.CrossSection
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.Measure
 import com.appdwg.core.Measurement
@@ -186,6 +188,11 @@ private fun ProjectScreen(
     // Measuring: taps add points instead of showing the info card; points survive rotation.
     var measuring by rememberSaveable(fileName) { mutableStateOf(false) }
     var measurePoints by rememberSaveable(fileName, stateSaver = PointListSaver) { mutableStateOf(emptyList<Point2>()) }
+    // Cross section: alignment, station and half width survive rotation.
+    var showSection by rememberSaveable(fileName) { mutableStateOf(false) }
+    var sectionAlignment by rememberSaveable(fileName) { mutableStateOf(0) }
+    var sectionStation by rememberSaveable(fileName) { mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0) }
+    var sectionHalfWidth by rememberSaveable(fileName) { mutableStateOf(30.0) }
     var showWarnings by remember(fileName) { mutableStateOf(false) }
     var showLayers by remember(fileName) { mutableStateOf(false) }
     // Layer settings start from the drawing and survive rotation.
@@ -209,6 +216,11 @@ private fun ProjectScreen(
     val info = remember(project, tapped, frozenLayers) {
         // Frozen layers are left out of the elevation lookup, as if they were not in the drawing.
         tapped?.let { PointQuery.at(project, it, frozenLayers.toSet()) }
+    }
+    val sectionAxis = project.alignments.getOrNull(sectionAlignment)
+    val section = remember(project, sectionAxis, sectionStation, sectionHalfWidth, frozenLayers, showSection) {
+        if (!showSection || sectionAxis == null) null
+        else CrossSection.at(sectionAxis, sectionStation, project.surfaces.filter { it.name !in frozenLayers }, sectionHalfWidth)
     }
     val measurement = remember(project, measurePoints, frozenLayers) {
         if (measurePoints.isEmpty()) null
@@ -253,11 +265,17 @@ private fun ProjectScreen(
             drape = drape,
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
-                if (!measuring) tapped = it else if (it != measurePoints.lastOrNull()) measurePoints = measurePoints + it
+                when {
+                    measuring -> if (it != measurePoints.lastOrNull()) measurePoints = measurePoints + it
+                    // With the section open, a tap picks the station on the chosen alignment.
+                    showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
+                    else -> tapped = it
+                }
             },
             modifier = Modifier.fillMaxSize(),
             measure = if (measuring) measurePoints else emptyList(),
             snap = measuring,
+            sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) },
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
@@ -271,8 +289,16 @@ private fun ProjectScreen(
                         // Vertical exaggeration helps read gentle terrain.
                         TextButton(onClick = { exaggeration = exaggeration % 3 + 1 }) { Text("Z ×$exaggeration") }
                     }
+                    if (!show3d && project.alignments.isNotEmpty()) {
+                        TextButton(onClick = {
+                            if (!showSection) tapped?.let { t -> sectionAxis?.stationOffset(t)?.let { sectionStation = it.station } }
+                            showSection = !showSection
+                            measuring = false
+                            tapped = null
+                        }) { Text(if (showSection) "Fechar seção" else "Seção") }
+                    }
                     if (!show3d) {
-                        TextButton(onClick = { measuring = !measuring; tapped = null }) {
+                        TextButton(onClick = { measuring = !measuring; showSection = false; tapped = null }) {
                             Text(if (measuring) "Sair da medição" else "Medir")
                         }
                     }
@@ -300,6 +326,19 @@ private fun ProjectScreen(
                 "1 dedo gira · 2 dedos movem · pinça aproxima",
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
+            )
+        } else if (showSection && sectionAxis != null) {
+            SectionPanel(
+                section = section,
+                alignmentNames = project.alignments.map { it.name },
+                alignmentIndex = sectionAlignment,
+                onAlignment = { sectionAlignment = it; sectionStation = project.alignments[it].startStation },
+                station = section?.station ?: sectionStation,
+                onStation = { sectionStation = it.coerceIn(sectionAxis.startStation, sectionAxis.endStation) },
+                halfWidth = sectionHalfWidth,
+                onHalfWidth = { sectionHalfWidth = it },
+                onClose = { showSection = false },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(0.45f),
             )
         } else if (measuring) {
             MeasureCard(

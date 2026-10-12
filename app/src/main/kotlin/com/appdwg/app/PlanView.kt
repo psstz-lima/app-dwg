@@ -103,6 +103,8 @@ fun PlanView(
     measure: List<Point2> = emptyList(),
     /** Taps snap to the nearest point or vertex, for measuring. */
     snap: Boolean = false,
+    /** Ends of the cross section being shown, drawn across the alignment. */
+    sectionLine: Pair<Point2, Point2>? = null,
 ) {
     val bounds = project.bounds ?: return
     val origin = bounds.center
@@ -234,6 +236,12 @@ fun PlanView(
         drawPoints(project, cam, colors) { toScreen(it, cam) }
 
         if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
+        if (sectionLine != null) {
+            val a = toScreen(sectionLine.first, cam)
+            val b = toScreen(sectionLine.second, cam)
+            drawLine(SECTION_LINE_COLOR, a, b, strokeWidth = 4f)
+            drawCircle(SECTION_LINE_COLOR, 5.sp.toPx(), (a + b) / 2f)
+        }
 
         if (marker != null) {
             val m = toScreen(marker, cam)
@@ -482,6 +490,7 @@ private fun DrawScope.drawPoints(
 private const val SNAP_DP = 24f
 
 private val MEASURE_COLOR = Color(0xFF00B8D4)
+private val SECTION_LINE_COLOR = Color(0xFFFFD600)
 
 /**
  * Nearest COGO point, drawing vertex or alignment vertex within [radius] metres of [p], or null.

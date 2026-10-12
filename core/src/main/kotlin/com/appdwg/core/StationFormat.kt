@@ -20,6 +20,20 @@ object StationFormat {
         return sign + whole + " + " + decimal(rest)
     }
 
+    /**
+     * Reads a station typed as "12 + 5,40" or "12+5.40" (20 m stakes) or as plain metres ("245,4").
+     * Null when the text is neither.
+     */
+    fun parse(text: String, stakeLength: Double = 20.0): Double? {
+        val t = text.trim().replace(" ", "").replace(',', '.')
+        if (t.isEmpty()) return null
+        val plus = t.indexOf('+', startIndex = 1)
+        if (plus < 0) return t.toDoubleOrNull()
+        val whole = t.substring(0, plus).toDoubleOrNull() ?: return null
+        val rest = t.substring(plus + 1).ifEmpty { "0" }.toDoubleOrNull() ?: return null
+        return if (whole < 0) whole * stakeLength - rest else whole * stakeLength + rest
+    }
+
     fun decimal(value: Double, digits: Int = 2): String =
         String.format(PT_BR, "%.${digits}f", value)
 
