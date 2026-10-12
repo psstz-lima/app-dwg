@@ -8,12 +8,12 @@ import com.appdwg.core.ElevationGrid
 import com.appdwg.core.Surface
 import kotlin.math.sqrt
 
-/** Shaded elevation image of a surface, positioned by [bounds] in plan coordinates. */
-class TerrainImage(val bounds: Bounds, val image: ImageBitmap) {
+/** Shaded elevation image of the surface [name], positioned by [bounds] in plan coordinates. */
+class TerrainImage(val name: String, val bounds: Bounds, val image: ImageBitmap) {
     companion object {
         fun of(surface: Surface, maxSize: Int = 1024): TerrainImage? {
             val grid = surface.rasterize(maxSize) ?: return null
-            return TerrainImage(grid.bounds, render(grid).asImageBitmap())
+            return TerrainImage(surface.name, grid.bounds, render(grid).asImageBitmap())
         }
 
         private fun render(g: ElevationGrid): Bitmap {

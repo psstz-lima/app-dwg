@@ -9,7 +9,10 @@ exporta com os dados reais de projeto.
 - Abre arquivos LandXML (`.xml`) e DXF ASCII (`.dxf`) do aparelho ou de outros apps (e-mail,
   gerenciador de arquivos).
 - DXF: faces 3D (`3DFACE`) e malhas viram superfície com cotas; linhas, polilinhas (inclusive 3D),
-  círculos, arcos e splines são desenhados; pontos (`POINT`) aparecem como pontos.
+  círculos, arcos, elipses, splines, textos (`TEXT`/`MTEXT`), hachuras (preenchimento translúcido)
+  e blocos (`INSERT`) são desenhados nas cores do CAD.
+- Painel de camadas: ligar/desligar, congelar (também tira a camada da consulta de cotas), ver e
+  trocar a cor. Começa com o estado das camadas salvo no desenho.
 - Mostra a planta: superfície TIN colorida por cota com relevo sombreado, malha de triângulos ao
   aproximar, alinhamentos com estaqueamento (estacas de 20 m) e pontos COGO.
 - Ao tocar na planta mostra: alinhamento mais próximo, estaca, afastamento (D/E), cota do terreno,
@@ -32,8 +35,9 @@ que os testes passam e que o app compila.
 ## Limites conhecidos
 
 - O app não lê DWG. No DXF, objetos do Civil 3D (alinhamentos, superfícies AECC) não são lidos: use
-  LandXML para eles, ou explode o desenho antes de salvar o DXF. Blocos, textos, hachuras e imagens do
-  DXF ainda não são desenhados (o app avisa). DXF binário não é aceito.
+  LandXML para eles, ou explode o desenho antes de salvar o DXF. Imagens e cotas (`DIMENSION`) do DXF
+  ainda não são desenhadas (o app avisa); hachuras aparecem como preenchimento, sem o padrão. DXF
+  binário não é aceito.
 - Corredores chegam no LandXML apenas como superfícies.
 - Equações de estaca, elementos `Chain` e `IrregularLine` ainda não são aplicados (o app avisa).
 - Curvas verticais assimétricas são tratadas como simétricas.

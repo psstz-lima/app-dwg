@@ -8,6 +8,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.appdwg.core.DxfReader
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -152,8 +160,20 @@ private fun Message(text: String, openFile: () -> Unit) {
 private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) {
     // The tapped position survives rotation; the info shown is recomputed from it.
     var tapped by rememberSaveable(project, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
-    val info = remember(project, tapped) { tapped?.let { PointQuery.at(project, it) } }
     var showWarnings by remember(project) { mutableStateOf(false) }
+    var showLayers by remember(project) { mutableStateOf(false) }
+    // Layer settings start from the drawing and survive rotation.
+    var offLayers by rememberSaveable(project) { mutableStateOf(ArrayList(project.layersOff)) }
+    var frozenLayers by rememberSaveable(project) { mutableStateOf(ArrayList(project.layersFrozen)) }
+    var colorOverrides by rememberSaveable(project) { mutableStateOf(HashMap<String, Int>()) }
+    val hidden = remember(offLayers, frozenLayers) { offLayers.toSet() + frozenLayers }
+    val layerColor: (String) -> Int? = { layer ->
+        colorOverrides[layer]?.let { if (it == FOREGROUND) null else it } ?: project.layerColors[layer]
+    }
+    val info = remember(project, tapped, frozenLayers) {
+        // Frozen layers are left out of the elevation lookup, as if they were not in the drawing.
+        tapped?.let { PointQuery.at(project, it, frozenLayers.toSet()) }
+    }
     val scheme = MaterialTheme.colorScheme
     val colors = PlanColors(
         background = scheme.background,
@@ -172,6 +192,8 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             colors = colors,
             marker = info?.position,
             markerOnAxis = info?.alignment?.stationOffset?.pointOnAlignment,
+            hiddenLayers = hidden,
+            layerColor = layerColor,
             onTap = { tapped = it },
             modifier = Modifier.fillMaxSize(),
         )
@@ -180,6 +202,9 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             Card {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(summary(project), style = MaterialTheme.typography.labelMedium)
+                    if (project.layers.isNotEmpty()) {
+                        TextButton(onClick = { showLayers = true }) { Text("Camadas") }
+                    }
                     if (project.warnings.isNotEmpty()) {
                         TextButton(onClick = { showWarnings = true }) { Text("${project.warnings.size} avisos") }
                     }
@@ -198,6 +223,23 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             // Capped so the card stays readable instead of stretching across a tablet in landscape.
             InfoCard(current, Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
+    }
+
+    if (showLayers) {
+        LayersDialog(
+            project = project,
+            off = offLayers.toSet(),
+            frozen = frozenLayers.toSet(),
+            colorOf = layerColor,
+            onOff = { layer, value -> offLayers = ArrayList(offLayers.toSet().toggle(layer, value)) },
+            onFrozen = { layer, value -> frozenLayers = ArrayList(frozenLayers.toSet().toggle(layer, value)) },
+            onAllOn = { offLayers = ArrayList(); frozenLayers = ArrayList() },
+            onAllOff = { offLayers = ArrayList(project.layers) },
+            onColor = { layer, argb ->
+                colorOverrides = HashMap(colorOverrides).apply { if (argb == null) remove(layer) else put(layer, argb) }
+            },
+            onDismiss = { showLayers = false },
+        )
     }
 
     if (showWarnings) {
@@ -250,8 +292,109 @@ private fun summary(p: LandXmlProject): String = buildList {
     if (p.alignments.isNotEmpty()) add(plural(p.alignments.size, "alinhamento", "alinhamentos"))
     if (p.cgPoints.isNotEmpty()) add(plural(p.cgPoints.size, "ponto", "pontos"))
     if (p.polylines.isNotEmpty()) add(plural(p.polylines.size, "linha", "linhas"))
+    if (p.texts.isNotEmpty()) add(plural(p.texts.size, "texto", "textos"))
     p.coordinateSystem?.epsgCode?.let { add("EPSG $it") }
 }.joinToString(" · ")
+
+/** Color override meaning "the foreground color" (CAD color 7); ARGB 0 is never a CAD color. */
+private const val FOREGROUND = 0
+
+private fun Set<String>.toggle(item: String, present: Boolean) = if (present) this + item else this - item
+
+/** CAD colors offered when changing a layer color: the 9 standard ones and a spread of hues and grays. */
+private val PALETTE = listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 70, 90, 110, 130, 150, 170, 190, 210, 230, 250, 252, 254)
+
+@Composable
+private fun LayersDialog(
+    project: LandXmlProject,
+    off: Set<String>,
+    frozen: Set<String>,
+    colorOf: (String) -> Int?,
+    onOff: (String, Boolean) -> Unit,
+    onFrozen: (String, Boolean) -> Unit,
+    onAllOn: () -> Unit,
+    onAllOff: () -> Unit,
+    onColor: (String, Int?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var editing by remember { mutableStateOf<String?>(null) }
+    val foreground = MaterialTheme.colorScheme.onSurface
+    fun swatch(argb: Int?) = argb?.let { Color(it) } ?: foreground
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onAllOn) { Text("Ligar todas") }
+                TextButton(onClick = onAllOff) { Text("Desligar todas") }
+            }
+        },
+        title = { Text("Camadas") },
+        text = {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Cor", Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall)
+                    Text("Nome", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                    Text("Ligada", Modifier.width(64.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                    Text("Congelada", Modifier.width(76.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                }
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    project.layers.forEach { layer ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.width(44.dp).padding(end = 12.dp).height(28.dp)
+                                    .background(swatch(colorOf(layer)), RoundedCornerShape(4.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
+                                    .clickable { editing = layer },
+                            )
+                            Text(
+                                layer,
+                                Modifier.weight(1f).padding(vertical = 8.dp),
+                                maxLines = 1,
+                                color = if (layer in off || layer in frozen) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified,
+                            )
+                            Box(Modifier.width(64.dp), contentAlignment = Alignment.Center) {
+                                Checkbox(checked = layer !in off, onCheckedChange = { onOff(layer, !it) })
+                            }
+                            Box(Modifier.width(76.dp), contentAlignment = Alignment.Center) {
+                                Checkbox(checked = layer in frozen, onCheckedChange = { onFrozen(layer, it) })
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
+
+    editing?.let { layer ->
+        AlertDialog(
+            onDismissRequest = { editing = null },
+            confirmButton = { TextButton(onClick = { editing = null }) { Text("Fechar") } },
+            dismissButton = {
+                TextButton(onClick = { onColor(layer, null); editing = null }) { Text("Cor original") }
+            },
+            title = { Text("Cor de $layer") },
+            text = {
+                Column {
+                    PALETTE.chunked(6).forEach { row ->
+                        Row {
+                            row.forEach { aci ->
+                                val argb = DxfReader.aciColor(aci)
+                                Box(
+                                    Modifier.padding(4.dp).size(36.dp)
+                                        .background(swatch(argb), RoundedCornerShape(6.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
+                                        .clickable { onColor(layer, argb ?: FOREGROUND); editing = null },
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
 
 private val Point2Saver = Saver<Point2?, DoubleArray>(
     save = { p -> p?.let { doubleArrayOf(it.x, it.y) } },

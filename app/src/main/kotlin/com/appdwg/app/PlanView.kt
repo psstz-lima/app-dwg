@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -29,7 +30,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import com.appdwg.core.Alignment
 import com.appdwg.core.LandXmlProject
+import com.appdwg.core.PlanText
 import com.appdwg.core.Point2
+import com.appdwg.core.Polyline
 import com.appdwg.core.StationFormat
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -71,6 +74,10 @@ fun PlanView(
     colors: PlanColors,
     marker: Point2?,
     markerOnAxis: Point2?,
+    /** CAD layers not to draw. */
+    hiddenLayers: Set<String>,
+    /** Current color of a CAD layer (ARGB, null for the foreground color). */
+    layerColor: (String) -> Int?,
     onTap: (Point2) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -129,7 +136,7 @@ fun PlanView(
         val cam = camera ?: return@Canvas
         val s = cam.scale.toFloat()
 
-        for (t in terrain) drawTerrain(t) { toScreen(it, cam) }
+        for (t in terrain) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
 
         withTransform({
             translate(size.width / 2f, size.height / 2f)
@@ -138,12 +145,19 @@ fun PlanView(
         }) {
             // The triangle mesh only helps once zoomed in; from afar it hides the shaded terrain.
             if (cam.scale >= MESH_MIN_SCALE) scene.mesh?.let { drawPath(it, colors.mesh, style = Stroke(width = 1f / s)) }
-            for ((argb, path) in scene.drawing) {
-                drawPath(path, argb?.let { Color(it) } ?: colors.drawing, style = Stroke(width = 1.5f / s))
+            fun Style.paint() = (if (byLayer) layerColor(layer) else color)?.let { Color(it) } ?: colors.drawing
+            for ((key, path) in scene.hatches) {
+                if (key.layer in hiddenLayers) continue
+                drawPath(path, key.paint().copy(alpha = 0.45f))
+            }
+            for ((key, path) in scene.drawing) {
+                if (key.layer in hiddenLayers) continue
+                drawPath(path, key.paint(), style = Stroke(width = 1.5f / s))
             }
             for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
         }
 
+        drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors) { toScreen(it, cam) }
 
@@ -183,8 +197,15 @@ private fun DrawScope.drawTerrain(t: TerrainImage, toScreen: (Point2) -> Offset)
     )
 }
 
-/** [drawing] holds the CAD lines grouped by color (null is the foreground color). */
-private class Scene(val mesh: Path?, val drawing: Map<Int?, Path>, val alignments: List<Path>) {
+/** CAD layer and color (null is the foreground color) that share one path. */
+private data class Style(val layer: String, val color: Int?, val byLayer: Boolean)
+
+private class Scene(
+    val mesh: Path?,
+    val drawing: Map<Style, Path>,
+    val hatches: Map<Style, Path>,
+    val alignments: List<Path>,
+) {
     companion object {
         fun build(project: LandXmlProject, origin: Point2): Scene {
             val mesh = if (project.surfaces.sumOf { it.triangleCount } in 1..MAX_DRAWN_TRIANGLES) {
@@ -210,17 +231,22 @@ private class Scene(val mesh: Path?, val drawing: Map<Int?, Path>, val alignment
                     }
                 }
             }
-            val drawing = LinkedHashMap<Int?, Path>()
-            for (l in project.polylines) {
-                val path = drawing.getOrPut(l.color) { Path() }
+            fun Path.add(l: Polyline) {
                 for (i in l.xs.indices) {
                     val x = (l.xs[i] - origin.x).toFloat()
                     val y = (l.ys[i] - origin.y).toFloat()
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    if (i == 0) moveTo(x, y) else lineTo(x, y)
                 }
-                if (l.closed) path.close()
+                if (l.closed) close()
             }
-            return Scene(mesh, drawing, alignments)
+            val drawing = LinkedHashMap<Style, Path>()
+            for (l in project.polylines) drawing.getOrPut(Style(l.layer, l.color, l.byLayer)) { Path() }.add(l)
+            val hatches = LinkedHashMap<Style, Path>()
+            for (h in project.hatches) {
+                val path = hatches.getOrPut(Style(h.layer, h.color, h.byLayer)) { Path().apply { fillType = PathFillType.EvenOdd } }
+                h.loops.forEach { path.add(it) }
+            }
+            return Scene(mesh, drawing, hatches, alignments)
         }
     }
 }
@@ -262,6 +288,52 @@ private fun DrawScope.drawStations(
             }
             sta += step
         }
+    }
+}
+
+/** Texts smaller than this on screen are skipped; they would be unreadable and slow down panning. */
+private const val MIN_TEXT_PX = 5f
+
+private fun DrawScope.drawTexts(
+    texts: List<PlanText>,
+    hiddenLayers: Set<String>,
+    layerColor: (String) -> Int?,
+    cam: Camera,
+    colors: PlanColors,
+    toScreen: (Point2) -> Offset,
+) {
+    if (texts.isEmpty()) return
+    val paint = Paint().apply { isAntiAlias = true }
+    val canvas = drawContext.canvas.nativeCanvas
+    val default = colors.drawing.toArgb()
+    for (t in texts) {
+        val px = (t.height * cam.scale).toFloat()
+        if (px < MIN_TEXT_PX || t.layer in hiddenLayers) continue
+        val p = toScreen(Point2(t.x, t.y))
+        val lines = t.text.lines()
+        // Rough extent check before measuring: skip texts far off screen.
+        val reach = px * (lines.maxOf { it.length } + lines.size * 2)
+        if (p.x < -reach || p.y < -reach || p.x > size.width + reach || p.y > size.height + reach) continue
+        paint.textSize = px
+        paint.color = (if (t.byLayer) layerColor(t.layer) else t.color) ?: default
+        val lineHeight = px * 1.6f
+        val block = lineHeight * (lines.size - 1)
+        // Baseline of the first line relative to the anchor, in text space (y down).
+        val firstBaseline = when (t.vAlign) {
+            PlanText.TOP -> px
+            PlanText.MIDDLE -> px / 2 - block / 2
+            PlanText.BOTTOM -> -block
+            else -> -block
+        }
+        canvas.save()
+        canvas.translate(p.x, p.y)
+        canvas.rotate(-Math.toDegrees(t.rotation).toFloat())
+        lines.forEachIndexed { i, line ->
+            val w = paint.measureText(line)
+            val x = when (t.hAlign) { 1 -> -w / 2; 2 -> -w; else -> 0f }
+            canvas.drawText(line, x, firstBaseline + i * lineHeight, paint)
+        }
+        canvas.restore()
     }
 }
 

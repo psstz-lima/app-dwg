@@ -35,7 +35,8 @@ data class Bounds(val minX: Double, val minY: Double, val maxX: Double, val maxY
 
 /**
  * Plan line from a CAD drawing (DXF line, polyline, arc), kept as drawn. [color] is ARGB, or null for
- * the foreground color (CAD color 7).
+ * the foreground color (CAD color 7). [byLayer] is true when the color comes from the layer, so it
+ * follows a change of the layer color.
  */
 class Polyline(
     val layer: String,
@@ -43,9 +44,37 @@ class Polyline(
     val ys: DoubleArray,
     val closed: Boolean,
     val color: Int? = null,
+    val byLayer: Boolean = false,
 ) {
     val bounds: Bounds? get() = Bounds.of(xs.indices.asSequence().map { Point2(xs[it], ys[it]) })
 }
+
+/**
+ * Text from a CAD drawing. Placed at ([x], [y]) by [hAlign] (0 left, 1 centre, 2 right) and
+ * [vAlign]; [height] is in drawing units and [rotation] in radians, counter-clockwise from east.
+ */
+class PlanText(
+    val layer: String,
+    val color: Int?,
+    val byLayer: Boolean,
+    val x: Double,
+    val y: Double,
+    val height: Double,
+    val rotation: Double,
+    val text: String,
+    val hAlign: Int,
+    val vAlign: Int,
+) {
+    companion object {
+        const val BASELINE = 0
+        const val BOTTOM = 1
+        const val MIDDLE = 2
+        const val TOP = 3
+    }
+}
+
+/** Filled area from a CAD hatch: its boundary loops, filled even-odd so islands stay open. */
+class Hatch(val layer: String, val color: Int?, val byLayer: Boolean, val loops: List<Polyline>)
 
 data class CgPoint(val name: String, val code: String?, val position: Point3)
 
@@ -59,15 +88,30 @@ data class LandXmlProject(
     val cgPoints: List<CgPoint>,
     /** Things the reader skipped or could not interpret, in Portuguese for display. */
     val warnings: List<String>,
-    /** Drawing lines; only DXF files have them. */
+    /** Drawing lines, texts and hatches; only DXF files have them. */
     val polylines: List<Polyline> = emptyList(),
+    val texts: List<PlanText> = emptyList(),
+    val hatches: List<Hatch> = emptyList(),
+    /** Layer states and colors (ARGB, null for the foreground color) from the drawing. */
+    val layersOff: Set<String> = emptySet(),
+    val layersFrozen: Set<String> = emptySet(),
+    val layerColors: Map<String, Int?> = emptyMap(),
 ) {
+    /** CAD layers that hold something to show, sorted by name. */
+    val layers: List<String> by lazy {
+        (polylines.map { it.layer } + texts.map { it.layer } + hatches.map { it.layer } +
+            if (polylines.isEmpty() && texts.isEmpty()) emptyList() else surfaces.map { it.name })
+            .distinct().sortedBy { it.lowercase() }
+    }
+
     val bounds: Bounds?
         get() {
             var b: Bounds? = null
             surfaces.forEach { s -> s.bounds?.let { b = it.union(b) } }
             alignments.forEach { a -> a.bounds?.let { b = it.union(b) } }
             polylines.forEach { l -> l.bounds?.let { b = it.union(b) } }
+            hatches.forEach { h -> h.loops.forEach { l -> l.bounds?.let { b = it.union(b) } } }
+            Bounds.of(texts.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
             Bounds.of(cgPoints.asSequence().map { Point2(it.position.x, it.position.y) })?.let { b = it.union(b) }
             return b
         }

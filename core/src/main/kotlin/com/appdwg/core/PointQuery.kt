@@ -24,10 +24,12 @@ data class AlignmentInfo(
 }
 
 object PointQuery {
-    fun at(project: LandXmlProject, p: Point2): PointInfo {
+    /** Info at [p]; surfaces named in [skipSurfaces] (frozen layers) are not queried. */
+    fun at(project: LandXmlProject, p: Point2, skipSurfaces: Set<String> = emptySet()): PointInfo {
+        val surfaces = project.surfaces.filter { it.name !in skipSurfaces }
         var terrain: Double? = null
         var surfaceName: String? = null
-        for (s in project.surfaces) {
+        for (s in surfaces) {
             val z = s.elevationAt(p) ?: continue
             terrain = z
             surfaceName = s.name
@@ -43,12 +45,9 @@ object PointQuery {
                 name = a.name,
                 stationOffset = so,
                 designElevation = if (so.outside) null else a.profile?.elevationAt(so.station),
-                terrainOnAxis = elevation(project, so.pointOnAlignment),
+                terrainOnAxis = surfaces.firstNotNullOfOrNull { it.elevationAt(so.pointOnAlignment) },
             )
         }
         return PointInfo(p, terrain, surfaceName, alignment)
     }
-
-    private fun elevation(project: LandXmlProject, p: Point2): Double? =
-        project.surfaces.firstNotNullOfOrNull { it.elevationAt(p) }
 }
