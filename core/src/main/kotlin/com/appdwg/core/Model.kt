@@ -45,6 +45,8 @@ class Polyline(
     val closed: Boolean,
     val color: Int? = null,
     val byLayer: Boolean = false,
+    /** Elevations of the points, for 3D lines; null for flat 2D drawing. */
+    val zs: DoubleArray? = null,
 ) {
     val bounds: Bounds? get() = Bounds.of(xs.indices.asSequence().map { Point2(xs[it], ys[it]) })
 }

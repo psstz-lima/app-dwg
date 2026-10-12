@@ -130,7 +130,7 @@ class DxfReader(private val input: BufferedReader) {
             val (color, byLayer) = colorOf(e, layer, ctx)
             val out = Out(layer, color, byLayer, xf)
             when (e.type) {
-                "LINE" -> out.line(listOf(Point2(e.d(10), e.d(20)), Point2(e.d(11), e.d(21))), false)
+                "LINE" -> out.line3(listOf(Point3(e.d(10), e.d(20), e.d(30)), Point3(e.d(11), e.d(21), e.d(31))), false)
                 "LWPOLYLINE" -> readLwPolyline(e, out)
                 "POLYLINE" -> {
                     val vertices = ArrayList<Entity>()
@@ -196,7 +196,7 @@ class DxfReader(private val input: BufferedReader) {
         }
         val closed = e.i(70) and 1 != 0
         val local = withBulges(xs.indices.map { Point2(xs[it], ys.getOrElse(it) { 0.0 }) }, bulges, closed)
-        out.line(local.map { ocs.toPlan(it.x, it.y, e.d(38)) }, closed)
+        out.line3(local.map { ocs.toWorld(it.x, it.y, e.d(38)) }, closed)
     }
 
     private fun readPolyline(p: Entity, vertices: List<Entity>, out: Out) {
@@ -217,12 +217,12 @@ class DxfReader(private val input: BufferedReader) {
                 }
             }
             flags and 16 != 0 -> skipped.merge("POLYLINE (malha)", 1, Int::plus)
-            flags and 8 != 0 -> out.line(curve.map { Point2(it.d(10), it.d(20)) }, flags and 1 != 0)
+            flags and 8 != 0 -> out.line3(curve.map { Point3(it.d(10), it.d(20), it.d(30)) }, flags and 1 != 0)
             else -> {
                 val ocs = Ocs.of(p)
                 val closed = flags and 1 != 0
                 val local = withBulges(curve.map { Point2(it.d(10), it.d(20)) }, curve.map { it.d(42) }, closed)
-                out.line(local.map { ocs.toPlan(it.x, it.y, p.d(30)) }, closed)
+                out.line3(local.map { ocs.toWorld(it.x, it.y, p.d(30)) }, closed)
             }
         }
     }
@@ -231,7 +231,7 @@ class DxfReader(private val input: BufferedReader) {
         val r = e.d(40)
         if (r <= 0) return
         val ocs = Ocs.of(e)
-        out.line(arc(e.d(10), e.d(20), r, start, end, true).map { ocs.toPlan(it.x, it.y, e.d(30)) }, false)
+        out.line3(arc(e.d(10), e.d(20), r, start, end, true).map { ocs.toWorld(it.x, it.y, e.d(30)) }, false)
     }
 
     private fun readText(e: Entity, out: Out) {
@@ -341,6 +341,14 @@ class DxfReader(private val input: BufferedReader) {
 
     /** Sink for one entity's geometry: applies the block transform and records layer and color. */
     private inner class Out(val layer: String, val color: Int?, val byLayer: Boolean, val xf: Xf) {
+        /** Line with elevations; they are kept only when not all zero, so 2D drawings stay flat. */
+        fun line3(pts: List<Point3>, closed: Boolean) {
+            if (pts.size < 2) return
+            val w = pts.map { xf.apply(it) }
+            val zs = if (w.any { it.z != 0.0 }) DoubleArray(w.size) { w[it].z } else null
+            polylines += Polyline(layer, DoubleArray(w.size) { w[it].x }, DoubleArray(w.size) { w[it].y }, closed, color, byLayer, zs)
+        }
+
         fun line(pts: List<Point2>, closed: Boolean) {
             if (pts.size < 2) return
             val w = pts.map { xf.apply(it) }
@@ -513,6 +521,10 @@ class DxfReader(private val input: BufferedReader) {
             )
             ay = normalize(cross(n, ax))
         }
+
+        fun toWorld(x: Double, y: Double, z: Double) = Point3(
+            x * ax[0] + y * ay[0] + z * n[0], x * ax[1] + y * ay[1] + z * n[1], x * ax[2] + y * ay[2] + z * n[2],
+        )
 
         fun toPlan(x: Double, y: Double, z: Double) =
             Point2(x * ax[0] + y * ay[0] + z * n[0], x * ax[1] + y * ay[1] + z * n[1])

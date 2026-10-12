@@ -69,6 +69,8 @@ class DxfReaderTest {
         assertEquals(listOf(3.0, 4.0), listOf(p.polylines[0].xs[1], p.polylines[0].ys[1]))
         assertTrue(p.polylines[1].closed)
         assertEquals(listOf(1.0, 2.0), p.polylines[2].xs.toList())
+        assertEquals(listOf(10.0, 11.0), p.polylines[2].zs?.toList())
+        assertEquals(null, p.polylines[0].zs)
         assertEquals(Point3(7.0, 8.0, 9.0), p.cgPoints.single().position)
         val b = assertNotNull(p.bounds)
         assertEquals(Bounds(0.0, 0.0, 7.0, 8.0), b)

@@ -43,6 +43,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -185,8 +186,22 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
         marker = Color(0xFFFF9800),
     )
 
+    var show3d by rememberSaveable(project) { mutableStateOf(false) }
+    var exaggeration by rememberSaveable(project) { mutableStateOf(1) }
+    val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } }
+
     Box(Modifier.fillMaxSize()) {
-        PlanView(
+        if (show3d) key(project) {
+            View3D(
+                project = project,
+                hiddenLayers = hidden,
+                layerColor = layerColor,
+                background = scheme.background,
+                foreground = scheme.onBackground,
+                exaggeration = exaggeration.toFloat(),
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else PlanView(
             project = project,
             terrain = terrain,
             colors = colors,
@@ -202,6 +217,13 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
             Card {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(summary(project), style = MaterialTheme.typography.labelMedium)
+                    if (has3d) {
+                        TextButton(onClick = { show3d = !show3d }) { Text(if (show3d) "Planta" else "3D") }
+                    }
+                    if (show3d) {
+                        // Vertical exaggeration helps read gentle terrain.
+                        TextButton(onClick = { exaggeration = exaggeration % 3 + 1 }) { Text("Z ×$exaggeration") }
+                    }
                     if (project.layers.isNotEmpty()) {
                         TextButton(onClick = { showLayers = true }) { Text("Camadas") }
                     }
@@ -213,7 +235,13 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
         }
 
         val current = info
-        if (current == null) {
+        if (show3d) {
+            Text(
+                "1 dedo gira · 2 dedos movem · pinça aproxima",
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        } else if (current == null) {
             Text(
                 "Toque na planta para ver estaca, afastamento e cotas",
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
