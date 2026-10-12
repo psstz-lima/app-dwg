@@ -21,7 +21,8 @@ object AeccPointCache {
         size >= RECORD * 4 && size % RECORD == 0L && head.size >= 4 &&
             ByteBuffer.wrap(head).order(ByteOrder.LITTLE_ENDIAN).getInt(0).let { it == POINT_FLAG || it == 0x3B3FF440 }
 
-    fun read(input: InputStream, size: Long, name: String): LandXmlProject {
+    /** [onStage] is told when reading ends and triangulation starts, which takes most of the time. */
+    fun read(input: InputStream, size: Long, name: String, onStage: (String) -> Unit = {}): LandXmlProject {
         val count = (size / RECORD).toInt()
         val xs = DoubleArray(count)
         val ys = DoubleArray(count)
@@ -46,6 +47,7 @@ object AeccPointCache {
             }
         }
         require(n >= 3) { "nenhum ponto encontrado no arquivo" }
+        onStage("Triangulando $n pontos")
         return LandXmlProject(
             linearUnit = null,
             coordinateSystem = null,

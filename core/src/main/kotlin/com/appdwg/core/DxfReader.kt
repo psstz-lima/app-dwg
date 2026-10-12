@@ -53,9 +53,12 @@ class DxfReader(private val input: BufferedReader) {
     private val modelSpace = ArrayList<Entity>()
     private val blocks = HashMap<String, Block>()
 
-    fun read(): LandXmlProject {
+    /** [onStage] is told when the file has been read and the drawing is being built. */
+    fun read(onStage: (String) -> Unit = {}): LandXmlProject {
         parse()
+        onStage("Montando desenho (${modelSpace.size} objetos)")
         draw(modelSpace, Xf.IDENTITY, Context("0", null, true), 0)
+        onStage("Montando superfícies")
         return build()
     }
 

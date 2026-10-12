@@ -247,7 +247,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     }
 
     fun zoom(factor: Float) {
-        distance = (distance * factor).coerceIn(scene.radius * 0.005f, scene.radius * 20f)
+        distance = (distance * factor).coerceIn(scene.radius * 0.0005f, scene.radius * 20f)
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {

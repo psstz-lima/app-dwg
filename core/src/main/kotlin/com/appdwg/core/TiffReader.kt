@@ -28,10 +28,13 @@ class TiffReader(
     /** Decodes one JPEG stream to pixels; null when JPEG is not available. */
     private val jpeg: ((ByteArray) -> Raster?)? = null,
 ) {
+    private var onProgress: (Float) -> Unit = {}
     private var little = true
     private var big = false
 
-    fun read(maxSize: Int): Raster {
+    /** [onProgress] gets the fraction of image blocks decoded so far. */
+    fun read(maxSize: Int, onProgress: (Float) -> Unit = {}): Raster {
+        this.onProgress = onProgress
         val head = bytes(0, 16)
         little = when {
             head[0] == 'I'.code.toByte() && head[1] == 'I'.code.toByte() -> true
@@ -149,6 +152,7 @@ class TiffReader(
         val jpegTables = ifd.raw[347]?.let { (pos, len) -> bytes(pos, len.toInt()) }
 
         for (b in offsets.indices) {
+            if (b % 64 == 0) onProgress(b.toFloat() / offsets.size)
             val bx = (b % across) * blockW
             val by = (b / across) * blockH
             if (by >= height) continue

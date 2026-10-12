@@ -32,7 +32,7 @@ import org.xmlpull.v1.XmlPullParser
 
 sealed interface ProjectState {
     data object Empty : ProjectState
-    data class Loading(val fileName: String) : ProjectState
+    data class Loading(val fileName: String, val task: LoadTask) : ProjectState
     data class Loaded(val fileName: String, val project: LandXmlProject, val terrain: List<TerrainImage>) : ProjectState
     data class Failed(val fileName: String, val message: String) : ProjectState
 }
@@ -50,6 +50,20 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Raster files loaded for DXF images, by the path the drawing stores. */
     var rasters by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set
+
+    /** Files loading in the background (images, xrefs), shown with their progress. */
+    var tasks by mutableStateOf<List<LoadTask>>(emptyList())
+        private set
+
+    private suspend fun <T> tracked(label: String, block: suspend (LoadTask) -> T): T {
+        val task = LoadTask(label)
+        tasks = tasks + task
+        try {
+            return block(task)
+        } finally {
+            tasks = tasks - task
+        }
+    }
 
     /** Why the last picture could not be loaded, for the images dialog. */
     var rasterError by mutableStateOf<String?>(null)
@@ -110,7 +124,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         referenceMessage = null
         viewModelScope.launch {
             try {
-                val drawing = withContext(Dispatchers.IO) { read(uri) }
+                val drawing = tracked("XREF ${displayName(uri)}") { t -> withContext(Dispatchers.IO) { read(uri, t) } }
                 xrefDrawings = xrefDrawings + (name to drawing)
                 prefs.edit().putString("xref:$path", uri.toString()).apply()
                 refreshProject()
@@ -147,7 +161,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val b = base ?: return
         val current = state as? ProjectState.Loaded ?: return
         viewModelScope.launch {
-            val (project, terrain) = withContext(Dispatchers.Default) {
+            val (project, terrain) = tracked("Atualizando referências") { withContext(Dispatchers.Default) {
                 var p = b.copy(
                     images = b.images.filter { it.file !in detached },
                     xrefs = b.xrefs.filter { it.name !in detached },
@@ -159,7 +173,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val extra = p.surfaces.filter { s -> baseTerrain.none { it.name == s.name } }
                 extra.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
                 p to baseTerrain + extra.mapNotNull { TerrainImage.of(it) }
-            }
+            } }
             loadedXrefs = xrefDrawings.keys
             state = current.copy(project = project, terrain = terrain)
         }
@@ -181,7 +195,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         rasterError = null
         viewModelScope.launch {
             try {
-                val bitmap = withContext(Dispatchers.IO) { decodeRaster(uri) }
+                val bitmap = tracked("Imagem ${displayName(uri)}") { t -> withContext(Dispatchers.IO) { decodeRaster(uri, t) } }
                 if (bitmap != null) {
                     rasters = rasters + (file to bitmap)
                     prefs.edit().putString(file, uri.toString()).apply()
@@ -201,7 +215,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         for (image in project.images) {
             val uri = prefs.getString(image.file, null)?.let(Uri::parse) ?: continue
             viewModelScope.launch {
-                val bitmap = withContext(Dispatchers.IO) { runCatching { decodeRaster(uri) }.getOrNull() }
+                val bitmap = tracked("Imagem ${image.fileName}") { t ->
+                    withContext(Dispatchers.IO) { runCatching { decodeRaster(uri, t) }.getOrNull() }
+                }
                 if (bitmap != null) rasters = rasters + (image.file to bitmap)
             }
         }
@@ -211,14 +227,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * Decodes a picture to at most [MAX_RASTER] pixels per side. TIFF goes through the app's own
      * reader (Android has none); JPEG, PNG and WebP through the platform.
      */
-    private fun decodeRaster(uri: Uri): ImageBitmap? {
+    private fun decodeRaster(uri: Uri, task: LoadTask): ImageBitmap? {
         val resolver = getApplication<Application>().contentResolver
         val head = ByteArray(8)
         resolver.openInputStream(uri)?.use { it.read(head) }
         val text = String(head, Charsets.ISO_8859_1)
         when {
             text.startsWith("II*\u0000") || text.startsWith("MM\u0000*") || text.startsWith("II+\u0000") || text.startsWith("MM\u0000+") ->
-                return decodeTiff(uri)
+                return decodeTiff(uri, task)
             displayName(uri).endsWith(".ecw", ignoreCase = true) ->
                 error("ECW é um formato fechado (Hexagon) sem leitor livre para Android. Converta para TIFF ou JPG no QGIS (Exportar > Salvar como)")
             displayName(uri).endsWith(".jp2", ignoreCase = true) ->
@@ -229,19 +245,23 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         if (bounds.outWidth <= 0) return null
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
+        task.step("Decodificando imagem")
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }?.asImageBitmap()
     }
 
     fun open(uri: Uri) {
         val name = displayName(uri)
-        state = ProjectState.Loading(name)
+        val task = LoadTask("Abrindo $name")
+        state = ProjectState.Loading(name, task)
         viewModelScope.launch {
             state = try {
                 val (project, terrain) = withContext(Dispatchers.IO) {
-                    val p = read(uri)
+                    val p = read(uri, task)
                     // Builds each surface's lookup index now, so the first tap on the plan is instant.
+                    if (p.surfaces.isNotEmpty()) task.step("Preparando consulta de cotas")
                     p.surfaces.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
+                    if (p.surfaces.isNotEmpty()) task.step("Gerando imagem do terreno")
                     p to p.surfaces.mapNotNull { TerrainImage.of(it) }
                 }
                 if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
@@ -271,9 +291,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun read(uri: Uri): LandXmlProject {
+    private fun read(uri: Uri, task: LoadTask? = null): LandXmlProject {
         val resolver = getApplication<Application>().contentResolver
-        val input = resolver.openInputStream(uri) ?: error("arquivo indisponível")
+        val size = fileSize(uri)
+        val raw = resolver.openInputStream(uri) ?: error("arquivo indisponível")
+        val input = if (task == null) raw else CountingInputStream(raw, size) { task.step("Lendo arquivo", it) }
         return input.buffered().use { stream ->
             // Sniffs the content rather than trusting the file name, which e-mail apps often drop.
             stream.mark(HEAD_SIZE)
@@ -284,9 +306,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             when {
                 text.startsWith("AC10") -> error("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML")
                 text.startsWith("AutoCAD Binary DXF") -> error("DXF binário. Salve o DXF no formato ASCII")
-                DxfReader.looksLikeDxf(text) -> return@use DxfReader(stream.reader(Charsets.UTF_8).buffered(1 shl 16)).read()
-                AeccPointCache.looksLikePointCache(head, fileSize(uri)) ->
-                    return@use AeccPointCache.read(stream, fileSize(uri), displayName(uri).substringBefore('.'))
+                DxfReader.looksLikeDxf(text) ->
+                    return@use DxfReader(stream.reader(Charsets.UTF_8).buffered(1 shl 16)).read { task?.step(it) }
+                AeccPointCache.looksLikePointCache(head, size) ->
+                    return@use AeccPointCache.read(stream, size, displayName(uri).substringBefore('.')) { task?.step(it) }
             }
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
@@ -295,7 +318,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun decodeTiff(uri: Uri): ImageBitmap {
+    private fun decodeTiff(uri: Uri, task: LoadTask): ImageBitmap {
         val resolver = getApplication<Application>().contentResolver
         val fd = resolver.openFileDescriptor(uri, "r") ?: error("arquivo indisponível")
         return fd.use {
@@ -318,7 +341,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
                         Raster(b.width, b.height, px).also { b.recycle() }
                     }
-                }.read(MAX_RASTER)
+                }.read(MAX_RASTER) { task.step("Decodificando TIFF", it) }
                 Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888).asImageBitmap()
             }
         }
