@@ -1,6 +1,8 @@
 package com.appdwg.app
 
+import android.graphics.Bitmap
 import android.opengl.GLES30
+import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -11,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -40,6 +43,8 @@ fun View3D(
     background: Color,
     foreground: Color,
     exaggeration: Float,
+    /** Picture laid over the surfaces, or null. */
+    drape: Drape?,
     modifier: Modifier = Modifier,
 ) {
     val scene = remember(project) { Scene3D.build(project) }
@@ -49,6 +54,10 @@ fun View3D(
 
     LaunchedEffect(hiddenLayers, layerColor, background, foreground, exaggeration) {
         renderer.update(hiddenLayers, layerColor, background.toArgb(), foreground.toArgb(), exaggeration)
+        holder[0]?.requestRender()
+    }
+    LaunchedEffect(drape) {
+        renderer.setDrape(drape)
         holder[0]?.requestRender()
     }
 
@@ -104,6 +113,9 @@ class Scene3D(
     val lines: List<LineBatch>,
     /** Half of the largest horizontal extent, to place the camera. */
     val radius: Float,
+    /** Plan position of the scene's (0, 0). */
+    val originX: Double = 0.0,
+    val originY: Double = 0.0,
 ) {
     class Mesh(val name: String, val vertices: FloatArray, val indices: IntArray)
 
@@ -184,7 +196,7 @@ class Scene3D(
                 }
                 LineBatch(key.first, key.second, key.third, segs.toFloatArray())
             }
-            return Scene3D(meshes, batches, (max(bx1 - bx0, by1 - by0) / 2).toFloat().coerceAtLeast(1f))
+            return Scene3D(meshes, batches, (max(bx1 - bx0, by1 - by0) / 2).toFloat().coerceAtLeast(1f), ox, oy)
         }
 
         private fun ramp(t: Float): Int {
@@ -222,6 +234,42 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private var program = 0
     private val meshBuffers = ArrayList<IntArray>()
     private val lineBuffers = ArrayList<Int>()
+
+    // Picture over the surfaces: set from the UI, uploaded as a texture on the GL thread.
+    @Volatile private var drape: Drape? = null
+    @Volatile private var drapeDirty = false
+    private var drapeTexture = 0
+
+    fun setDrape(drape: Drape?) {
+        this.drape = drape
+        drapeDirty = true
+    }
+
+    /** Uploads the picture, scaled down when it exceeds what the GPU takes. */
+    private fun uploadDrape() {
+        drapeDirty = false
+        if (drapeTexture != 0) {
+            GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0)
+            drapeTexture = 0
+        }
+        val d = drape ?: return
+        var bitmap = d.image.asAndroidBitmap()
+        val maxSize = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0].coerceAtLeast(2048)
+        if (bitmap.width > maxSize || bitmap.height > maxSize) {
+            val f = maxSize.toFloat() / max(bitmap.width, bitmap.height)
+            bitmap = Bitmap.createScaledBitmap(bitmap, (bitmap.width * f).toInt().coerceAtLeast(1), (bitmap.height * f).toInt().coerceAtLeast(1), true)
+        }
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        drapeTexture = ids[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
+        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+    }
 
     fun update(hidden: Set<String>, layerColor: (String) -> Int?, background: Int, foreground: Int, zScale: Float) {
         this.hidden = hidden
@@ -271,6 +319,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             lineBuffers += ids[0]
         }
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        // A new GL context has lost the old texture.
+        drapeTexture = 0
+        drapeDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -295,6 +346,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         Matrix.setLookAtM(viewM, 0, ex, ey, ez, tx, ty, tz, 0f, 0f, 1f)
         Matrix.multiplyMM(mvp, 0, proj, 0, viewM, 0)
 
+        if (drapeDirty) uploadDrape()
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uZScale"), zScale)
@@ -305,6 +357,22 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(1f, 1f)
         GLES30.glUniform1i(uLit, 1)
+        val d = drape
+        val uDrape = GLES30.glGetUniformLocation(program, "uDrape")
+        if (d != null && drapeTexture != 0) {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
+            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uTex"), 0)
+            GLES30.glUniform1i(uDrape, 1)
+            // Texture v runs down from the picture's top (north) edge.
+            GLES30.glUniform4f(
+                GLES30.glGetUniformLocation(program, "uDrapeRect"),
+                (d.bounds.minX - scene.originX).toFloat(), (d.bounds.maxY - scene.originY).toFloat(),
+                d.bounds.width.toFloat(), d.bounds.height.toFloat(),
+            )
+        } else {
+            GLES30.glUniform1i(uDrape, 0)
+        }
         scene.surfaces.forEachIndexed { i, m ->
             if (m.name in hidden) return@forEachIndexed
             val ids = meshBuffers[i]
@@ -321,6 +389,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
 
         GLES30.glUniform1i(uLit, 0)
+        GLES30.glUniform1i(uDrape, 0)
         GLES30.glDisableVertexAttribArray(1)
         GLES30.glDisableVertexAttribArray(2)
         scene.lines.forEachIndexed { i, b ->
@@ -358,16 +427,23 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             uniform float uZScale;
             uniform int uLit;
             uniform vec3 uColor;
+            // Picture over the surface: left x, top y, width and height, relative to the scene origin.
+            uniform vec4 uDrapeRect;
             out vec3 vColor;
+            out float vShade;
+            out vec2 vUv;
             void main() {
                 gl_Position = uMvp * vec4(aPos.xy, aPos.z * uZScale, 1.0);
+                vUv = vec2((aPos.x - uDrapeRect.x) / uDrapeRect.z, (uDrapeRect.y - aPos.y) / uDrapeRect.w);
                 if (uLit == 1) {
                     // Normal under a vertical stretch: (nx, ny, nz / s), normalised.
                     vec3 n = normalize(vec3(aNormal.xy * uZScale, aNormal.z));
                     float light = max(dot(n, normalize(vec3(-0.5, 0.5, 0.7))), 0.0);
-                    vColor = aColor * (0.45 + 0.65 * light);
+                    vColor = aColor;
+                    vShade = 0.45 + 0.65 * light;
                 } else {
                     vColor = uColor;
+                    vShade = 1.0;
                 }
             }
         """.trimIndent()
@@ -376,8 +452,21 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             #version 300 es
             precision mediump float;
             in vec3 vColor;
+            in float vShade;
+            in vec2 vUv;
+            uniform int uDrape;
+            uniform sampler2D uTex;
             out vec4 fragColor;
-            void main() { fragColor = vec4(vColor, 1.0); }
+            void main() {
+                vec3 c = vColor;
+                if (uDrape == 1 && vUv.x >= 0.0 && vUv.x <= 1.0 && vUv.y >= 0.0 && vUv.y <= 1.0) {
+                    // Photos already carry their own shading, so the light is softened over them.
+                    vec4 t = texture(uTex, vUv);
+                    fragColor = vec4(mix(c * vShade, t.rgb * (0.7 + 0.3 * vShade), t.a), 1.0);
+                    return;
+                }
+                fragColor = vec4(c * vShade, 1.0);
+            }
         """.trimIndent()
 
         private fun floats(a: FloatArray): FloatBuffer =

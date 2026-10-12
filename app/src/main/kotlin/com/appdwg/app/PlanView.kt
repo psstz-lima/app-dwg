@@ -15,6 +15,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
@@ -93,6 +95,8 @@ fun PlanView(
     layerColor: (String) -> Int?,
     /** Pictures loaded for the drawing's images, by file path. */
     rasters: Map<String, ImageBitmap>,
+    /** Picture laid over the surfaces, or null. */
+    drape: Drape?,
     onTap: (Point2) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -191,8 +195,15 @@ fun PlanView(
         for (img in project.images) {
             if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], colors) { toScreen(it, cam) }
         }
+        // The picture laid over the surfaces covers only the terrain: it is drawn in the same layer
+        // with SrcAtop, so it shows where the terrain images have pixels and nowhere else.
+        if (drape != null) drawContext.canvas.saveLayer(Rect(Offset.Zero, this.size), androidx.compose.ui.graphics.Paint())
         for (t in terrain) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
         for (t in detail) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
+        if (drape != null) {
+            drawTerrain(TerrainImage(drape.name, drape.bounds, drape.image), BlendMode.SrcAtop) { toScreen(it, cam) }
+            drawContext.canvas.restore()
+        }
 
         withTransform({
             translate(size.width / 2f, size.height / 2f)
@@ -274,7 +285,7 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: P
 }
 
 /** Draws only the part of the terrain image that is on screen, so deep zoom stays cheap. */
-private fun DrawScope.drawTerrain(t: TerrainImage, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendMode.SrcOver, toScreen: (Point2) -> Offset) {
     val topLeft = toScreen(Point2(t.bounds.minX, t.bounds.maxY))
     val bottomRight = toScreen(Point2(t.bounds.maxX, t.bounds.minY))
     val pxW = (bottomRight.x - topLeft.x) / t.image.width
@@ -294,6 +305,7 @@ private fun DrawScope.drawTerrain(t: TerrainImage, toScreen: (Point2) -> Offset)
             ((right - left) * pxW).roundToInt().coerceAtLeast(1),
             ((bottom - top) * pxH).roundToInt().coerceAtLeast(1),
         ),
+        blendMode = blendMode,
     )
 }
 

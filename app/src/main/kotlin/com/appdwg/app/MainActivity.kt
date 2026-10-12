@@ -167,6 +167,15 @@ private fun ProjectScreen(
     vm: ProjectViewModel,
 ) {
     var showReferences by remember(fileName) { mutableStateOf(false) }
+    var showDrape by remember(fileName) { mutableStateOf(false) }
+    // Picture and, optionally, its world file, chosen together.
+    val drapePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
+            vm.loadDrape(uris)
+            showDrape = true
+        }
+    }
+    val drape = vm.drape?.takeIf { vm.drapeVisible }
     val rasters = vm.rasters.filterKeys { it !in vm.unloaded }
     // The tapped position survives rotation; the info shown is recomputed from it.
     var tapped by rememberSaveable(fileName, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
@@ -218,6 +227,7 @@ private fun ProjectScreen(
                 background = scheme.background,
                 foreground = scheme.onBackground,
                 exaggeration = exaggeration.toFloat(),
+                drape = drape,
                 modifier = Modifier.fillMaxSize(),
             )
         } else PlanView(
@@ -229,6 +239,7 @@ private fun ProjectScreen(
             hiddenLayers = hidden,
             layerColor = layerColor,
             rasters = rasters,
+            drape = drape,
             onTap = { tapped = it },
             modifier = Modifier.fillMaxSize(),
         )
@@ -246,6 +257,11 @@ private fun ProjectScreen(
                     }
                     if (project.layers.isNotEmpty()) {
                         TextButton(onClick = { showLayers = true }) { Text("Camadas") }
+                    }
+                    if (project.surfaces.isNotEmpty()) {
+                        TextButton(onClick = { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true }) {
+                            Text("Imagem")
+                        }
                     }
                     if (vm.hasReferences) {
                         TextButton(onClick = { showReferences = true }) { Text("Referências") }
@@ -275,6 +291,10 @@ private fun ProjectScreen(
             InfoCard(current, Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
         BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(8.dp).widthIn(max = 360.dp))
+    }
+
+    if (showDrape) {
+        DrapeDialog(vm, onPick = { drapePicker.launch(arrayOf("*/*")) }, onDismiss = { showDrape = false })
     }
 
     if (showReferences) {
@@ -310,6 +330,43 @@ private fun ProjectScreen(
             },
         )
     }
+}
+
+/** Shows, swaps or removes the picture laid over the surfaces. */
+@Composable
+private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () -> Unit) {
+    val d = vm.drape
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onPick) { Text(if (d == null) "Escolher" else "Trocar") }
+                if (d != null) TextButton(onClick = { vm.removeDrape(); onDismiss() }) { Text("Remover") }
+            }
+        },
+        title = { Text("Imagem sobre a superfície") },
+        text = {
+            Column {
+                if (d != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = vm.drapeVisible, onCheckedChange = { vm.drapeVisible = it })
+                        Text(d.name, maxLines = 1)
+                    }
+                } else if (vm.tasks.isEmpty()) {
+                    Text("Escolha um TIFF, JPG ou PNG. Para posicionar um JPG ou PNG, selecione junto o arquivo de georreferência (.jgw, .pgw ou .tfw).")
+                }
+                vm.drapeMessage?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+                if (vm.tasks.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    vm.tasks.forEach { LoadProgress(it) }
+                }
+            }
+        },
+    )
 }
 
 @Composable

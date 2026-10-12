@@ -10,8 +10,19 @@ interface RandomInput {
     fun read(position: Long, buffer: ByteArray, offset: Int = 0, length: Int = buffer.size)
 }
 
-/** Decoded picture as ARGB pixels, row by row from the top. */
-class Raster(val width: Int, val height: Int, val pixels: IntArray)
+/**
+ * Decoded picture as ARGB pixels, row by row from the top. [extent] is where the picture lies in plan
+ * coordinates when the file says so (GeoTIFF), from the outer edge of its corner pixels.
+ */
+class Raster(
+    val width: Int,
+    val height: Int,
+    val pixels: IntArray,
+    val extent: Bounds? = null,
+    /** Size of the full picture in the file, before downsampling, which world files refer to. */
+    val sourceWidth: Int = width,
+    val sourceHeight: Int = height,
+)
 
 /**
  * TIFF and BigTIFF reader for orthophotos and other rasters, written for the app so it needs no
@@ -60,7 +71,30 @@ class TiffReader(
             .filter { abs(it.width.toDouble() / it.height - full.width.toDouble() / full.height) < 0.02 }
             .sortedBy { it.width }
         val chosen = candidates.firstOrNull { max(it.width, it.height) >= maxSize } ?: candidates.lastOrNull() ?: full
-        return decode(chosen, maxSize)
+        val raster = decode(chosen, maxSize)
+        return Raster(raster.width, raster.height, raster.pixels, geoExtent(full), full.width, full.height)
+    }
+
+    /**
+     * Plan extent of a GeoTIFF from its pixel scale and tie point, or from a transformation matrix
+     * without rotation. Null when the file has neither, or the picture is rotated.
+     */
+    private fun geoExtent(ifd: Ifd): Bounds? {
+        val w = ifd.width.toDouble()
+        val h = ifd.height.toDouble()
+        val scale = ifd.doubles(TAG_PIXEL_SCALE)
+        val tie = ifd.doubles(TAG_TIEPOINT)
+        val (minX, maxY, sx, sy) = when {
+            scale != null && scale.size >= 2 && tie != null && tie.size >= 6 ->
+                listOf(tie[3] - tie[0] * scale[0], tie[4] + tie[1] * scale[1], scale[0], scale[1])
+            else -> {
+                val m = ifd.doubles(TAG_TRANSFORMATION)?.takeIf { it.size >= 16 } ?: return null
+                if (m[1] != 0.0 || m[4] != 0.0) return null
+                listOf(m[3], m[7], m[0], -m[5])
+            }
+        }
+        if (!(sx > 0 && sy > 0) || minX.isNaN() || maxY.isNaN()) return null
+        return Bounds(minX, maxY - h * sy, minX + w * sx, maxY)
     }
 
     private class Ifd(val tags: Map<Int, LongArray>, val raw: Map<Int, Pair<Long, Long>>) {
@@ -68,6 +102,8 @@ class TiffReader(
         val width get() = int(256).toInt()
         val height get() = int(257).toInt()
         val subfileType get() = int(254).toInt()
+        /** Values of a DOUBLE tag, which are kept as their raw bits. */
+        fun doubles(tag: Int) = tags[tag]?.let { v -> DoubleArray(v.size) { Double.fromBits(v[it]) } }
     }
 
     /** Reads one IFD; returns it and the offset of the next one. */
@@ -107,7 +143,7 @@ class TiffReader(
                     1, 2, 6 -> (data[i].toLong() and 0xFF)
                     3, 8 -> u16(data, i * 2).toLong()
                     4, 9 -> u32(data, i * 4)
-                    16, 17, 18 -> i64(data, i * 8)
+                    12, 16, 17, 18 -> i64(data, i * 8)
                     5, 10 -> u32(data, i * 8)
                     else -> 0L
                 }
@@ -286,6 +322,10 @@ class TiffReader(
     private fun abs(v: Double) = if (v < 0) -v else v
 
     companion object {
+        private const val TAG_PIXEL_SCALE = 33550
+        private const val TAG_TIEPOINT = 33922
+        private const val TAG_TRANSFORMATION = 34264
+
         private val SUPPORTED = setOf(1, 5, 7, 8, 32946, 32773)
 
         /** Bytes per value of each TIFF field type. */

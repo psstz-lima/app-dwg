@@ -16,12 +16,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.appdwg.core.AeccPointCache
+import com.appdwg.core.Bounds
 import com.appdwg.core.DxfReader
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.LandXmlReader
 import com.appdwg.core.RandomInput
 import com.appdwg.core.Raster
 import com.appdwg.core.TiffReader
+import com.appdwg.core.WorldFile
 import com.appdwg.core.Xrefs
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -38,6 +40,15 @@ sealed interface ProjectState {
 }
 
 private const val HEAD_SIZE = 64
+
+/** Picture laid over the surfaces ("imagem sobre a superfície"), placed at [bounds] in plan. */
+class Drape(val name: String, val bounds: Bounds, val image: ImageBitmap, val placement: String)
+
+/** Decoded picture, with its plan extent when the file carries one and its size in the file. */
+private class Picture(val image: ImageBitmap, val extent: Bounds?, val sourceWidth: Int, val sourceHeight: Int)
+
+/** Extensions of world files, which place a JPG, PNG or TIFF picture in plan. */
+private val WORLD_FILE_EXTENSIONS = setOf("jgw", "jpgw", "jpegw", "pgw", "pngw", "tfw", "tifw", "tiffw", "wld", "bpw", "gfw")
 
 /** Longest side of a loaded raster image; larger pictures are downsampled to save memory. */
 private const val MAX_RASTER = 4096
@@ -64,6 +75,68 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             tasks = tasks - task
         }
     }
+
+    /** Picture laid over the surfaces, in plan and in 3D, and whether it is shown. */
+    var drape by mutableStateOf<Drape?>(null)
+        private set
+    var drapeVisible by mutableStateOf(true)
+    /** Result or error of the last picture chosen for the surfaces. */
+    var drapeMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun removeDrape() {
+        drape = null
+        drapeMessage = null
+    }
+
+    /**
+     * Lays the chosen picture over the surfaces. [uris] holds the picture and, optionally, its world
+     * file (.jgw, .pgw, .tfw). A GeoTIFF places itself; a picture with no placement is stretched over
+     * the surfaces' extent.
+     */
+    fun loadDrape(uris: List<Uri>) {
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val named = uris.map { it to displayName(it) }
+        val world = named.firstOrNull { it.second.substringAfterLast('.', "").lowercase() in WORLD_FILE_EXTENSIONS }
+        val picture = named.firstOrNull { it !== world }
+        drapeMessage = null
+        if (picture == null) {
+            drapeMessage = "Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência."
+            return
+        }
+        val (uri, name) = picture
+        viewModelScope.launch {
+            try {
+                val pic = tracked("Imagem $name") { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
+                    ?: error("formato de imagem não reconhecido")
+                val surfaces = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) }
+                val area = surfaces ?: project.bounds ?: error("projeto sem área")
+                val worldText = world?.let { (w, _) ->
+                    withContext(Dispatchers.IO) {
+                        getApplication<Application>().contentResolver.openInputStream(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) }
+                    }
+                }
+                val (bounds, placement) = when {
+                    worldText != null -> WorldFile.extent(worldText, pic.sourceWidth, pic.sourceHeight) to "posicionada pelo arquivo ${world?.second}"
+                    pic.extent != null -> pic.extent to "posicionada pelo GeoTIFF"
+                    else -> area to "esticada sobre a superfície (a imagem não tem georreferência)"
+                }
+                drape = Drape(name, bounds, pic.image, placement)
+                drapeVisible = true
+                drapeMessage = if (!overlaps(bounds, area)) {
+                    "A imagem foi $placement, mas não cai sobre a superfície. Confira se as duas estão no mesmo sistema de coordenadas."
+                } else {
+                    "Imagem $placement."
+                }
+            } catch (e: OutOfMemoryError) {
+                drapeMessage = "Imagem grande demais para a memória deste aparelho."
+            } catch (e: Exception) {
+                drapeMessage = "Não foi possível usar a imagem: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    private fun overlaps(a: Bounds, b: Bounds) = a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY
 
     /** Why the last picture could not be loaded, for the images dialog. */
     var rasterError by mutableStateOf<String?>(null)
@@ -227,7 +300,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * Decodes a picture to at most [MAX_RASTER] pixels per side. TIFF goes through the app's own
      * reader (Android has none); JPEG, PNG and WebP through the platform.
      */
-    private fun decodeRaster(uri: Uri, task: LoadTask): ImageBitmap? {
+    private fun decodeRaster(uri: Uri, task: LoadTask): ImageBitmap? = decodePicture(uri, task)?.image
+
+    private fun decodePicture(uri: Uri, task: LoadTask): Picture? {
         val resolver = getApplication<Application>().contentResolver
         val head = ByteArray(8)
         resolver.openInputStream(uri)?.use { it.read(head) }
@@ -247,7 +322,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
         task.step("Decodificando imagem")
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }?.asImageBitmap()
+        val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+        return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
 
     fun open(uri: Uri) {
@@ -270,6 +346,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?")
                 } else {
                     rasters = emptyMap()
+                    drape = null
+                    drapeMessage = null
                     sourceUri = uri
                     base = project
                     baseTerrain = terrain
@@ -318,7 +396,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun decodeTiff(uri: Uri, task: LoadTask): ImageBitmap {
+    private fun decodeTiff(uri: Uri, task: LoadTask): Picture {
         val resolver = getApplication<Application>().contentResolver
         val fd = resolver.openFileDescriptor(uri, "r") ?: error("arquivo indisponível")
         return fd.use {
@@ -342,7 +420,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         Raster(b.width, b.height, px).also { b.recycle() }
                     }
                 }.read(MAX_RASTER) { task.step("Decodificando TIFF", it) }
-                Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888).asImageBitmap()
+                val bitmap = Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888)
+                Picture(bitmap.asImageBitmap(), raster.extent, raster.sourceWidth, raster.sourceHeight)
             }
         }
     }
