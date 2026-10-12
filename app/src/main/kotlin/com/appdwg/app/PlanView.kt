@@ -99,6 +99,10 @@ fun PlanView(
     drape: Drape?,
     onTap: (Point2) -> Unit,
     modifier: Modifier = Modifier,
+    /** Points of the measurement being taken, drawn as a line and, from 3 points on, an area. */
+    measure: List<Point2> = emptyList(),
+    /** Taps snap to the nearest point or vertex, for measuring. */
+    snap: Boolean = false,
 ) {
     val bounds = project.bounds ?: return
     val origin = bounds.center
@@ -168,7 +172,7 @@ fun PlanView(
                     frame++
                 }
             }
-            .pointerInput(project) {
+            .pointerInput(project, snap, hiddenLayers) {
                 detectTapGestures(
                     // Double tap zooms in 2x around the finger, handy with one hand.
                     onDoubleTap = { offset ->
@@ -182,7 +186,8 @@ fun PlanView(
                     onTap = { offset ->
                         val cam = camera ?: return@detectTapGestures
                         val local = toLocal(offset, cam)
-                        onTap(Point2(local.x + origin.x, local.y + origin.y))
+                        val world = Point2(local.x + origin.x, local.y + origin.y)
+                        onTap(if (snap) snapTarget(project, world, SNAP_DP * density / cam.scale, hiddenLayers) ?: world else world)
                     },
                 )
             },
@@ -227,6 +232,8 @@ fun PlanView(
         drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors) { toScreen(it, cam) }
+
+        if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
 
         if (marker != null) {
             val m = toScreen(marker, cam)
@@ -468,5 +475,67 @@ private fun DrawScope.drawPoints(
         if (sp.x < -20f || sp.y < -20f || sp.x > size.width + 20f || sp.y > size.height + 20f) continue
         drawCircle(colors.points, radius = r, center = sp)
         if (showNames) drawContext.canvas.nativeCanvas.drawText(pt.name, sp.x + r * 1.5f, sp.y - r * 1.5f, paint)
+    }
+}
+
+/** Snap radius for measuring, in dp. */
+private const val SNAP_DP = 24f
+
+private val MEASURE_COLOR = Color(0xFF00B8D4)
+
+/**
+ * Nearest COGO point, drawing vertex or alignment vertex within [radius] metres of [p], or null.
+ * Hidden layers are skipped.
+ */
+private fun snapTarget(project: LandXmlProject, p: Point2, radius: Double, hiddenLayers: Set<String>): Point2? {
+    var best: Point2? = null
+    var bestD = radius
+    fun consider(x: Double, y: Double) {
+        val d = hypot(x - p.x, y - p.y)
+        if (d < bestD) {
+            bestD = d
+            best = Point2(x, y)
+        }
+    }
+    for (pt in project.cgPoints) consider(pt.position.x, pt.position.y)
+    for (l in project.polylines) {
+        if (l.layer in hiddenLayers) continue
+        for (i in l.xs.indices) consider(l.xs[i], l.ys[i])
+    }
+    for (a in project.alignments) for (v in a.vertices) consider(v.x, v.y)
+    return best
+}
+
+/** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */
+private fun DrawScope.drawMeasure(points: List<Point2>, toScreen: (Point2) -> Offset) {
+    val screen = points.map(toScreen)
+    if (screen.size >= 3) {
+        val fill = Path().apply {
+            moveTo(screen[0].x, screen[0].y)
+            for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
+            close()
+        }
+        drawPath(fill, MEASURE_COLOR.copy(alpha = 0.18f))
+        drawLine(
+            MEASURE_COLOR, screen.last(), screen[0], strokeWidth = 2f,
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
+        )
+    }
+    for (i in 1 until screen.size) drawLine(MEASURE_COLOR, screen[i - 1], screen[i], strokeWidth = 4f)
+    val label = Paint().apply {
+        isAntiAlias = true
+        textSize = 12.sp.toPx()
+        color = MEASURE_COLOR.toArgb()
+        setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK)
+    }
+    for (i in 1 until screen.size) {
+        val mid = (screen[i - 1] + screen[i]) / 2f
+        val d = hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+        drawContext.canvas.nativeCanvas.drawText(StationFormat.decimal(d) + " m", mid.x + 6f, mid.y - 6f, label)
+    }
+    for ((i, sp) in screen.withIndex()) {
+        drawCircle(Color.White, radius = 6.sp.toPx(), center = sp)
+        drawCircle(MEASURE_COLOR, radius = 6.sp.toPx(), center = sp, style = Stroke(width = 3f))
+        if (i == 0) drawCircle(MEASURE_COLOR, radius = 3.sp.toPx(), center = sp)
     }
 }

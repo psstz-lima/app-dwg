@@ -10,6 +10,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.size
@@ -57,6 +59,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.LandXmlProject
+import com.appdwg.core.Measure
+import com.appdwg.core.Measurement
 import com.appdwg.core.Point2
 import com.appdwg.core.PointInfo
 import com.appdwg.core.PointQuery
@@ -179,6 +183,9 @@ private fun ProjectScreen(
     val rasters = vm.rasters.filterKeys { it !in vm.unloaded }
     // The tapped position survives rotation; the info shown is recomputed from it.
     var tapped by rememberSaveable(fileName, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
+    // Measuring: taps add points instead of showing the info card; points survive rotation.
+    var measuring by rememberSaveable(fileName) { mutableStateOf(false) }
+    var measurePoints by rememberSaveable(fileName, stateSaver = PointListSaver) { mutableStateOf(emptyList<Point2>()) }
     var showWarnings by remember(fileName) { mutableStateOf(false) }
     var showLayers by remember(fileName) { mutableStateOf(false) }
     // Layer settings start from the drawing and survive rotation.
@@ -202,6 +209,10 @@ private fun ProjectScreen(
     val info = remember(project, tapped, frozenLayers) {
         // Frozen layers are left out of the elevation lookup, as if they were not in the drawing.
         tapped?.let { PointQuery.at(project, it, frozenLayers.toSet()) }
+    }
+    val measurement = remember(project, measurePoints, frozenLayers) {
+        if (measurePoints.isEmpty()) null
+        else Measure.of(measurePoints, measurePoints.map { PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation })
     }
     val scheme = MaterialTheme.colorScheme
     val colors = PlanColors(
@@ -240,8 +251,13 @@ private fun ProjectScreen(
             layerColor = layerColor,
             rasters = rasters,
             drape = drape,
-            onTap = { tapped = it },
+            onTap = {
+                // Tapping the same snapped point twice would add a zero-length leg.
+                if (!measuring) tapped = it else if (it != measurePoints.lastOrNull()) measurePoints = measurePoints + it
+            },
             modifier = Modifier.fillMaxSize(),
+            measure = if (measuring) measurePoints else emptyList(),
+            snap = measuring,
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
@@ -254,6 +270,11 @@ private fun ProjectScreen(
                     if (show3d) {
                         // Vertical exaggeration helps read gentle terrain.
                         TextButton(onClick = { exaggeration = exaggeration % 3 + 1 }) { Text("Z ×$exaggeration") }
+                    }
+                    if (!show3d) {
+                        TextButton(onClick = { measuring = !measuring; tapped = null }) {
+                            Text(if (measuring) "Sair da medição" else "Medir")
+                        }
                     }
                     if (project.layers.isNotEmpty()) {
                         TextButton(onClick = { showLayers = true }) { Text("Camadas") }
@@ -279,6 +300,15 @@ private fun ProjectScreen(
                 "1 dedo gira · 2 dedos movem · pinça aproxima",
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
+            )
+        } else if (measuring) {
+            MeasureCard(
+                measurement,
+                onUndo = { measurePoints = measurePoints.dropLast(1) },
+                onClear = { measurePoints = emptyList() },
+                onDone = { measuring = false },
+                // At the side, so the points being measured stay visible on a tablet.
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).widthIn(max = 380.dp).fillMaxWidth(),
             )
         } else if (current == null) {
             Text(
@@ -391,6 +421,51 @@ private fun InfoCard(info: PointInfo, modifier: Modifier) {
         }
     }
 }
+
+/** Results of the measurement being taken, with undo, clear and done. */
+@Composable
+private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier) {
+    // Taps on the card must not reach the plan underneath and add a point.
+    Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Medir", style = MaterialTheme.typography.titleSmall)
+            val leg = m?.legs?.lastOrNull()
+            if (m == null || leg == null) {
+                Text(
+                    "Toque na planta para marcar os pontos. O toque encaixa em pontos e vértices próximos." +
+                        if (m != null) " Marque o próximo ponto." else "",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                if (m.legs.size > 1) Text("Último trecho", style = MaterialTheme.typography.labelMedium)
+                Line("Distância", StationFormat.decimal(leg.distance, 3) + " m")
+                Line("Azimute", Measure.dms(leg.azimuth))
+                leg.rise?.let { r ->
+                    Line("Desnível", signed(r, 3) + " m")
+                    leg.slopePercent?.let { Line("Inclinação", signed(it, 2) + " %") }
+                }
+                if (m.legs.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Total (${m.legs.size + 1} pontos)", style = MaterialTheme.typography.labelMedium)
+                    Line("Comprimento", StationFormat.decimal(m.length, 3) + " m")
+                    m.rise?.let { r -> Line("Desnível 1º → último", signed(r, 3) + " m") }
+                }
+                m.slopeLength?.let { Line("Comprimento inclinado", StationFormat.decimal(it, 3) + " m") }
+                m.area?.let { Line("Área", Measure.area(it)) }
+                m.perimeter?.let { Line("Perímetro", StationFormat.decimal(it, 3) + " m") }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                if (m != null) {
+                    TextButton(onClick = onUndo) { Text("Desfazer") }
+                    TextButton(onClick = onClear) { Text("Limpar") }
+                }
+                TextButton(onClick = onDone) { Text("Concluir") }
+            }
+        }
+    }
+}
+
+private fun signed(v: Double, digits: Int) = (if (v >= 0) "+" else "−") + StationFormat.decimal(abs(v), digits)
 
 @Composable
 private fun Line(label: String, value: String) {
@@ -508,6 +583,11 @@ private fun LayersDialog(
         )
     }
 }
+
+private val PointListSaver = Saver<List<Point2>, DoubleArray>(
+    save = { pts -> DoubleArray(pts.size * 2) { i -> if (i % 2 == 0) pts[i / 2].x else pts[i / 2].y } },
+    restore = { a -> List(a.size / 2) { Point2(a[2 * it], a[2 * it + 1]) } },
+)
 
 private val Point2Saver = Saver<Point2?, DoubleArray>(
     save = { p -> p?.let { doubleArrayOf(it.x, it.y) } },

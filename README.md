@@ -25,6 +25,9 @@ exporta com os dados reais de projeto.
   aproximar, alinhamentos com estaqueamento (estacas de 20 m) e pontos COGO.
 - Ao tocar na planta mostra: alinhamento mais próximo, estaca, afastamento (D/E), cota do terreno,
   cota do greide no eixo e corte ou aterro no eixo.
+- Medir (botão "Medir"): toque pontos na planta para ver distância, azimute, desnível e inclinação de
+  cada trecho, comprimento total (horizontal e inclinado) e, a partir de 3 pontos, área e perímetro.
+  O toque encaixa em pontos COGO e vértices de linhas e alinhamentos próximos.
 - Funciona offline.
 
 ## Como exportar do Civil 3D
