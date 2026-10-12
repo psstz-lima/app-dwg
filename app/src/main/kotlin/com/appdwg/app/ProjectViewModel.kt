@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.appdwg.core.DxfReader
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.LandXmlReader
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,8 @@ sealed interface ProjectState {
     data class Loaded(val fileName: String, val project: LandXmlProject, val terrain: List<TerrainImage>) : ProjectState
     data class Failed(val fileName: String, val message: String) : ProjectState
 }
+
+private const val HEAD_SIZE = 64
 
 class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -39,8 +42,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     p.surfaces.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
                     p to p.surfaces.mapNotNull { TerrainImage.of(it) }
                 }
-                if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty()) {
-                    ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML?")
+                if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
+                    project.polylines.isEmpty()
+                ) {
+                    ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML ou DXF?")
                 } else {
                     ProjectState.Loaded(name, project, terrain)
                 }
@@ -56,11 +61,32 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val resolver = getApplication<Application>().contentResolver
         val input = resolver.openInputStream(uri) ?: error("arquivo indisponível")
         return input.buffered().use { stream ->
+            // Sniffs the content rather than trusting the file name, which e-mail apps often drop.
+            stream.mark(HEAD_SIZE)
+            val head = ByteArray(HEAD_SIZE)
+            val n = stream.readNBytesCompat(head)
+            stream.reset()
+            val text = String(head, 0, n, Charsets.ISO_8859_1)
+            when {
+                text.startsWith("AC10") -> error("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML")
+                text.startsWith("AutoCAD Binary DXF") -> error("DXF binário. Salve o DXF no formato ASCII")
+                DxfReader.looksLikeDxf(text) -> return@use DxfReader(stream.reader(Charsets.UTF_8).buffered(1 shl 16)).read()
+            }
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
             parser.setInput(stream, null)
             LandXmlReader(parser).read()
         }
+    }
+
+    private fun java.io.InputStream.readNBytesCompat(buffer: ByteArray): Int {
+        var total = 0
+        while (total < buffer.size) {
+            val r = read(buffer, total, buffer.size - total)
+            if (r < 0) break
+            total += r
+        }
+        return total
     }
 
     private fun displayName(uri: Uri): String {

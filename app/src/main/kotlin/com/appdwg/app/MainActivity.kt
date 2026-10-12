@@ -124,10 +124,10 @@ private fun EmptyState(openFile: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Abra um arquivo LandXML", style = MaterialTheme.typography.titleLarge)
+        Text("Abra um arquivo LandXML ou DXF", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         Text(
-            "No Civil 3D, use Saída > Exportar para LandXML e copie o arquivo .xml para o aparelho.",
+            "No Civil 3D, use Saída > Exportar para LandXML (.xml) ou salve como DXF (.dxf) e copie o arquivo para o aparelho.",
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(16.dp))
@@ -159,6 +159,7 @@ private fun ProjectScreen(project: LandXmlProject, terrain: List<TerrainImage>) 
         background = scheme.background,
         mesh = Color(0x66000000),
         alignment = Color(0xFFE53935),
+        drawing = scheme.onBackground,
         stations = scheme.onBackground,
         points = Color(0xFF1E88E5),
         marker = Color(0xFFFF9800),
@@ -248,6 +249,7 @@ private fun summary(p: LandXmlProject): String = buildList {
     if (p.surfaces.isNotEmpty()) add(plural(p.surfaces.size, "superfície", "superfícies"))
     if (p.alignments.isNotEmpty()) add(plural(p.alignments.size, "alinhamento", "alinhamentos"))
     if (p.cgPoints.isNotEmpty()) add(plural(p.cgPoints.size, "ponto", "pontos"))
+    if (p.polylines.isNotEmpty()) add(plural(p.polylines.size, "linha", "linhas"))
     p.coordinateSystem?.epsgCode?.let { add("EPSG $it") }
 }.joinToString(" · ")
 

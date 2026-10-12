@@ -47,6 +47,7 @@ data class PlanColors(
     val background: Color,
     val mesh: Color,
     val alignment: Color,
+    val drawing: Color,
     val stations: Color,
     val points: Color,
     val marker: Color,
@@ -137,6 +138,9 @@ fun PlanView(
         }) {
             // The triangle mesh only helps once zoomed in; from afar it hides the shaded terrain.
             if (cam.scale >= MESH_MIN_SCALE) scene.mesh?.let { drawPath(it, colors.mesh, style = Stroke(width = 1f / s)) }
+            for ((argb, path) in scene.drawing) {
+                drawPath(path, argb?.let { Color(it) } ?: colors.drawing, style = Stroke(width = 1.5f / s))
+            }
             for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
         }
 
@@ -179,7 +183,8 @@ private fun DrawScope.drawTerrain(t: TerrainImage, toScreen: (Point2) -> Offset)
     )
 }
 
-private class Scene(val mesh: Path?, val alignments: List<Path>) {
+/** [drawing] holds the CAD lines grouped by color (null is the foreground color). */
+private class Scene(val mesh: Path?, val drawing: Map<Int?, Path>, val alignments: List<Path>) {
     companion object {
         fun build(project: LandXmlProject, origin: Point2): Scene {
             val mesh = if (project.surfaces.sumOf { it.triangleCount } in 1..MAX_DRAWN_TRIANGLES) {
@@ -205,7 +210,17 @@ private class Scene(val mesh: Path?, val alignments: List<Path>) {
                     }
                 }
             }
-            return Scene(mesh, alignments)
+            val drawing = LinkedHashMap<Int?, Path>()
+            for (l in project.polylines) {
+                val path = drawing.getOrPut(l.color) { Path() }
+                for (i in l.xs.indices) {
+                    val x = (l.xs[i] - origin.x).toFloat()
+                    val y = (l.ys[i] - origin.y).toFloat()
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                if (l.closed) path.close()
+            }
+            return Scene(mesh, drawing, alignments)
         }
     }
 }

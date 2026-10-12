@@ -33,6 +33,20 @@ data class Bounds(val minX: Double, val minY: Double, val maxX: Double, val maxY
     }
 }
 
+/**
+ * Plan line from a CAD drawing (DXF line, polyline, arc), kept as drawn. [color] is ARGB, or null for
+ * the foreground color (CAD color 7).
+ */
+class Polyline(
+    val layer: String,
+    val xs: DoubleArray,
+    val ys: DoubleArray,
+    val closed: Boolean,
+    val color: Int? = null,
+) {
+    val bounds: Bounds? get() = Bounds.of(xs.indices.asSequence().map { Point2(xs[it], ys[it]) })
+}
+
 data class CgPoint(val name: String, val code: String?, val position: Point3)
 
 data class CoordinateSystemInfo(val name: String?, val epsgCode: String?, val horizontalDatum: String?)
@@ -45,12 +59,15 @@ data class LandXmlProject(
     val cgPoints: List<CgPoint>,
     /** Things the reader skipped or could not interpret, in Portuguese for display. */
     val warnings: List<String>,
+    /** Drawing lines; only DXF files have them. */
+    val polylines: List<Polyline> = emptyList(),
 ) {
     val bounds: Bounds?
         get() {
             var b: Bounds? = null
             surfaces.forEach { s -> s.bounds?.let { b = it.union(b) } }
             alignments.forEach { a -> a.bounds?.let { b = it.union(b) } }
+            polylines.forEach { l -> l.bounds?.let { b = it.union(b) } }
             Bounds.of(cgPoints.asSequence().map { Point2(it.position.x, it.position.y) })?.let { b = it.union(b) }
             return b
         }
