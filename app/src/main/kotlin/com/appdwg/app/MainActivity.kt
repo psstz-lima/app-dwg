@@ -169,7 +169,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                                 TextButton(onClick = { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }, modifier = Modifier.weight(1f)) {
                                     Text(name, maxLines = 1, modifier = Modifier.fillMaxWidth())
                                 }
-                                TextButton(onClick = { viewModel.forgetRecent(uri) }) { Text("Tirar") }
+                                TextButton(onClick = { viewModel.forgetRecent(uri) }) { Text("Remover") }
                             }
                         }
                     }
