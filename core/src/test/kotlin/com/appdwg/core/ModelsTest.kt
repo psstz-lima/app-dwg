@@ -92,4 +92,14 @@ class ModelsTest {
         assertEquals("baixo", ModelPick.at(listOf(low, high), Point2(2.0, 2.0), setOf("B"))!!.name)
         assertEquals(null, ModelPick.at(listOf(low), Point2(9.0, 9.0)))
     }
+
+    @Test
+    fun twoPointAlignmentMapsBothPoints() {
+        val pl = ModelAlign.twoPoints(Point2(0.0, 0.0), Point2(10000.0, 0.0), Point2(500.0, 700.0), Point2(500.0, 720.0), 0.001, 50.0)!!
+        val m = pl.apply(ModelMesh("L", "n", doubleArrayOf(0.0, 0.0, 0.0, 10000.0, 0.0, 0.0), intArrayOf(), 0))
+        assertEquals(500.0, m.positions[0], 1e-9); assertEquals(700.0, m.positions[1], 1e-9)
+        assertEquals(500.0, m.positions[3], 1e-9); assertEquals(720.0, m.positions[4], 1e-9)
+        assertEquals(2.0, pl.scale, 1e-12)
+        assertEquals(90.0, pl.rotationDeg, 1e-9)
+    }
 }

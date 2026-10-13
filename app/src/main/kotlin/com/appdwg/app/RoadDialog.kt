@@ -59,6 +59,7 @@ fun RoadDialog(
     project: LandXmlProject,
     onDrawAxis: () -> Unit,
     onServiceNote: () -> Unit,
+    onServiceNotePdf: () -> Unit,
     /** Asks the plan for a line to be the edge target of region [index] on the left (−1) or right (1). */
     onPickTarget: (index: Int, side: Int) -> Unit,
     onDismiss: () -> Unit,
@@ -235,7 +236,7 @@ fun RoadDialog(
                     RoadTab.RESULT -> {
                         vm.tasks.forEach { LoadProgress(it) }
                         vm.roadMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        vm.road?.let { r -> RoadResult(r, onServiceNote) } ?: if (vm.tasks.isEmpty()) Text("Toque em Calcular.") else Unit
+                        vm.road?.let { r -> RoadResult(r, onServiceNote, onServiceNotePdf) } ?: if (vm.tasks.isEmpty()) Text("Toque em Calcular.") else Unit
                     }
                 }
             }
@@ -286,12 +287,17 @@ private fun SlopeEditor(title: String, r: SlopeRule, onChange: (SlopeRule) -> Un
 }
 
 @Composable
-private fun RoadResult(r: CorridorResult, onServiceNote: () -> Unit) {
+private fun RoadResult(r: CorridorResult, onServiceNote: () -> Unit, onServiceNotePdf: () -> Unit) {
     Text("Eixo ${r.alignment.name}: ${f(r.alignment.length)} m, ${r.sections.size} seções", style = MaterialTheme.typography.labelLarge)
     Text("Corte ${f(r.totalCut, 1)} m³ · Aterro ${f(r.totalFill, 1)} m³ · Saldo final (Brückner) ${f(r.volumes.last().accumulated, 1)} m³")
     Text("Superfícies \"$ROAD_LABEL\" (acabada) e \"$ROAD_LABEL (terraplenagem)\" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.",
         style = MaterialTheme.typography.bodySmall)
-    OutlinedButton(onClick = onServiceNote) { Text("Exportar nota de serviço e volumes (CSV)") }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = onServiceNote) { Text("Nota de serviço e volumes (CSV)") }
+        OutlinedButton(onClick = onServiceNotePdf) { Text("Nota de serviço (PDF)") }
+    }
+    Text("No Exportar: LandXML leva o eixo, o greide, as seções e as superfícies com breaklines; DXF leva bordos, crista e pé em 3D.",
+        style = MaterialTheme.typography.bodySmall)
     HorizontalDivider()
     Text("Diagrama de Brückner (volume acumulado: acima = sobra de corte)", style = MaterialTheme.typography.labelMedium)
     val fg = MaterialTheme.colorScheme.onSurface

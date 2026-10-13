@@ -163,6 +163,9 @@ object LandXmlWriter {
         out: Writer,
         epsg: String? = null,
         sources: Map<String, SurfaceSource> = emptyMap(),
+        alignments: List<Alignment> = emptyList(),
+        /** Cross sections per alignment name, written as CrossSects with the design points. */
+        sections: Map<String, List<RoadSection>> = emptyMap(),
     ) {
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         out.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
@@ -213,6 +216,44 @@ object LandXmlWriter {
                 out.write("        </Faces>\n      </Definition>\n    </Surface>\n")
             }
             out.write("  </Surfaces>\n")
+        }
+        if (alignments.isNotEmpty()) {
+            out.write("  <Alignments>\n")
+            for (a in alignments) {
+                fun pt(tag: String, p: Point2) = "<$tag>${f3(p.y)} ${f3(p.x)}</$tag>"
+                out.write("    <Alignment name=\"${esc(a.name)}\" length=\"${f3(a.length)}\" staStart=\"${f3(a.startStation)}\">\n      <CoordGeom>\n")
+                for (e in a.elements) when (e) {
+                    is AlignmentElement.Line -> out.write("        <Line length=\"${f3(e.length)}\">${pt("Start", e.start)}${pt("End", e.end)}</Line>\n")
+                    is AlignmentElement.Arc -> out.write("        <Curve rot=\"${if (e.clockwise) "cw" else "ccw"}\" radius=\"${f3(e.radius)}\" length=\"${f3(e.length)}\">" +
+                        "${pt("Start", e.start)}${pt("Center", e.center)}${pt("End", e.end)}</Curve>\n")
+                    is AlignmentElement.Spiral -> {
+                        fun r(v: Double) = if (v.isInfinite()) "INF" else f3(v)
+                        out.write("        <Spiral rot=\"${if (e.clockwise) "cw" else "ccw"}\" length=\"${f3(e.length)}\" radiusStart=\"${r(e.radiusStart)}\" " +
+                            "radiusEnd=\"${r(e.radiusEnd)}\" spiType=\"clothoid\">${pt("Start", e.start)}${pt("PI", e.pi)}${pt("End", e.end)}</Spiral>\n")
+                    }
+                }
+                out.write("      </CoordGeom>\n")
+                a.profile?.let { pr ->
+                    out.write("      <Profile name=\"${esc(pr.name)}\">\n        <ProfAlign name=\"${esc(pr.name)}\">\n")
+                    for (v in pr.pvis) {
+                        if (v.curveLength > 0) out.write("          <ParaCurve length=\"${f3(v.curveLength)}\">${f3(v.station)} ${f3(v.elevation)}</ParaCurve>\n")
+                        else out.write("          <PVI>${f3(v.station)} ${f3(v.elevation)}</PVI>\n")
+                    }
+                    out.write("        </ProfAlign>\n      </Profile>\n")
+                }
+                sections[a.name]?.takeIf { it.isNotEmpty() }?.let { secs ->
+                    out.write("      <CrossSects>\n")
+                    for (sec in secs) {
+                        out.write("        <CrossSect sta=\"${f3(sec.station)}\" areaCut=\"${f3(sec.cutArea)}\" areaFill=\"${f3(sec.fillArea)}\">\n")
+                        out.write("          <DesignCrossSectSurf name=\"Acabada\">")
+                        out.write(sec.top.joinToString("") { "<CrossSectPnt code=\"${esc(it.code)}\">${f3(it.offset)} ${f3(it.z)}</CrossSectPnt>" })
+                        out.write("</DesignCrossSectSurf>\n        </CrossSect>\n")
+                    }
+                    out.write("      </CrossSects>\n")
+                }
+                out.write("    </Alignment>\n")
+            }
+            out.write("  </Alignments>\n")
         }
         out.write("</LandXML>\n")
         out.flush()

@@ -264,6 +264,9 @@ private fun ProjectScreen(
     val noteSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) vm.exportServiceNote(uri)
     }
+    val notePdfSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) vm.exportServiceNotePdf(uri, fileName)
+    }
     // Generate points: settings, dialog, what is being picked on the plan and the visible area.
     val gen = remember(fileName) { GenState() }
     // Line editor: on/off, its settings and the operation dialog.
@@ -272,6 +275,11 @@ private fun ProjectScreen(
     var showModels by remember(fileName) { mutableStateOf(false) }
     var modelPickFor by remember(fileName) { mutableStateOf<Int?>(null) }
     var modelPoint by remember(fileName) { mutableStateOf<Point2?>(null) }
+    // Two-point alignment: which plan point is being tapped (1 = A, 2 = B) and the ones tapped.
+    var alignPick by remember(fileName) { mutableStateOf(0) }
+    var alignA by remember(fileName) { mutableStateOf<Point2?>(null) }
+    var alignB by remember(fileName) { mutableStateOf<Point2?>(null) }
+    val alignInputs = remember(fileName) { androidx.compose.runtime.mutableStateMapOf<Int, List<String>>() }
     var modelHit by remember(fileName) { mutableStateOf<com.appdwg.core.ModelMesh?>(null) }
     var editing by remember(fileName) { mutableStateOf(false) }
     var showLineOp by remember(fileName) { mutableStateOf(false) }
@@ -433,7 +441,10 @@ private fun ProjectScreen(
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
                     drawingRoad -> v.roadParams = v.roadParams.copy(pis = (v.roadParams.pis + it).let { l -> if (l.size > 1 && l[l.size - 2] == it) l.dropLast(1) else l })
-                    modelPickFor != null -> { modelPoint = it; modelPickFor = null; showModels = true }
+                    modelPickFor != null -> {
+                        when (alignPick) { 1 -> alignA = it; 2 -> alignB = it; else -> modelPoint = it }
+                        modelPickFor = null; alignPick = 0; showModels = true
+                    }
                     editing && edit.pick == EditPick.WINDOW -> {
                         val c = edit.windowCorner
                         if (c == null) edit.windowCorner = it else {
@@ -634,7 +645,8 @@ private fun ProjectScreen(
         } else if (modelPickFor != null) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Toque o ponto de inserção do modelo (encaixa em pontos e vértices).", style = MaterialTheme.typography.bodyMedium)
+                    Text(when (alignPick) { 1 -> "Toque onde fica o ponto A do modelo."; 2 -> "Toque onde fica o ponto B do modelo."
+                        else -> "Toque o ponto de inserção do modelo." } + " O toque encaixa em pontos e vértices.", style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { modelPickFor = null; showModels = true }) { Text("Cancelar") }
                 }
             }
@@ -788,8 +800,11 @@ private fun ProjectScreen(
     }
 
     if (showModels) {
-        ModelsDialog(vm, modelPoint, onAdd = { modelPicker.launch(arrayOf("*/*")) },
-            onPickPoint = { i -> showModels = false; show3d = false; modelPickFor = i }, onDismiss = { showModels = false })
+        ModelsDialog(vm, modelPoint, alignA to alignB, onAdd = { modelPicker.launch(arrayOf("*/*")) },
+            onPickPoint = { i -> showModels = false; show3d = false; alignPick = 0; modelPickFor = i },
+            onPickAlign = { i, which -> showModels = false; show3d = false; alignPick = which; modelPickFor = i },
+            alignInputs = alignInputs,
+            onDismiss = { showModels = false })
     }
 
     if (showLineOp) {
@@ -816,6 +831,7 @@ private fun ProjectScreen(
             v.roadParams = v.roadParams.copy(alignmentIndex = -1)
             drawingRoad = true
         }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") },
+            onServiceNotePdf = { notePdfSaver.launch("$baseName-nota-de-servico.pdf") },
             onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
             onDismiss = { showRoad = false })
     }

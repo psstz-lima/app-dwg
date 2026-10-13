@@ -59,6 +59,24 @@ data class ModelPlacement(
     }
 }
 
+object ModelAlign {
+    /**
+     * Placement that takes model points [a] and [b] (model units) onto plan points [pa] and [pb]:
+     * rotation and scale from the two pairs, keeping [unitScale] and [elevation].
+     */
+    fun twoPoints(a: Point2, b: Point2, pa: Point2, pb: Point2, unitScale: Double, elevation: Double): ModelPlacement? {
+        val dm = hypot(b.x - a.x, b.y - a.y) * unitScale
+        val dp = hypot(pb.x - pa.x, pb.y - pa.y)
+        if (dm < 1e-12 || dp < 1e-12) return null
+        val rot = atan2(pb.y - pa.y, pb.x - pa.x) - atan2(b.y - a.y, b.x - a.x)
+        val scale = dp / dm
+        val k = unitScale * scale
+        val c = cos(rot); val s = sin(rot)
+        val ax = a.x * k; val ay = a.y * k
+        return ModelPlacement(pa.x - (ax * c - ay * s), pa.y - (ax * s + ay * c), elevation, Math.toDegrees(rot), scale, unitScale)
+    }
+}
+
 /** Readers for OBJ, STL, PLY, glTF/GLB and IFC models. */
 object ModelReader {
     private const val DEFAULT_COLOR = 0xB0BEC5

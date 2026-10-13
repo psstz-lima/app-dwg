@@ -896,6 +896,39 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         writeTo(target, "nota de serviço") { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
     }
 
+    /** Service note as a PDF table, A4 landscape, a page per 30 stations. */
+    fun exportServiceNotePdf(target: Uri, title: String) {
+        val r = road ?: return
+        fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: ""
+        writeTo(target, "nota de serviço (PDF)") { out ->
+            val doc = android.graphics.pdf.PdfDocument()
+            val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
+            val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true }
+            val head = listOf("Estaca", "Terreno", "Greide", "C/A eixo", "Bordo E (af./cota)", "Bordo D (af./cota)", "Offset E (tipo af./cota)", "Offset D (tipo af./cota)", "Área C", "Área A")
+            val colX = floatArrayOf(20f, 80f, 130f, 180f, 230f, 330f, 430f, 570f, 710f, 760f)
+            val rows = r.sections.map { s ->
+                val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
+                val oe = s.top.first(); val od = s.top.last(); val ca = s.terrainAxis?.let { s.grade - it }
+                listOf(StationFormat.estaca(s.station), n(s.terrainAxis), n(s.grade), ca?.let { (if (it >= 0) "A " else "C ") + n(kotlin.math.abs(it)) } ?: "",
+                    "${n(be?.offset?.let { -it })} / ${n(be?.z)}", "${n(bd?.offset)} / ${n(bd?.z)}",
+                    "${oe.code} ${n(-oe.offset)} / ${n(oe.z)}", "${od.code} ${n(od.offset)} / ${n(od.z)}", n(s.cutArea), n(s.fillArea))
+            }
+            rows.chunked(30).forEachIndexed { pi, chunk ->
+                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(842, 595, pi + 1).create())
+                val c = page.canvas
+                c.drawText("Nota de serviço — $title — eixo ${r.alignment.name}", 20f, 30f, android.graphics.Paint(bold).apply { textSize = 11f })
+                c.drawText("Corte total ${StationFormat.decimal(r.totalCut, 1)} m³ · Aterro total ${StationFormat.decimal(r.totalFill, 1)} m³ · página ${pi + 1}", 20f, 45f, paint)
+                var y = 65f
+                head.forEachIndexed { k, h -> c.drawText(h, colX[k], y, bold) }
+                y += 14f
+                for (row in chunk) { row.forEachIndexed { k, v -> c.drawText(v, colX[k], y, paint) }; y += 15f }
+                doc.finishPage(page)
+            }
+            doc.writeTo(out)
+            doc.close()
+        }
+    }
+
     // ---- 3D models ----
 
     /** Models added to the project, each with its placement. */
@@ -1105,10 +1138,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val hidden = hiddenLayers()
         writeTo(target, "LandXML") { out ->
             out.writer(Charsets.UTF_8).let { w ->
-                val sources = platform?.let { r ->
-                    mapOf(PLATFORM_LABEL to SurfaceSource(listOf(r.edge, r.daylight) + r.benches, r.daylight.map { Point2(it.x, it.y) }))
-                }.orEmpty()
-                LandXmlWriter.write(p.surfaces.filter { it.name !in hidden }, p.points, p.cgPoints, w, p.coordinateSystem?.epsgCode, sources)
+                val sources = HashMap<String, SurfaceSource>()
+                platform?.let { r -> sources[PLATFORM_LABEL] = SurfaceSource(listOf(r.edge, r.daylight) + r.benches, r.daylight.map { Point2(it.x, it.y) }) }
+                road?.let { r ->
+                    // Outline: the left daylight down the road, back up the right one.
+                    val outline = r.sections.map { sec -> sec.pointAt(sec.top.first().offset) } + r.sections.reversed().map { sec -> sec.pointAt(sec.top.last().offset) }
+                    sources[ROAD_LABEL] = SurfaceSource(r.features.values.flatten(), outline)
+                }
+                LandXmlWriter.write(p.surfaces.filter { it.name !in hidden }, p.points, p.cgPoints, w, p.coordinateSystem?.epsgCode, sources,
+                    p.alignments, road?.let { mapOf(it.alignment.name to it.sections) }.orEmpty())
                 w.flush()
             }
         }

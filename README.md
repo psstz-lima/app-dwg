@@ -86,7 +86,8 @@ exporta com os dados reais de projeto.
   circular e poligonal, itens mapeados e posicionamentos encadeados; unidades e cores do arquivo;
   camadas por pavimento e tipo). Posicionado pela georreferência do IFC (IfcMapConversion) ou por ponto
   de inserção (digitado ou tocado, cota do terreno), rotação, escala e unidade. Aparece no 3D e na planta
-  (projeção), mostra nome/tipo/GlobalId ao tocar, liga/desliga por camada, entra no projeto salvo e no
+  (projeção), alinhamento por 2 pontos (coordenadas do modelo → pontos tocados na planta, com escala e
+  rotação), mostra nome/tipo/GlobalId ao tocar, liga/desliga por camada, entra no projeto salvo e no
   DXF (3DFACE). FBX/DWG 3D/Revit: exporte em OBJ, glTF ou IFC.
 - Estrada/corredor (botão "Estrada"): eixo do arquivo ou novo por PIs (desenhados ou dos `_POINTS`) com
   curvas circulares e espirais (clotoides); greide do arquivo ou por PVIs digitados/gerados no terreno,
@@ -99,7 +100,8 @@ exporta com os dados reais de projeto.
   estaca, com transição linear, e o bordo pode seguir uma linha-alvo tocada; a superelevação pode ser
   calculada pelas curvas (velocidade e e máx., critério do DNIT, com giro da pista externa primeiro).
   No eixo de projeto, o perfil longitudinal edita o greide: arraste os PVIs, ajuste ±0,10, adicione ou
-  remova e recalcule.
+  remova e recalcule. O LandXML exportado leva o eixo (retas, curvas e espirais), o greide, as seções
+  transversais com áreas e as superfícies com breaklines e limite; a nota de serviço sai também em PDF.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

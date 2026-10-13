@@ -106,4 +106,20 @@ class ExportersTest {
             assertEquals(lon, lon2, 1e-8)
         }
     }
+
+    @Test
+    fun landXmlCarriesAlignmentsWithCurvesSpiralsAndGrade() {
+        val prof = Profile("G", listOf(Profile.Pvi(0.0, 100.0), Profile.Pvi(300.0, 106.0, 80.0), Profile.Pvi(800.0, 101.0)))
+        val a = AlignmentBuilder.fromPis("E", listOf(Pi(Point2(0.0, 0.0)), Pi(Point2(500.0, 0.0), 200.0, 60.0), Pi(Point2(500.0, 500.0))), profile = prof)
+        val out = StringWriter()
+        LandXmlWriter.write(emptyList(), emptyList(), emptyList(), out, alignments = listOf(a))
+        val parser = KXmlParser()
+        parser.setInput(StringReader(out.toString()))
+        val back = LandXmlReader(parser).read().alignments.single()
+        assertEquals(a.length, back.length, 0.01)
+        assertEquals(5, back.elements.size)
+        val end = back.pointAt(back.endStation)!!
+        assertEquals(500.0, end.x, 0.05); assertEquals(500.0, end.y, 0.05)
+        assertEquals(prof.elevationAt(300.0)!!, back.profile!!.elevationAt(300.0)!!, 1e-6)
+    }
 }

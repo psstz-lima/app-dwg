@@ -40,8 +40,14 @@ private val UNITS = listOf(0.001 to "mm", 0.01 to "cm", 1.0 to "m", 0.3048 to "p
 fun ModelsDialog(
     vm: ProjectViewModel,
     pickedPoint: Point2?,
+    /** Plan points tapped for the two-point alignment (A, B). */
+    alignPoints: Pair<Point2?, Point2?>,
     onAdd: () -> Unit,
     onPickPoint: (Int) -> Unit,
+    /** Asks for plan point A (1) or B (2) of model [index]. */
+    onPickAlign: (Int, Int) -> Unit,
+    /** Model coordinates typed for A and B, per model; kept outside so they survive picking on the plan. */
+    alignInputs: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, List<String>>,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -59,7 +65,7 @@ fun ModelsDialog(
                 vm.modelMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.models.forEachIndexed { i, entry ->
                     HorizontalDivider()
-                    key(entry.name, i) { ModelRow(vm, i, entry, pickedPoint, onPickPoint) }
+                    key(entry.name, i) { ModelRow(vm, i, entry, pickedPoint, alignPoints, onPickPoint, onPickAlign, alignInputs) }
                 }
             }
         },
@@ -67,7 +73,11 @@ fun ModelsDialog(
 }
 
 @Composable
-private fun ModelRow(vm: ProjectViewModel, index: Int, entry: ModelEntry, pickedPoint: Point2?, onPickPoint: (Int) -> Unit) {
+private fun ModelRow(
+    vm: ProjectViewModel, index: Int, entry: ModelEntry, pickedPoint: Point2?, alignPoints: Pair<Point2?, Point2?>,
+    onPickPoint: (Int) -> Unit, onPickAlign: (Int, Int) -> Unit,
+    alignInputs: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, List<String>>,
+) {
     val p0 = entry.placement
     var e by remember(p0) { mutableStateOf(StationFormat.decimal(p0.east, 3)) }
     var n by remember(p0) { mutableStateOf(StationFormat.decimal(p0.north, 3)) }
@@ -108,5 +118,24 @@ private fun ModelRow(vm: ProjectViewModel, index: Int, entry: ModelEntry, picked
         val ok = listOf(e, n, z, rot, scale).all { num(it) != null } && (num(scale) ?: 0.0) > 0
         OutlinedButton(enabled = ok, onClick = { vm.placeModel(index, ModelPlacement(num(e)!!, num(n)!!, num(z)!!, num(rot)!!, num(scale)!!, unit)) }) { Text("Aplicar") }
         TextButton(onClick = { vm.removeModel(index) }) { Text("Remover") }
+    }
+    // Two-point alignment: two points known in the model's own coordinates and where they are on the plan.
+    val typed = alignInputs[index] ?: listOf("0", "0", "", "")
+    fun setTyped(k: Int, value: String) { alignInputs[index] = typed.toMutableList().also { it[k] = value } }
+    val ax = typed[0]; val ay = typed[1]; val bx = typed[2]; val by = typed[3]
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Alinhar por 2 pontos", style = MaterialTheme.typography.labelLarge)
+        OutlinedTextField(ax, { setTyped(0, it) }, label = { Text("A: X modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
+        OutlinedTextField(ay, { setTyped(1, it) }, label = { Text("A: Y modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
+        OutlinedButton(onClick = { onPickAlign(index, 1) }) { Text(if (alignPoints.first != null) "A na planta ✓" else "Tocar A na planta") }
+        OutlinedTextField(bx, { setTyped(2, it) }, label = { Text("B: X modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
+        OutlinedTextField(by, { setTyped(3, it) }, label = { Text("B: Y modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
+        OutlinedButton(onClick = { onPickAlign(index, 2) }) { Text(if (alignPoints.second != null) "B na planta ✓" else "Tocar B na planta") }
+        val pa = alignPoints.first; val pb = alignPoints.second
+        val ma = num(ax)?.let { x -> num(ay)?.let { y -> Point2(x, y) } }
+        val mb = num(bx)?.let { x -> num(by)?.let { y -> Point2(x, y) } }
+        OutlinedButton(enabled = pa != null && pb != null && ma != null && mb != null, onClick = {
+            com.appdwg.core.ModelAlign.twoPoints(ma!!, mb!!, pa!!, pb!!, unit, num(z) ?: p0.elevation)?.let { vm.placeModel(index, it) }
+        }) { Text("Alinhar") }
     }
 }
