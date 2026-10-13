@@ -261,6 +261,11 @@ private fun ProjectScreen(
     val gen = remember(fileName) { GenState() }
     // Line editor: on/off, its settings and the operation dialog.
     val edit = remember(fileName) { EditState() }
+    // 3D models: dialog, the model whose insertion point is being tapped, the point, and a tapped element.
+    var showModels by remember(fileName) { mutableStateOf(false) }
+    var modelPickFor by remember(fileName) { mutableStateOf<Int?>(null) }
+    var modelPoint by remember(fileName) { mutableStateOf<Point2?>(null) }
+    var modelHit by remember(fileName) { mutableStateOf<com.appdwg.core.ModelMesh?>(null) }
     var editing by remember(fileName) { mutableStateOf(false) }
     var showLineOp by remember(fileName) { mutableStateOf(false) }
     var showGen by remember(fileName) { mutableStateOf(false) }
@@ -268,6 +273,9 @@ private fun ProjectScreen(
     var genReview by remember(fileName) { mutableStateOf(false) }
     var genPick by remember(fileName) { mutableStateOf<GenPick?>(null) }
     var viewport by remember(fileName) { mutableStateOf<com.appdwg.core.Bounds?>(null) }
+    val modelPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.addModel(uris, viewport?.center)
+    }
     var drawingPlatform by v::drawingPlatform
     var platformOutline by v::platformOutline
     var showContours by v::showContours
@@ -275,6 +283,7 @@ private fun ProjectScreen(
     // Interval the plan drew (null: too dense at this zoom), for the status line.
     var contourDrawn by remember(fileName) { mutableStateOf<Double?>(null) }
     var includeContours by remember(fileName) { mutableStateOf(false) }
+    var includeModels by remember(fileName) { mutableStateOf(true) }
     // Point the plan centres on after a search; the key repeats it for the same place.
     var focus by remember(fileName) { mutableStateOf<Point2?>(null) }
     var focusKey by remember(fileName) { mutableStateOf(0) }
@@ -289,7 +298,7 @@ private fun ProjectScreen(
         if (uri != null && kind != null) {
             val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines()
             when (kind) {
-                ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null)
+                ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
                 ExportKind.POINTS -> vm.exportPoints(uri)
                 ExportKind.KML -> vm.exportKml(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
@@ -381,7 +390,7 @@ private fun ProjectScreen(
 
     var show3d by v::show3d
     var exaggeration by v::exaggeration
-    val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } }
+    val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } || project.models.isNotEmpty() }
 
     Box(Modifier.fillMaxSize()) {
         if (show3d) key(project) {
@@ -408,6 +417,7 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    modelPickFor != null -> { modelPoint = it; modelPickFor = null; showModels = true }
                     editing && edit.pick == EditPick.WINDOW -> {
                         val c = edit.windowCorner
                         if (c == null) edit.windowCorner = it else {
@@ -440,13 +450,16 @@ private fun ProjectScreen(
                     // With the section open, a tap picks the station on the chosen alignment.
                     showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
                     showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
-                    else -> { tapped = it; selectedPoint = null }
+                    else -> {
+                        tapped = it; selectedPoint = null
+                        modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
+                    }
                 }
             },
             modifier = Modifier.fillMaxSize(),
             measure = if (measuring) measurePoints else if (drawingPlatform) platformOutline
                 else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
-            snap = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW ||
+            snap = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
                 (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS)),
             selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION ||
                 (editing && edit.pick == EditPick.SELECT),
@@ -538,6 +551,7 @@ private fun ProjectScreen(
                             edit.pick = EditPick.SELECT
                         }) { Text(if (editing) "Fechar edição" else "Linhas") }
                     }
+                    TextButton(onClick = { showModels = true }) { Text("Modelos 3D") }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
@@ -572,6 +586,13 @@ private fun ProjectScreen(
         } else if (editing) {
             EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
+        } else if (modelPickFor != null) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toque o ponto de inserção do modelo (encaixa em pontos e vértices).", style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { modelPickFor = null; showModels = true }) { Text("Cancelar") }
+                }
+            }
         } else if (genReview) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -663,6 +684,15 @@ private fun ProjectScreen(
             )
         } else {
             // Capped so the card stays readable instead of stretching across a tablet in landscape.
+            modelHit?.let { m ->
+                Card(Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp).widthIn(max = 380.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(m.name, style = MaterialTheme.typography.titleSmall)
+                        Line("Camada", m.layer)
+                        m.props.forEach { (k, value) -> Line(k, value) }
+                    }
+                }
+            }
             InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
         BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(8.dp).widthIn(max = 360.dp))
@@ -707,6 +737,11 @@ private fun ProjectScreen(
             onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
         )
+    }
+
+    if (showModels) {
+        ModelsDialog(vm, modelPoint, onAdd = { modelPicker.launch(arrayOf("*/*")) },
+            onPickPoint = { i -> showModels = false; show3d = false; modelPickFor = i }, onDismiss = { showModels = false })
     }
 
     if (showLineOp) {
@@ -779,6 +814,8 @@ private fun ProjectScreen(
             onIncludeSurfaces = { includeSurfaces = it },
             includeContours = includeContours,
             onIncludeContours = { includeContours = it },
+            includeModels = includeModels,
+            onIncludeModels = { includeModels = it },
             zone = utmZone,
             onZone = { utmZone = it.trim().uppercase() },
             onExport = { kind ->

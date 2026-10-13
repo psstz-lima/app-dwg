@@ -60,6 +60,8 @@ class ProjectDoc(
     val pathEdits: Map<String, String>,
     val userLines: List<com.appdwg.core.Polyline> = emptyList(),
     val hiddenLines: List<Int> = emptyList(),
+    /** Files of each 3D model and its placement. */
+    val models: List<Pair<List<String>, com.appdwg.core.ModelPlacement>> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -86,6 +88,10 @@ class ProjectDoc(
             }
         }))
         put("hiddenLines", JSONArray(hiddenLines))
+        put("models", JSONArray(models.map { (uris, p) ->
+            JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
+                .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
+        }))
     }
 
     companion object {
@@ -116,10 +122,19 @@ class ProjectDoc(
                 }
             }.orEmpty()
             val hidden = o.optJSONArray("hiddenLines")?.let { a -> List(a.length()) { a.getInt(it) } }.orEmpty()
+            val models = o.optJSONArray("models")?.let { a ->
+                List(a.length()) {
+                    val m = a.getJSONObject(it)
+                    val u = m.getJSONArray("uris")
+                    List(u.length()) { k -> u.getString(k) } to com.appdwg.core.ModelPlacement(
+                        m.getDouble("east"), m.getDouble("north"), m.getDouble("elevation"), m.optDouble("rotation", 0.0),
+                        m.optDouble("scale", 1.0), m.optDouble("unit", 1.0))
+                }
+            }.orEmpty()
             return ProjectDoc(
                 o.getString("main"), files, o.optBoolean("pointsSurface"), strings("drape"), o.optBoolean("drapeVisible", true),
                 points, o.optJSONObject("view") ?: JSONObject(), o.optBoolean("compareShown"), strings("cross"),
-                strings("unloaded"), strings("detached"), edits, lines, hidden,
+                strings("unloaded"), strings("detached"), edits, lines, hidden, models,
             )
         }
 

@@ -32,6 +32,7 @@ object DxfWriter {
         hiddenLayers: Set<String> = emptySet(),
         extra: List<ExportLine> = emptyList(),
         includeSurfaces: Boolean = false,
+        includeModels: Boolean = false,
     ) {
         fun pair(code: Int, value: Any) {
             out.write(code.toString()); out.write("\r\n"); out.write(value.toString()); out.write("\r\n")
@@ -48,6 +49,7 @@ object DxfWriter {
         if (project.cgPoints.isNotEmpty()) layers.getOrPut(CG_LAYER) { 5 }
         extra.forEach { layers.getOrPut(it.layer) { it.aci } }
         if (includeSurfaces) project.surfaces.forEach { if (it.name !in hiddenLayers) layers.getOrPut(clean(it.name)) { 8 } }
+        if (includeModels) project.models.forEach { if (it.layer !in hiddenLayers) layers.getOrPut(it.layer) { aci(it.color) } }
 
         pair(0, "SECTION"); pair(2, "HEADER")
         pair(9, "\$ACADVER"); pair(1, "AC1009")
@@ -112,6 +114,15 @@ object DxfWriter {
                 pair(0, "3DFACE"); pair(8, clean(s.name))
                 val idx = intArrayOf(t[3 * k], t[3 * k + 1], t[3 * k + 2], t[3 * k + 2])
                 for ((j, i) in idx.withIndex()) { num(10 + j, s.xs[i]); num(20 + j, s.ys[i]); num(30 + j, s.zs[i]) }
+            }
+        }
+        if (includeModels) for (m in project.models) {
+            if (m.layer in hiddenLayers) continue
+            val t = m.triangles; val q = m.positions
+            for (k in 0 until t.size / 3) {
+                pair(0, "3DFACE"); pair(8, clean(m.layer))
+                val idx = intArrayOf(t[3 * k], t[3 * k + 1], t[3 * k + 2], t[3 * k + 2])
+                for ((j, i) in idx.withIndex()) { num(10 + j, q[3 * i]); num(20 + j, q[3 * i + 1]); num(30 + j, q[3 * i + 2]) }
             }
         }
         pair(0, "ENDSEC"); pair(0, "EOF")

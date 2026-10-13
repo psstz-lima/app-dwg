@@ -35,6 +35,9 @@ import com.appdwg.core.PlatformDesign
 import com.appdwg.core.PlatformResult
 import com.appdwg.core.Point3
 import com.appdwg.core.Polyline
+import com.appdwg.core.Model3D
+import com.appdwg.core.ModelPlacement
+import com.appdwg.core.ModelReader
 import com.appdwg.core.SlopeRule
 import com.appdwg.core.SurfaceSource
 import com.appdwg.core.Contours
@@ -64,6 +67,15 @@ sealed interface ProjectState {
 }
 
 private const val HEAD_SIZE = 64
+
+/** Extensions read as 3D models. */
+val MODEL_EXTENSIONS = setOf("obj", "stl", "ply", "gltf", "glb", "ifc", "fbx", "dwg")
+
+/** Most triangles a model may have on a tablet. */
+private const val MAX_MODEL_TRIANGLES = 3_000_000
+
+/** Model added to the project: file name, the files chosen, what was read and where it sits. */
+data class ModelEntry(val name: String, val uris: List<Uri>, val model: Model3D, val placement: ModelPlacement)
 
 /** Name of the designed platform surface. */
 const val PLATFORM_LABEL = "Plataforma"
@@ -669,6 +681,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         },
                     )
                 }
+                p = p.copy(models = models.flatMap { e -> e.model.meshes.map { e.placement.apply(it) } })
                 // Line edits: originals the user removed or changed are left out, edited lines added.
                 keptOriginals = p.polylines.indices.filter { it !in hiddenOriginals }
                 p = p.copy(polylines = keptOriginals.map { p.polylines[it] } + userLines)
@@ -760,6 +773,79 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
+
+    // ---- 3D models ----
+
+    /** Models added to the project, each with its placement. */
+    var models by mutableStateOf<List<ModelEntry>>(emptyList())
+        private set
+    var modelMessage by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Reads a model from [uris]: the model file plus, optionally, files it refers to (an OBJ's .mtl, a
+     * glTF's .bin), chosen together. Placed by its georeference, or at [at] on the terrain.
+     */
+    fun addModel(uris: List<Uri>, at: Point2?) {
+        val named = uris.map { it to displayName(it) }
+        val main = named.firstOrNull { it.second.substringAfterLast('.').lowercase() in MODEL_EXTENSIONS }
+            ?: run { modelMessage = "Escolha um arquivo OBJ, STL, PLY, glTF/GLB ou IFC."; return }
+        uris.forEach { u -> runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+        modelMessage = null
+        viewModelScope.launch {
+            try {
+                val placementFor: (Model3D) -> ModelPlacement = { m -> defaultPlacement(m, at) }
+                val entry = tracked("Lendo modelo ${main.second}") { t ->
+                    withContext(Dispatchers.Default) { loadModel(main.first, main.second, named, t)?.let { m -> ModelEntry(main.second, uris, m, placementFor(m)) } }
+                } ?: return@launch
+                models = models + entry
+                refreshJob?.cancel(); refreshNow()
+                val m = entry.model
+                modelMessage = "${main.second}: ${m.meshes.size} elemento(s), ${m.triangleCount} triângulos" +
+                    (if (m.georef != null) ", posicionado pela georreferência do IFC" else "") + "." +
+                    (if (m.warnings.isNotEmpty()) " Avisos: " + m.warnings.take(5).joinToString("; ") else "")
+            } catch (e: OutOfMemoryError) {
+                modelMessage = "Modelo grande demais para a memória deste aparelho."
+            } catch (e: Exception) {
+                modelMessage = "Não foi possível ler ${main.second}: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    private fun loadModel(uri: Uri, name: String, named: List<Pair<Uri, String>>, task: LoadTask): Model3D? {
+        val resolver = getApplication<Application>().contentResolver
+        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("arquivo indisponível")
+        task.step("Montando a geometria")
+        val model = ModelReader.read(bytes, name) { other ->
+            // Companion files are matched by name among the ones chosen with the model.
+            named.firstOrNull { it.second.equals(other.substringAfterLast('/').substringAfterLast('\\'), ignoreCase = true) }
+                ?.let { (u, _) -> resolver.openInputStream(u)?.use { it.readBytes() } }
+        }
+        require(model.meshes.isNotEmpty()) { "nenhuma geometria encontrada" + if (model.warnings.isNotEmpty()) " (" + model.warnings.joinToString("; ") + ")" else "" }
+        require(model.triangleCount <= MAX_MODEL_TRIANGLES) { "modelo com ${model.triangleCount} triângulos; o limite neste aparelho é $MAX_MODEL_TRIANGLES. Simplifique o modelo." }
+        return model
+    }
+
+    private fun defaultPlacement(m: Model3D, at: Point2?): ModelPlacement {
+        m.georef?.let { g -> return ModelPlacement(g.east, g.north, g.height, g.rotationDeg, g.scale, m.unitScale) }
+        val project = (state as? ProjectState.Loaded)?.project
+        val p = at ?: project?.bounds?.center ?: Point2(0.0, 0.0)
+        val z = project?.surfaces?.firstNotNullOfOrNull { it.elevationAt(p) } ?: 0.0
+        return ModelPlacement(p.x, p.y, z, 0.0, 1.0, m.unitScale)
+    }
+
+    fun placeModel(index: Int, placement: ModelPlacement) {
+        models = models.mapIndexed { i, m -> if (i == index) m.copy(placement = placement) else m }
+        refreshProject()
+    }
+
+    fun removeModel(index: Int) {
+        models = models.filterIndexed { i, _ -> i != index }
+        refreshProject()
+    }
+
+    /** Elevation of the first surface at [p], for placing a model on the ground. */
+    fun groundAt(p: Point2): Double? = (state as? ProjectState.Loaded)?.project?.surfaces?.firstNotNullOfOrNull { it.elevationAt(p) }
 
     // ---- Platform design ----
 
@@ -879,7 +965,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** [contourInterval] adds contour lines of the shown surfaces on layer _CURVAS. */
-    fun exportDxf(target: Uri, includeSurfaces: Boolean, extra: List<ExportLine>, contourInterval: Double? = null) {
+    fun exportDxf(target: Uri, includeSurfaces: Boolean, extra: List<ExportLine>, contourInterval: Double? = null, includeModels: Boolean = false) {
         val p = exportProject() ?: return
         val hidden = hiddenLayers()
         writeTo(target, "DXF") { out ->
@@ -888,7 +974,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     Contours.lines(Contours.segments(s, iv, maxSegments = 20_000_000) ?: emptyList())
                 }.map { c -> ExportLine("_CURVAS", List(c.xs.size) { Point2(c.xs[it], c.ys[it]) }, false, 34, c.elevation) }
             }.orEmpty()
-            out.writer(Charsets.UTF_8).let { w -> DxfWriter.write(p, w, hidden, extra + contours, includeSurfaces); w.flush() }
+            out.writer(Charsets.UTF_8).let { w -> DxfWriter.write(p, w, hidden, extra + contours, includeSurfaces, includeModels); w.flush() }
         }
     }
 
@@ -1001,6 +1087,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             pathEdits = pathEdits,
             userLines = userLines,
             hiddenLines = hiddenOriginals.toList(),
+            models = models.map { m -> m.uris.map { it.toString() } to m.placement },
         )
     }
 
@@ -1084,6 +1171,17 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             if (addedFiles.size == before) problems += label
         }
         userPoints = doc.points
+        for ((uris, placement) in doc.models) {
+            val list = uris.map(Uri::parse)
+            val named = list.map { it to displayName(it) }
+            val main = named.firstOrNull { it.second.substringAfterLast('.').lowercase() in MODEL_EXTENSIONS } ?: continue
+            try {
+                val m = tracked("Lendo modelo ${main.second}") { t -> withContext(Dispatchers.Default) { loadModel(main.first, main.second, named, t) } } ?: continue
+                models = models + ModelEntry(main.second, list, m, placement)
+            } catch (e: Exception) {
+                problems += main.second
+            }
+        }
         userLines = doc.userLines
         hiddenOriginals = doc.hiddenLines.toSet()
         if (doc.pointsSurface) surfaceFromPointsNow()
@@ -1154,6 +1252,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     matrix = emptyMap()
                     stageProgress = null
                     drapeUris = emptyList()
+                    models = emptyList()
+                    modelMessage = null
                     userLines = emptyList()
                     hiddenOriginals = emptySet()
                     keptOriginals = project.polylines.indices.toList()

@@ -130,12 +130,14 @@ data class LandXmlProject(
     val layerColors: Map<String, Int?> = emptyMap(),
     /** COGO points imported or created by the user, on [POINTS_LAYER]. */
     val points: List<CogoPoint> = emptyList(),
+    /** 3D models (OBJ, IFC…) already placed in project coordinates. */
+    val models: List<ModelMesh> = emptyList(),
 ) {
     /** CAD layers that hold something to show, sorted by name. */
     val layers: List<String> by lazy {
         (polylines.map { it.layer } + texts.map { it.layer } + hatches.map { it.layer } + images.map { it.layer } +
             (if (polylines.isEmpty() && texts.isEmpty()) emptyList() else surfaces.map { it.name }) +
-            (if (points.isEmpty()) emptyList() else listOf(POINTS_LAYER)))
+            (if (points.isEmpty()) emptyList() else listOf(POINTS_LAYER)) + models.map { it.layer })
             .distinct().sortedBy { it.lowercase() }
     }
 
@@ -150,6 +152,7 @@ data class LandXmlProject(
             Bounds.of(texts.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
             Bounds.of(cgPoints.asSequence().map { Point2(it.position.x, it.position.y) })?.let { b = it.union(b) }
             Bounds.of(points.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
+            for (m in models) Bounds.of((0 until m.positions.size / 3).asSequence().map { Point2(m.positions[3 * it], m.positions[3 * it + 1]) })?.let { b = it.union(b) }
             return b
         }
 }

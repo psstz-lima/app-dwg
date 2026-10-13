@@ -81,6 +81,13 @@ exporta com os dados reais de projeto.
   densificando), achatar numa cota, girar, espelhar, inverter, unir, explodir, dividir (N partes ou a
   cada X m), trocar camada/cor e apagar; propriedades (comprimento 2D/3D, cotas, rampa); pré-
   visualização, desfazer/refazer, salvo no projeto e exportado no DXF. Linhas novas vão para `_EDICAO`.
+- Modelos 3D (botão "Modelos 3D"): OBJ (com .mtl), STL, PLY, glTF/GLB e IFC (IFC2x3/IFC4, leitor
+  próprio: malhas trianguladas e poligonais, B-rep facetado, sólidos extrudados de perfis retangular,
+  circular e poligonal, itens mapeados e posicionamentos encadeados; unidades e cores do arquivo;
+  camadas por pavimento e tipo). Posicionado pela georreferência do IFC (IfcMapConversion) ou por ponto
+  de inserção (digitado ou tocado, cota do terreno), rotação, escala e unidade. Aparece no 3D e na planta
+  (projeção), mostra nome/tipo/GlobalId ao tocar, liga/desliga por camada, entra no projeto salvo e no
+  DXF (3DFACE). FBX/DWG 3D/Revit: exporte em OBJ, glTF ou IFC.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

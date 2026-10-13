@@ -307,6 +307,12 @@ fun PlanView(
         }) {
             // The triangle mesh only helps once zoomed in; from afar it hides the shaded terrain.
             if (cam.scale >= MESH_MIN_SCALE) scene.mesh?.let { drawPath(it, colors.mesh, style = Stroke(width = 1f / s)) }
+            // 3D models seen from above: their projection filled, a little see-through.
+            for ((layer, color, path) in scene.models) {
+                if (layer in hiddenLayers) continue
+                drawPath(path, Color(0xFF000000.toInt() or color).copy(alpha = 0.55f))
+                drawPath(path, Color(0xFF000000.toInt() or color).copy(alpha = 0.9f), style = Stroke(width = 0.6f / s))
+            }
             fun Style.paint() = (if (byLayer) layerColor(layer) else color)?.let { Color(it) } ?: colors.drawing
             for ((key, path) in scene.hatches) {
                 if (key.layer in hiddenLayers) continue
@@ -460,6 +466,8 @@ private class Scene(
     val drawing: Map<Style, Path>,
     val hatches: Map<Style, Path>,
     val alignments: List<Path>,
+    /** Per model element: layer, colour and the plan path of its triangles. */
+    val models: List<Triple<String, Int, Path>> = emptyList(),
 ) {
     companion object {
         fun build(project: LandXmlProject, origin: Point2): Scene {
@@ -501,7 +509,19 @@ private class Scene(
                 val path = hatches.getOrPut(Style(h.layer, h.color, h.byLayer)) { Path().apply { fillType = PathFillType.EvenOdd } }
                 h.loops.forEach { path.add(it) }
             }
-            return Scene(mesh, drawing, hatches, alignments)
+            val models = project.models.map { m ->
+                val q = m.positions; val t = m.triangles
+                val path = Path()
+                for (k in 0 until t.size / 3) {
+                    val a = t[3 * k]; val b = t[3 * k + 1]; val c = t[3 * k + 2]
+                    path.moveTo((q[3 * a] - origin.x).toFloat(), (q[3 * a + 1] - origin.y).toFloat())
+                    path.lineTo((q[3 * b] - origin.x).toFloat(), (q[3 * b + 1] - origin.y).toFloat())
+                    path.lineTo((q[3 * c] - origin.x).toFloat(), (q[3 * c + 1] - origin.y).toFloat())
+                    path.close()
+                }
+                Triple(m.layer, m.color, path)
+            }
+            return Scene(mesh, drawing, hatches, alignments, models)
         }
     }
 }

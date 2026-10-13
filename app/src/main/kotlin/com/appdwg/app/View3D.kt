@@ -116,12 +116,14 @@ class Scene3D(
     /** Plan position of the scene's (0, 0). */
     val originX: Double = 0.0,
     val originY: Double = 0.0,
+    /** 3D models, flat shaded, named by layer. */
+    val models: List<Mesh> = emptyList(),
 ) {
     class Mesh(val name: String, val vertices: FloatArray, val indices: IntArray)
 
     class LineBatch(val layer: String, val color: Int?, val byLayer: Boolean, val vertices: FloatArray)
 
-    val isEmpty get() = surfaces.isEmpty() && lines.isEmpty()
+    val isEmpty get() = surfaces.isEmpty() && lines.isEmpty() && models.isEmpty()
 
     companion object {
         private val STOPS = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
@@ -135,6 +137,7 @@ class Scene3D(
             val surfaceMinZ = minZ
             val surfaceRange = (maxZ - minZ).takeIf { it > 0 } ?: 1.0
             lines3d.forEach { l -> l.zs!!.forEach { minZ = minOf(minZ, it); maxZ = maxOf(maxZ, it) } }
+            project.models.forEach { m -> for (i in 0 until m.positions.size / 3) { minZ = minOf(minZ, m.positions[3 * i + 2]); maxZ = maxOf(maxZ, m.positions[3 * i + 2]) } }
             if (minZ > maxZ) { minZ = 0.0; maxZ = 0.0 }
 
             var bx0 = Double.POSITIVE_INFINITY; var by0 = Double.POSITIVE_INFINITY
@@ -143,6 +146,12 @@ class Scene3D(
             // Without a terrain the 3D lines frame the view; with one, the terrain does.
             if (project.surfaces.isEmpty()) {
                 lines3d.forEach { l -> l.bounds?.let { bx0 = minOf(bx0, it.minX); by0 = minOf(by0, it.minY); bx1 = maxOf(bx1, it.maxX); by1 = maxOf(by1, it.maxY) } }
+                project.models.forEach { m ->
+                    for (i in 0 until m.positions.size / 3) {
+                        bx0 = minOf(bx0, m.positions[3 * i]); bx1 = maxOf(bx1, m.positions[3 * i])
+                        by0 = minOf(by0, m.positions[3 * i + 1]); by1 = maxOf(by1, m.positions[3 * i + 1])
+                    }
+                }
             }
             if (bx0 > bx1) return Scene3D(emptyList(), emptyList(), 1f)
             val ox = (bx0 + bx1) / 2
@@ -196,7 +205,29 @@ class Scene3D(
                 }
                 LineBatch(key.first, key.second, key.third, segs.toFloatArray())
             }
-            return Scene3D(meshes, batches, (max(bx1 - bx0, by1 - by0) / 2).toFloat().coerceAtLeast(1f), ox, oy)
+            // Models get one normal per face (vertices repeated), so edges stay crisp.
+            val models = project.models.map { m ->
+                val t = m.triangles
+                val v = FloatArray(t.size * 9)
+                val r = ((m.color shr 16) and 0xFF) / 255f; val g = ((m.color shr 8) and 0xFF) / 255f; val bl = (m.color and 0xFF) / 255f
+                val p = m.positions
+                for (k in 0 until t.size / 3) {
+                    val a = t[3 * k]; val b = t[3 * k + 1]; val c = t[3 * k + 2]
+                    val ux = p[3 * b] - p[3 * a]; val uy = p[3 * b + 1] - p[3 * a + 1]; val uz = p[3 * b + 2] - p[3 * a + 2]
+                    val vx = p[3 * c] - p[3 * a]; val vy = p[3 * c + 1] - p[3 * a + 1]; val vz = p[3 * c + 2] - p[3 * a + 2]
+                    var nx = uy * vz - uz * vy; var ny = uz * vx - ux * vz; var nz = ux * vy - uy * vx
+                    val len = sqrt(nx * nx + ny * ny + nz * nz).takeIf { it > 0 } ?: 1.0
+                    nx /= len; ny /= len; nz /= len
+                    for ((j, i) in intArrayOf(a, b, c).withIndex()) {
+                        val o = (3 * k + j) * 9
+                        v[o] = (p[3 * i] - ox).toFloat(); v[o + 1] = (p[3 * i + 1] - oy).toFloat(); v[o + 2] = (p[3 * i + 2] - oz).toFloat()
+                        v[o + 3] = nx.toFloat(); v[o + 4] = ny.toFloat(); v[o + 5] = nz.toFloat()
+                        v[o + 6] = r; v[o + 7] = g; v[o + 8] = bl
+                    }
+                }
+                Mesh(m.layer, v, IntArray(t.size) { it })
+            }
+            return Scene3D(meshes, batches, (max(bx1 - bx0, by1 - by0) / 2).toFloat().coerceAtLeast(1f), ox, oy, models)
         }
 
         private fun ramp(t: Float): Int {
@@ -302,7 +333,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         program = buildProgram()
         meshBuffers.clear()
         lineBuffers.clear()
-        for (m in scene.surfaces) {
+        for (m in scene.surfaces + scene.models) {
             val ids = IntArray(2)
             GLES30.glGenBuffers(2, ids, 0)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
@@ -387,6 +418,21 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
         }
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        // Models: lit like the terrain, without the picture over the surfaces.
+        GLES30.glUniform1i(uDrape, 0)
+        scene.models.forEachIndexed { i, m ->
+            if (m.name in hidden) return@forEachIndexed
+            val ids = meshBuffers[scene.surfaces.size + i]
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+            GLES30.glEnableVertexAttribArray(1)
+            GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
+            GLES30.glEnableVertexAttribArray(2)
+            GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
+            GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
+        }
 
         GLES30.glUniform1i(uLit, 0)
         GLES30.glUniform1i(uDrape, 0)
@@ -438,7 +484,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                 if (uLit == 1) {
                     // Normal under a vertical stretch: (nx, ny, nz / s), normalised.
                     vec3 n = normalize(vec3(aNormal.xy * uZScale, aNormal.z));
-                    float light = max(dot(n, normalize(vec3(-0.5, 0.5, 0.7))), 0.0);
+                    // Two-sided: model faces may be wound either way, so both sides take the light.
+                    float light = abs(dot(n, normalize(vec3(-0.5, 0.5, 0.7))));
                     vColor = aColor;
                     vShade = 0.45 + 0.65 * light;
                 } else {
