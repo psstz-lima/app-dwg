@@ -38,6 +38,33 @@
     <string name="calib_rms">RMS horizontal %1$s m · vertical %2$s m</string>
     <string name="calib_none">Sem pontos de controle: a posição do GPS fica em UTM, sem calibração.</string>
 
+    <!-- Stockpile and volume to an elevation -->
+    <string name="vol_tool">Volume</string>
+    <string name="vol_title">Volume de pilha e até a cota</string>
+    <string name="vol_surface">Superfície medida</string>
+    <string name="vol_area">Área</string>
+    <string name="vol_area_all">Superfície inteira</string>
+    <string name="vol_area_polygon">Polígono da medição (%1$d vértices)</string>
+    <string name="vol_draw">Desenhar polígono</string>
+    <string name="vol_draw_hint">Use Medir para marcar o contorno da pilha ou da área (3 vértices ou mais) e volte aqui.</string>
+    <string name="vol_base">Base</string>
+    <string name="vol_base_elevation">Cota</string>
+    <string name="vol_base_lowest">Menor cota da borda</string>
+    <string name="vol_base_mean">Média da borda</string>
+    <string name="vol_base_plane">Plano pela borda</string>
+    <string name="vol_base_other">Outra superfície</string>
+    <string name="vol_elevation">Cota (m)</string>
+    <string name="vol_base_hint">Pilha: plano pela borda (terreno inclinado) ou menor cota. Volume até a cota: material acima da cota (corte) e espaço abaixo dela (aterro).</string>
+    <string name="vol_compute">Calcular</string>
+    <string name="vol_above">Acima da base (material / corte): %1$s m³ em %2$s m²</string>
+    <string name="vol_below">Abaixo da base (vazio / aterro): %1$s m³ em %2$s m²</string>
+    <string name="vol_net">Saldo %1$s m³ · área %2$s m² · cotas da superfície %3$s a %4$s · malha %5$s m</string>
+    <string name="vol_base_flat">Base horizontal na cota %1$s</string>
+    <string name="vol_base_inclined">Base inclinada: %1$s %% em E, %2$s %% em N</string>
+    <string name="vol_base_surface">Base: superfície %1$s</string>
+    <string name="vol_none">Sem sobreposição entre a superfície, a área e a base.</string>
+    <string name="vol_running">Calculando volume</string>
+
     <!-- As-built check -->
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>

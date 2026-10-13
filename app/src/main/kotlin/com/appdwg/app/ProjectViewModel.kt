@@ -64,6 +64,8 @@ import com.appdwg.core.Xrefs
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
@@ -1009,6 +1011,29 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Stockpile / volume to an elevation ----
+
+    var volume by mutableStateOf<com.appdwg.core.VolumeResult?>(null)
+        private set
+    var volumeMessage by mutableStateOf<String?>(null)
+        private set
+    private var volumeJob: Job? = null
+
+    fun computeVolume(surface: Surface, polygon: List<com.appdwg.core.Point2>?, base: com.appdwg.core.VolumeBase) {
+        volumeJob?.cancel()
+        volumeMessage = null
+        val app = getApplication<Application>()
+        volumeJob = viewModelScope.launch {
+            val r = tracked(app.getString(R.string.vol_running)) {
+                withContext(Dispatchers.Default) { com.appdwg.core.Volumes.of(surface, polygon, base) { !isActive } }
+            }
+            volume = r
+            if (r == null) volumeMessage = app.getString(R.string.vol_none)
+        }
+    }
+
+    fun clearVolume() { volume = null; volumeMessage = null }
+
     // ---- As-built check ----
 
     /** Last as-built check, also drawn on the plan as coloured rings. */
@@ -1669,6 +1694,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     undoStack.clear(); redoStack.clear(); canUndo = false; canRedo = false
                     platform = null
                     asBuilt = null
+                    volume = null
                     road = null
                     roadMessage = null
                     platformVolumes = null

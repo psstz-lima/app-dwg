@@ -360,6 +360,8 @@ private fun ProjectScreen(
     var showPlatform by remember(fileName) { mutableStateOf(false) }
     var showRoad by remember(fileName) { mutableStateOf(false) }
     var showAsBuilt by remember(fileName) { mutableStateOf(false) }
+    var showVolume by remember(fileName) { mutableStateOf(false) }
+    val volumeState = remember(fileName) { VolumeState() }
     val asBuiltState = remember(fileName) { AsBuiltState() }
     val asBuiltCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) vm.exportAsBuiltCsv(uri, fileName)
@@ -549,6 +551,7 @@ private fun ProjectScreen(
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val asBuiltLabel = androidx.compose.ui.res.stringResource(R.string.asbuilt_tool)
     val calibLabel = androidx.compose.ui.res.stringResource(R.string.calib_tool)
+    val volumeLabel = androidx.compose.ui.res.stringResource(R.string.vol_tool)
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
@@ -566,6 +569,7 @@ private fun ProjectScreen(
             add(RailTool(GIcon.PLATFORM, "Plataforma", drawingPlatform || vm.platform != null) { showPlatform = true })
             add(RailTool(GIcon.ROAD, "Estrada", drawingRoad || v.roadBuilt) { showRoad = true })
         }
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, "Modelos") { showModels = true })
         add(RailTool(GIcon.NOTE, "Anotar", addingNote) { addingNote = true; measuring = false; show3d = false })
@@ -980,6 +984,12 @@ private fun ProjectScreen(
         gpsText = gnssFix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.decimal(it, 3) + " m" } ?: "") },
         gpsColor = if (gnssFix?.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(gnssFix?.quality),
     )
+    }
+
+    if (showVolume) {
+        VolumeDialog(vm, project, volumeState, measurePoints, onDraw = {
+            showVolume = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
+        }, onDismiss = { showVolume = false })
     }
 
     if (showCalibration) {
