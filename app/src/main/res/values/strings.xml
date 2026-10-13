@@ -268,4 +268,13 @@
         <item quantity="one">%1$d sistema</item>
         <item quantity="other">%1$d sistemas</item>
     </plurals>
+    <!-- Gromatic Pro -->
+    <string name="pro_error">Não foi possível concluir a compra: %1$s</string>
+    <string name="pro_unavailable">Google Play indisponível no momento (%1$s). Tente de novo com internet.</string>
+    <string name="pro_restored">Assinatura encontrada: Gromatic Pro liberado.</string>
+    <string name="pro_none_found">Nenhuma assinatura ativa encontrada nesta conta do Google Play.</string>
+    <string name="pro_no_plans">Os planos ainda não estão disponíveis no Google Play.</string>
+    <string name="pro_thanks">Obrigado! Gromatic Pro liberado.</string>
+    <string name="pro_pending">Pagamento pendente: o Pro é liberado assim que o Google Play confirmar.</string>
+    <string name="pro_too_big">Arquivo de %1$s MB. A versão grátis abre arquivos de até %2$s MB; o Gromatic Pro abre arquivos maiores.</string>
 </resources>

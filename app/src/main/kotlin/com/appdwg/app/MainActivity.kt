@@ -147,6 +147,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
     fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".gromatic"
     fun save(then: () -> Unit = {}) {
+        if (!viewModel.pro.isPro) { viewModel.proRequested = true; return }
         val target = viewModel.projectUri
         if (target != null) viewModel.saveProject(target, then) else { afterSave = then; saver.launch(projectName()) }
     }
@@ -155,7 +156,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
     val openFile = { guarded { picker.launch(arrayOf("*/*")) } }
     val openFromDrive = { guarded { inDrive.set(true); picker.launch(arrayOf("*/*")) } }
-    fun saveAs(drive: Boolean) { afterSave = null; inDrive.set(drive); saver.launch(projectName()) }
+    fun saveAs(drive: Boolean) { if (!viewModel.pro.isPro) { viewModel.proRequested = true; return }; afterSave = null; inDrive.set(drive); saver.launch(projectName()) }
     val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
     androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) {
         if (viewModel.fullScreen) viewModel.fullScreen = false else guarded { activity?.finish() }
@@ -195,7 +196,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                                 if (hasDrive) item("Abrir do Google Drive", openFromDrive)
                                 if (state is ProjectState.Loaded && hasDrive) item("Salvar no Google Drive") { saveAs(true) }
                                 if (viewModel.recent.isNotEmpty()) item("Recentes") { showRecent = true }
-                                if (state is ProjectState.Loaded) item("Salvar como") { afterSave = null; saver.launch(projectName()) }
+                                if (state is ProjectState.Loaded) item("Salvar como") { saveAs(false) }
                                 item("Configurações") { showAppearance = true }
                             }
                         }
@@ -219,7 +220,9 @@ private fun AppScreen(viewModel: ProjectViewModel) {
             units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
             language = viewModel.languages.choice, onLanguage = { viewModel.languages.choose(it) },
             crsName = if (state is ProjectState.Loaded) viewModel.crs().name else null,
-            onCrs = if (state is ProjectState.Loaded) ({ showAppearance = false; viewModel.crsDialogRequested = true }) else null)
+            onCrs = if (state is ProjectState.Loaded) ({ showAppearance = false; if (viewModel.pro.isPro) viewModel.crsDialogRequested = true else viewModel.proRequested = true }) else null,
+            pro = viewModel.pro.isPro, onPro = { showAppearance = false; viewModel.proRequested = true })
+        if (viewModel.proRequested) ProDialog(viewModel.pro, onDismiss = { viewModel.proRequested = false })
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
@@ -267,6 +270,18 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                 is ProjectState.Failed -> Message(state.message, openFile, viewModel.relocating?.let { { locator.launch(arrayOf("*/*")) } })
                 is ProjectState.Loaded -> ProjectScreen(state.fileName, state.project, state.terrain, viewModel)
             }
+        }
+    }
+}
+
+/** Free version: the plan is for viewing; a tap here opens the Gromatic Pro screen. */
+@Composable
+private fun FreeHint(modifier: Modifier, onPro: () -> Unit) {
+    Card(modifier.widthIn(max = 480.dp).clickable(onClick = onPro)) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Versão grátis: visualização da planta", style = MaterialTheme.typography.titleSmall)
+            Text("Estaca, cotas, 3D, seções, medições e as demais ferramentas estão no Gromatic Pro. Toque para conhecer.",
+                style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -606,7 +621,8 @@ private fun ProjectScreen(
     val analysisLabel = androidx.compose.ui.res.stringResource(R.string.ta_tool)
     val surfaceEditLabel = androidx.compose.ui.res.stringResource(R.string.se_tool)
     val bulletinLabel = androidx.compose.ui.res.stringResource(R.string.bm_tool)
-    fun railTools(): List<RailTool> = buildList {
+    val isPro = vm.pro.isPro
+    fun allTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
         if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) add(RailTool(GIcon.LINES, "Linhas", editing) {
@@ -639,6 +655,10 @@ private fun ProjectScreen(
         if (vm.hasReferences) add(RailTool(GIcon.REFS, "Referências") { showReferences = true })
         if (project.warnings.isNotEmpty()) add(RailTool(GIcon.WARNING, "Avisos") { showWarnings = true })
     }
+    // The free version shows every tool with a padlock; touching one opens the Gromatic Pro screen.
+    fun railTools(): List<RailTool> = allTools().let { all ->
+        if (isPro) all else all.map { it.copy(active = false, locked = true, onClick = { vm.proRequested = true }) }
+    }
     val current = info
     @Composable
     fun BoxScope.NarrowCards() {
@@ -660,6 +680,8 @@ private fun ProjectScreen(
                 // At the side, so the points being measured stay visible on a tablet.
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).widthIn(max = 380.dp).fillMaxWidth(),
             )
+        } else if (!isPro) {
+            FreeHint(Modifier.align(Alignment.BottomCenter).padding(12.dp)) { vm.proRequested = true }
         } else if (current == null) {
             Text(
                 "Toque na planta para ver estaca, afastamento e cotas",
@@ -757,6 +779,8 @@ private fun ProjectScreen(
                             // With the section open, a tap picks the station on the chosen alignment.
                             showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
                             showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
+                            // Free version: the plan is for viewing only.
+                            !isPro -> {}
                             else -> {
                                 tapped = it; selectedPoint = null
                                 modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
@@ -776,7 +800,7 @@ private fun ProjectScreen(
                     gpsAccuracy = gnssFix?.sigmaH ?: gnssFix?.hdop?.let { it * 3 },
                     gpsColor = fixColor(gnssFix?.quality),
                     notes = vm.notes,
-                    onNoteTap = if (measuring || addingPoints || editing) null else { n -> openNote = n; tapped = null; selectedPoint = null },
+                    onNoteTap = if (measuring || addingPoints || editing || !isPro) null else { n -> openNote = n; tapped = null; selectedPoint = null },
                     basemap = vm.basemap.takeIf { it.enabled && !crs.isGeographic && !crs.local },
                     basemapCrs = crs,
                     onLineSelected = { ref ->
@@ -817,7 +841,7 @@ private fun ProjectScreen(
                     channels = if (vm.analysisMode >= 2) vm.flowChannels else emptyList(),
                     arrows = if (vm.analysisMode >= 2) vm.flowArrows else emptyList(),
                     points = vm.userPoints,
-                    onPointTap = if (measuring || addingPoints) null else { pt -> selectedPoint = pt; tapped = null },
+                    onPointTap = if (measuring || addingPoints || !isPro) null else { pt -> selectedPoint = pt; tapped = null },
                     selectedPoint = selectedPoint,
                     focus = focus,
                     focusKey = focusKey,
@@ -837,7 +861,8 @@ private fun ProjectScreen(
                         if (has3d) add("3D" to show3d)
                         if (project.alignments.isNotEmpty()) { add("Seção" to (showSection && !show3d)); add("Perfil" to (showProfile && !show3d)) }
                     }
-                    ViewSwitch(views, onPick = { i ->
+                    ViewSwitch(views, locked = { i -> !isPro && i > 0 }, onPick = { i ->
+                        if (!isPro && i > 0) { vm.proRequested = true; return@ViewSwitch }
                         when (views[i].first) {
                             "Planta" -> { show3d = false; showSection = false; showProfile = false }
                             "3D" -> { show3d = true; showSection = false; showProfile = false }
@@ -1024,7 +1049,8 @@ private fun ProjectScreen(
             }
             if (differenceOverlay != null && difference != null && !show3d) DifferenceLegend(difference, Modifier)
             if ((vm.analysisMode == 1 || vm.analysisMode == 3) && !show3d) SlopeLegend(vm, Modifier)
-            if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
+            if (!isPro) FreeHint(Modifier.fillMaxWidth()) { vm.proRequested = true }
+            else if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
                 Text("Toque na planta para ver estaca, afastamento e cotas.", style = MaterialTheme.typography.bodyMedium, color = g.muted)
             }
         }
@@ -1074,7 +1100,23 @@ private fun ProjectScreen(
                     })
                 }
             },
-            right = buildList {
+            right = if (!isPro) buildList {
+                add(FooterItem(StationFormat.lengthUnit) { close ->
+                    MenuTitle("Unidades")
+                    for (u in UnitChoice.entries) MenuLine(u.label, checked = vm.units.choice == u) { close(); vm.units.choose(u) }
+                })
+                add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: "Auto") { close ->
+                    MenuTitle("Idioma")
+                    for (l in LanguageChoice.entries) MenuLine(l.label, checked = vm.languages.choice == l) { close(); vm.languages.choose(l) }
+                })
+                add(FooterItem("Tema") { close ->
+                    for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }
+                })
+                add(FooterItem("Grátis", dot = g.accent) { close ->
+                    MenuTitle("Versão grátis: abrir e ver a planta")
+                    MenuLine("Conhecer o Gromatic Pro…") { close(); vm.proRequested = true }
+                })
+            } else buildList {
                 // Drawing settings without leaving the plan.
                 val layers = project.layers + (if (vm.userPoints.isNotEmpty()) listOf(com.appdwg.core.POINTS_LAYER) else emptyList())
                 if (layers.isNotEmpty()) add(FooterItem("Camadas ${layers.count { it !in hidden }}/${layers.size}") { close ->

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -190,8 +191,8 @@ private fun Modifier.drawBehindLine(c: Color, w: Dp, top: Boolean) = Modifier.dr
     drawLine(c, Offset(0f, y), Offset(size.width, y), w.toPx())
 }
 
-/** One tool of the rail: icon over its name; [active] while the tool is on. */
-data class RailTool(val icon: GIcon, val label: String, val active: Boolean = false, val onClick: () -> Unit)
+/** One tool of the rail: icon over its name; [active] while the tool is on; [locked] needs Gromatic Pro. */
+data class RailTool(val icon: GIcon, val label: String, val active: Boolean = false, val locked: Boolean = false, val onClick: () -> Unit)
 
 /** Tool bar along the bottom on phones: the rail's buttons in a scrolling row. */
 @Composable
@@ -260,7 +261,14 @@ private fun RailButton(t: RailTool) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(if (g.choice == ThemeChoice.SUN) 24.dp else 22.dp))
+        Box {
+            Icon(icon, contentDescription = null, tint = if (t.locked) fg.copy(alpha = 0.55f) else fg, modifier = Modifier.size(if (g.choice == ThemeChoice.SUN) 24.dp else 22.dp))
+            if (t.locked) {
+                val lock = remember(g.iconStroke) { GIcon.LOCK.vector(maxOf(g.iconStroke, 2f)) }
+                Icon(lock, contentDescription = "Pro", tint = g.accent,
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 9.dp, y = (-5).dp).size(13.dp).clip(CircleShape).background(g.rail))
+            }
+        }
         Spacer(Modifier.height(3.dp))
         Text(t.label, color = fg, fontSize = if (g.choice == ThemeChoice.EARTH) 11.sp else 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             fontWeight = if (t.active || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium)
@@ -269,7 +277,7 @@ private fun RailButton(t: RailTool) {
 
 /** Segmented switch over the plan: Planta / 3D / Seção / Perfil. */
 @Composable
-fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modifier: Modifier = Modifier, locked: (Int) -> Boolean = { false }) {
     val g = LocalG.current
     val earth = g.choice == ThemeChoice.EARTH
     val outer = RoundedCornerShape(if (earth) 24.dp else if (g.choice == ThemeChoice.SUN) 8.dp else 10.dp)
@@ -301,7 +309,13 @@ fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modi
                     .selectable(on, role = Role.Tab) { onPick(i) }.padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(label, color = fg, fontSize = 14.sp, fontWeight = if (on || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(label, color = fg, fontSize = 14.sp, fontWeight = if (on || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium)
+                    if (locked(i)) {
+                        val lock = remember(g.iconStroke) { GIcon.LOCK.vector(maxOf(g.iconStroke, 2f)) }
+                        Icon(lock, contentDescription = "Pro", tint = g.accent, modifier = Modifier.size(14.dp))
+                    }
+                }
             }
         }
     }
@@ -439,12 +453,22 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                      units: UnitChoice = UnitChoice.AUTO, onUnits: (UnitChoice) -> Unit = {},
                      language: LanguageChoice = LanguageChoice.AUTO, onLanguage: (LanguageChoice) -> Unit = {},
                      /** Opens the open project's coordinate system; null without a project. */
-                     crsName: String? = null, onCrs: (() -> Unit)? = null) {
+                     crsName: String? = null, onCrs: (() -> Unit)? = null,
+                     /** Gromatic Pro: whether it is on, and the screen that explains and sells it. */
+                     pro: Boolean = false, onPro: (() -> Unit)? = null) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Configurações") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (onPro != null) {
+                    Text("Gromatic Pro", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(if (pro) "Assinatura ativa: todas as ferramentas liberadas." else "Versão grátis: abrir e ver a planta.", Modifier.weight(1f))
+                        androidx.compose.material3.OutlinedButton(onClick = onPro) { Text(if (pro) "Detalhes" else "Conhecer o Pro") }
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                }
                 if (onCrs != null) {
                     Text("Projeto", fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

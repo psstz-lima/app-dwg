@@ -59,6 +59,11 @@ Abra no tablet ou no celular os arquivos exportados do Civil 3D e de outros soft
 • Importa também GeoJSON e Shapefile
 • Projeto salvo em arquivo, para continuar depois
 
+**Grátis e Pro**
+• Grátis: abra e veja a planta (2D) de arquivos de até 5 MB, com zoom, escala, unidades, idioma e tema
+• Gromatic Pro: todas as ferramentas acima, arquivos de qualquer tamanho, 3D, seções, perfil, GPS, exportação e salvar projetos
+• Assinatura mensal ou anual pelo Google Play, com 7 dias grátis para testar; cancele quando quiser no Google Play
+
 Seus dados ficam no aparelho: sem conta, sem anúncios.
 
 ---
@@ -116,6 +121,11 @@ Open files exported from Civil 3D and other software on a tablet or phone: surfa
 • Imports GeoJSON and Shapefile too
 • Projects saved to a file, to pick up later
 
+**Free and Pro**
+• Free: open and view the plan (2D) of files up to 5 MB, with zoom, scale, units, language and theme
+• Gromatic Pro: every tool above, files of any size, 3D, cross sections, profile, GPS, export and saving projects
+• Monthly or yearly subscription through Google Play, with a 7-day free trial; cancel anytime in Google Play
+
 Your data stays on your device: no account, no ads.
 
 ---
@@ -123,8 +133,9 @@ Your data stays on your device: no account, no ads.
 ## Notas para o cadastro
 
 - Categoria sugerida: Ferramentas (ou Produtividade).
+- Preço: app gratuito com compras no app (a loja mostra "Contém compras no app"). Assinaturas a criar no Play Console pelo Paulo: `gromatic_pro_mensal` e `gromatic_pro_anual`, cada uma com um plano básico (renovação mensal / anual) e uma oferta de teste grátis de 7 dias. O app lê os preços do Google Play; nada de preço fica no código.
 - Classificação etária: Livre (sem conteúdo gerado por usuário compartilhado, sem anúncios).
-- Seção "Segurança dos dados": nenhum dado coletado nem compartilhado pelo desenvolvedor. A localização é processada só no aparelho e não sai dele. Ver `docs/politica-de-privacidade.md`.
+- Seção "Segurança dos dados": nenhum dado coletado nem compartilhado pelo desenvolvedor. O histórico de compras é tratado pelo próprio Google Play (o app só consulta se há assinatura ativa). A localização é processada só no aparelho e não sai dele. Ver `docs/politica-de-privacidade.md`.
 - A política de privacidade precisa estar num endereço público (por exemplo GitHub Pages) antes do envio.
 - Capturas de tela: em `docs/store/screenshots` (pt-BR e en-US), feitas com o projeto de exemplo sintético `docs/store/exemplo/rodovia-exemplo.xml`. A interface ainda está só em português.
 - "Civil 3D" é marca da Autodesk. O texto só cita o formato dos arquivos, de forma descritiva. Se a revisão da Play reclamar, trocar por "dados de projeto e topografia (LandXML/DXF)".

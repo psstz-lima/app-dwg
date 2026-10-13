@@ -875,6 +875,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     val themes = ThemeStore(app)
     val units = UnitStore(app)
     val languages = LanguageStore(app)
+    /** Gromatic Pro subscription; checked with Play at start. */
+    val pro = ProStore(app).also { it.refresh() }
+    /** Set to show the Gromatic Pro screen (a locked tool was touched). */
+    var proRequested by mutableStateOf(false)
 
     // ---- Coordinate system ----
 
@@ -1864,6 +1868,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         CloudDocs.noteUsed(getApplication(), uri)
         projectMessage = null
         viewModelScope.launch {
+            // The free version opens small files only.
+            val size = withContext(Dispatchers.IO) { fileSize(uri) }
+            if (!pro.isPro && size > FreeLimits.MAX_FILE_BYTES) {
+                state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
+                    StationFormat.decimal(size / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString()))
+                proRequested = true
+                return@launch
+            }
             val head = withContext(Dispatchers.IO) {
                 runCatching {
                     getApplication<Application>().contentResolver.openInputStream(uri)?.use { s ->
