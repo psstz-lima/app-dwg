@@ -75,7 +75,12 @@ data class PlanColors(
     val stations: Color,
     val points: Color,
     val marker: Color,
+    val contour: Color = Color(0xFF8D6E63),
+    val contourMajor: Color = Color(0xFF5D4037),
 )
+
+/** Zoom asked from outside the plan (buttons): [factor] multiplies the scale, 0 fits the drawing. [id] repeats it. */
+data class ZoomRequest(val id: Int, val factor: Double)
 
 /**
  * Pan/zoom plan view. Geometry is kept relative to [origin] so single-precision drawing stays
@@ -155,6 +160,7 @@ fun PlanView(
     basemap: BasemapStore? = null,
     basemapZone: Int = 23,
     basemapSouth: Boolean = true,
+    zoom: ZoomRequest? = null,
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -226,6 +232,17 @@ fun PlanView(
             val h = maxOf(bounds.height, 1.0)
             camera = Camera(0.0, 0.0, 0.9 * min(size.width / w, size.height / h))
         }
+    }
+
+    LaunchedEffect(zoom) {
+        val z = zoom ?: return@LaunchedEffect
+        val cam = camera ?: return@LaunchedEffect
+        if (z.factor == 0.0) {
+            cam.centerX = bounds.center.x - origin.x
+            cam.centerY = bounds.center.y - origin.y
+            cam.scale = 0.9 * min(size.width / maxOf(bounds.width, 1.0), size.height / maxOf(bounds.height, 1.0))
+        } else cam.scale = (cam.scale * z.factor).coerceIn(1e-4, 1e4)
+        frame++
     }
 
     LaunchedEffect(focus, focusKey, size) {
@@ -349,12 +366,12 @@ fun PlanView(
                 drawPath(path, key.paint(), style = Stroke(width = 1.5f / s))
             }
             contours?.let { c ->
-                drawPath(c.minor, CONTOUR_COLOR.copy(alpha = 0.55f), style = Stroke(width = 1f / s))
-                drawPath(c.major, CONTOUR_COLOR, style = Stroke(width = 2f / s))
+                drawPath(c.minor, colors.contour.copy(alpha = 0.8f), style = Stroke(width = 1f / s))
+                drawPath(c.major, colors.contourMajor, style = Stroke(width = 2f / s))
             }
             for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
         }
-        contours?.let { c -> drawContourLabels(c, cam) { toScreen(it, cam) } }
+        contours?.let { c -> drawContourLabels(c, cam, colors) { toScreen(it, cam) } }
 
         drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
@@ -823,7 +840,6 @@ private fun DrawScope.drawCogoPoints(
     }
 }
 
-private val CONTOUR_COLOR = Color(0xFF5D4037)
 
 /** Contours ready to draw: thin and thick (every fifth) lines relative to the plan origin, and label spots. */
 class ContourPaths(val interval: Double, val minor: Path, val major: Path, val labels: List<Pair<Point2, Double>>) {
@@ -871,12 +887,12 @@ class ContourPaths(val interval: Double, val minor: Path, val major: Path, val l
     }
 }
 
-private fun DrawScope.drawContourLabels(c: ContourPaths, cam: Camera, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawContourLabels(c: ContourPaths, cam: Camera, colors: PlanColors, toScreen: (Point2) -> Offset) {
     val paint = Paint().apply {
         isAntiAlias = true
         textSize = 10.sp.toPx()
-        color = CONTOUR_COLOR.toArgb()
-        setShadowLayer(3f, 0f, 0f, android.graphics.Color.WHITE)
+        color = colors.contourMajor.toArgb()
+        setShadowLayer(3f, 0f, 0f, colors.background.toArgb())
     }
     val digits = if (c.interval < 1) 2 else 0
     var lastX = Float.NaN; var lastY = Float.NaN

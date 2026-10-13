@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 
 /** Version, what the app does with data, map credits and open source licences. */
 @Composable
@@ -20,7 +21,13 @@ fun AboutDialog(onDismiss: () -> Unit) {
     val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sobre o Gromatic") },
+        title = {
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AppMark(Modifier.size(48.dp))
+                Text("Sobre o Gromatic")
+            }
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Versão $version")
@@ -44,6 +51,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     "Kotlin e kotlinx.coroutines (JetBrains)" to "Apache 2.0",
                     "Jetpack Compose, Material 3, AndroidX Activity, Lifecycle e Core (Google)" to "Apache 2.0",
                     "kXML2 (incluído no Android)" to "MIT",
+                    "Fontes Barlow, IBM Plex Sans e Plex Mono, Manrope, DM Mono, Atkinson Hyperlegible e JetBrains Mono" to "SIL Open Font License 1.1",
                 )) Text("$name — licença $licence")
                 Text("Texto da licença Apache 2.0: apache.org/licenses/LICENSE-2.0", style = MaterialTheme.typography.bodySmall)
 

@@ -833,6 +833,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Receiver connection; lives with the view model so rotating the screen keeps it. */
     val gnss = GnssManager(app)
     val basemap = BasemapStore(app)
+    val themes = ThemeStore(app)
 
     override fun onCleared() { gnss.disconnect() }
 
