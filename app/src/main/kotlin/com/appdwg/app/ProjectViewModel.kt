@@ -1783,6 +1783,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 savedJson = json.toString()
                 projectUri = target
+                CloudDocs.noteUsed(getApplication(), target)
                 remember(target)
                 then()
                 "Projeto salvo em ${displayName(target)}."
@@ -1818,9 +1819,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens a drawing or, when [uri] is a project file, the drawing and everything saved with it. */
     fun open(uri: Uri) {
-        runCatching {
-            getApplication<Application>().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+        // Read and write when the provider allows (a project on Drive is saved back in place), else read.
+        val cr = getApplication<Application>().contentResolver
+        runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+            .onFailure { runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+        CloudDocs.noteUsed(getApplication(), uri)
         projectMessage = null
         viewModelScope.launch {
             val head = withContext(Dispatchers.IO) {

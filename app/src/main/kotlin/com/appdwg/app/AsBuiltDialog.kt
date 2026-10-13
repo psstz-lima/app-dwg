@@ -70,6 +70,7 @@ fun AsBuiltDialog(
     project: LandXmlProject,
     st: AsBuiltState,
     onImport: () -> Unit,
+    onImportDrive: (() -> Unit)? = null,
     onCsv: () -> Unit,
     onPdf: () -> Unit,
     onDismiss: () -> Unit,
@@ -102,6 +103,7 @@ fun AsBuiltDialog(
                         FilterChip(st.source == 2, { st.source = 2 }, { Text(stringResource(R.string.asbuilt_points_all, user.size + filePoints.size)) })
                     }
                     OutlinedButton(onClick = onImport) { Text(stringResource(R.string.asbuilt_import)) }
+                    onImportDrive?.let { OutlinedButton(onClick = it) { Text("☁ Google Drive") } }
                 }
                 Text(stringResource(R.string.asbuilt_design), style = MaterialTheme.typography.labelLarge)
                 if (surfaces.isEmpty()) Text(stringResource(R.string.asbuilt_no_surface), style = MaterialTheme.typography.bodySmall)

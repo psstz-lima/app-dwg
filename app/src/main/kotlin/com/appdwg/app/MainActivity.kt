@@ -126,7 +126,12 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppScreen(viewModel: ProjectViewModel) {
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // When set, the next picker starts in Google Drive.
+    val inDrive = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    fun start(): android.net.Uri? = if (inDrive.getAndSet(false)) CloudDocs.driveStart(context) else null
+    val hasDrive = remember { CloudDocs.driveInstalled(context) }
+    val picker = rememberLauncherForActivityResult(OpenDocumentAt(::start)) { uri ->
         if (uri != null) viewModel.open(uri)
     }
     val state = viewModel.state
@@ -137,7 +142,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     var showAbout by remember { mutableStateOf(false) }
     var showAppearance by remember { mutableStateOf(false) }
     var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
-    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+    val saver = rememberLauncherForActivityResult(CreateDocumentAt("application/octet-stream", ::start)) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
     }
     fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".gromatic"
@@ -149,6 +154,8 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (state is ProjectState.Loaded && viewModel.isDirty()) confirm = action else action()
     }
     val openFile = { guarded { picker.launch(arrayOf("*/*")) } }
+    val openFromDrive = { guarded { inDrive.set(true); picker.launch(arrayOf("*/*")) } }
+    fun saveAs(drive: Boolean) { afterSave = null; inDrive.set(drive); saver.launch(projectName()) }
     val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
     androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) {
         if (viewModel.fullScreen) viewModel.fullScreen = false else guarded { activity?.finish() }
@@ -185,6 +192,8 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                                 @Composable fun item(label: String, action: () -> Unit) =
                                     androidx.compose.material3.DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
                                 if (state is ProjectState.Loaded) item("Abrir", openFile)
+                                if (hasDrive) item("Abrir do Google Drive", openFromDrive)
+                                if (state is ProjectState.Loaded && hasDrive) item("Salvar no Google Drive") { saveAs(true) }
                                 if (viewModel.recent.isNotEmpty()) item("Recentes") { showRecent = true }
                                 if (state is ProjectState.Loaded) item("Salvar como") { afterSave = null; saver.launch(projectName()) }
                                 item("Configurações") { showAppearance = true }
@@ -192,9 +201,10 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         }
                     } else {
                         if (viewModel.recent.isNotEmpty()) GButton("Recentes", { showRecent = true })
-                        GButton("Abrir", openFile)
+                        // Abrir and Salvar como offer the device or Google Drive.
+                        DropButton("Abrir", hasDrive, openFile, openFromDrive)
                         if (state is ProjectState.Loaded) {
-                            GButton("Salvar como", { afterSave = null; saver.launch(projectName()) })
+                            DropButton("Salvar como", hasDrive, { saveAs(false) }, { saveAs(true) })
                             GButton("Salvar", { save() }, primary = true)
                         }
                         GButton("Configurações", { showAppearance = true }, icon = GIcon.SETTINGS, outlined = true)
@@ -220,7 +230,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         viewModel.recent.forEach { (name, uri) ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RecentButton(name, Modifier.weight(1f)) { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }
+                                RecentButton(name, Modifier.weight(1f), cloud = CloudDocs.isDrive(uri)) { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }
                                 GButton("Remover", { viewModel.forgetRecent(uri) }, outlined = true)
                             }
                         }
@@ -250,7 +260,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                 Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).zIndex(1f)) { Text(msg, Modifier.padding(12.dp)) }
             }
             when (state) {
-                ProjectState.Empty -> EmptyState(openFile)
+                ProjectState.Empty -> EmptyState(openFile, if (hasDrive) openFromDrive else null)
                 is ProjectState.Loading -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     LoadProgress(state.task)
                 }
@@ -262,7 +272,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
 }
 
 @Composable
-private fun EmptyState(openFile: () -> Unit) {
+private fun EmptyState(openFile: () -> Unit, openDrive: (() -> Unit)?) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -275,7 +285,10 @@ private fun EmptyState(openFile: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(16.dp))
-        Button(onClick = openFile) { Text("Abrir arquivo") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = openFile) { Text("Abrir arquivo") }
+            openDrive?.let { androidx.compose.material3.OutlinedButton(onClick = it) { Text("☁ Abrir do Google Drive") } }
+        }
     }
 }
 
@@ -328,7 +341,13 @@ private fun ProjectScreen(
     var selectedPoint by remember(fileName) { mutableStateOf<CogoPoint?>(null) }
     var editingPoint by remember(fileName) { mutableStateOf<Pair<CogoPoint?, CogoPoint>?>(null) }
     var addingPoints by remember(fileName) { mutableStateOf(false) }
-    val pointImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    // Exports and point imports can start in Google Drive (chosen in their dialogs).
+    val driveNext = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    fun driveStart(): android.net.Uri? = if (driveNext.getAndSet(false)) CloudDocs.driveStart(ctx) else null
+    val hasDrive = remember { CloudDocs.driveInstalled(ctx) }
+    var exportToDrive by remember { mutableStateOf(false) }
+    val pointImporter = rememberLauncherForActivityResult(OpenDocumentAt(::driveStart)) { uri ->
         if (uri != null) vm.importPoints(uri)
     }
     val pointExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
@@ -448,7 +467,7 @@ private fun ProjectScreen(
     var pendingExport by remember { mutableStateOf<ExportKind?>(null) }
     var screenShot by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var captureFor by remember { mutableStateOf<ExportKind?>(null) }
-    val exportSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+    val exportSaver = rememberLauncherForActivityResult(CreateDocumentAt("application/octet-stream", ::driveStart)) { uri ->
         val kind = pendingExport
         pendingExport = null
         if (uri != null && kind != null) {
@@ -477,7 +496,7 @@ private fun ProjectScreen(
         screenShot = window?.let { captureWindow(it) }
         captureFor = null
         pendingExport = kind
-        exportSaver.launch(baseName + kind.suffix)
+        driveNext.set(exportToDrive); exportSaver.launch(baseName + kind.suffix)
     }
     val difference = vm.difference
     val differenceOverlay = vm.differenceImage?.takeIf { vm.differenceVisible }
@@ -1158,6 +1177,7 @@ private fun ProjectScreen(
     if (showAsBuilt) {
         AsBuiltDialog(vm, project, asBuiltState,
             onImport = { pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) },
+            onImportDrive = if (hasDrive) ({ driveNext.set(true); pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) }) else null,
             onCsv = { asBuiltCsv.launch("$baseName-as-built.csv") },
             onPdf = { asBuiltPdf.launch("$baseName-as-built.pdf") },
             onDismiss = { showAsBuilt = false })
@@ -1171,6 +1191,7 @@ private fun ProjectScreen(
         PointsDialog(
             vm,
             onImport = { pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) },
+            onImportDrive = if (hasDrive) ({ driveNext.set(true); pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) }) else null,
             onExport = { pointExporter.launch("pontos.txt") },
             onCreate = { addingPoints = true; measuring = false; showSection = false; showPoints = false },
             onGenerate = { showPoints = false; showGen = true },
@@ -1325,8 +1346,10 @@ private fun ProjectScreen(
             onExport = { kind ->
                 showExport = false
                 if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind
-                else { pendingExport = kind; exportSaver.launch(baseName + kind.suffix) }
+                else { pendingExport = kind; driveNext.set(exportToDrive); exportSaver.launch(baseName + kind.suffix) }
             },
+            toDrive = if (hasDrive) exportToDrive else null,
+            onToDrive = { exportToDrive = it },
             onSheets = if (project.alignments.isNotEmpty()) ({ showExport = false; showSheets = true }) else null,
             onDismiss = { showExport = false },
         )
@@ -1657,4 +1680,18 @@ private fun niceScale(ratio: Double): String {
     val e = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(ratio)))
     val n = listOf(1.0, 2.0, 2.5, 5.0, 10.0).minByOrNull { kotlin.math.abs(it * e - ratio) }!! * e
     return StationFormat.grouped(Math.round(n).toDouble(), 0)
+}
+
+/** Top-bar button that asks where: this device or Google Drive (when Drive is installed). */
+@Composable
+private fun DropButton(text: String, drive: Boolean, onDevice: () -> Unit, onDrive: () -> Unit) {
+    if (!drive) { GButton(text, onDevice); return }
+    var open by remember { mutableStateOf(false) }
+    Box {
+        GButton("$text ▾", { open = true })
+        androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
+            androidx.compose.material3.DropdownMenuItem(text = { Text("Neste aparelho") }, onClick = { open = false; onDevice() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text("Google Drive") }, leadingIcon = { Text("☁") }, onClick = { open = false; onDrive() })
+        }
+    }
 }

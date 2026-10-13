@@ -50,6 +50,9 @@ fun ExportDialog(
     onCrs: () -> Unit,
     onExport: (ExportKind) -> Unit,
     onSheets: (() -> Unit)? = null,
+    /** Shown when Google Drive is installed: exports start in Drive while on. */
+    toDrive: Boolean? = null,
+    onToDrive: (Boolean) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -58,6 +61,10 @@ fun ExportDialog(
         title = { Text("Exportar") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (toDrive != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = toDrive, onCheckedChange = onToDrive)
+                    Text("☁ Salvar no Google Drive")
+                }
                 OutlinedButton(onClick = { onExport(ExportKind.DXF) }) { Text(ExportKind.DXF.label) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = includeSurfaces, onCheckedChange = onIncludeSurfaces)

@@ -12,6 +12,11 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- To know whether Google Drive is installed, for the "Google Drive" shortcuts. -->
+    <queries>
+        <package android:name="com.google.android.apps.docs" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:largeHeap="true"

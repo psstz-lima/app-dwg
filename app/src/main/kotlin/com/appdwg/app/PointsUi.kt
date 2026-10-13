@@ -38,6 +38,7 @@ import kotlin.math.abs
 fun PointsDialog(
     vm: ProjectViewModel,
     onImport: () -> Unit,
+    onImportDrive: (() -> Unit)? = null,
     onExport: () -> Unit,
     onCreate: () -> Unit,
     onGenerate: () -> Unit,
@@ -53,6 +54,7 @@ fun PointsDialog(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onImport) { Text("Importar TXT/CSV") }
+                    onImportDrive?.let { OutlinedButton(onClick = it) { Text("☁ Importar do Google Drive") } }
                     OutlinedButton(onClick = onExport, enabled = vm.userPoints.isNotEmpty()) { Text("Exportar PDENZ") }
                 }
                 Spacer(Modifier.height(8.dp))

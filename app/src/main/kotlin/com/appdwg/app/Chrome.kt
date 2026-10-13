@@ -128,7 +128,7 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
 
 /** A recent file as a full-width button: its type on the left, the name, and an arrow to open. */
 @Composable
-fun RecentButton(name: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun RecentButton(name: String, modifier: Modifier = Modifier, cloud: Boolean = false, onClick: () -> Unit) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val type = when {
@@ -149,6 +149,7 @@ fun RecentButton(name: String, modifier: Modifier = Modifier, onClick: () -> Uni
             Text(type, color = g.onAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
         Text(name, color = g.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (cloud) Text("☁ Drive", color = g.muted, fontSize = 13.sp)
         Text("›", color = g.muted, fontSize = 22.sp)
     }
 }
