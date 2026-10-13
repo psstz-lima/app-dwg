@@ -56,4 +56,16 @@ class PlatformTest {
         assertEquals(3.0, area, 1e-9)
         assertTrue(Platform.signedArea(l) > 0)
     }
+
+    @Test
+    fun eachBenchItsOwnHeight() {
+        // Flat ground at 80, platform edge at 100 going east: fill. Benches after 5 m, then every 10 m.
+        val ground = Surface("T", doubleArrayOf(-10.0, 500.0, 500.0, -10.0), doubleArrayOf(-10.0, -10.0, 10.0, 10.0), DoubleArray(4) { 80.0 }, intArrayOf(0, 1, 2, 0, 2, 3))
+        val rule = SlopeRule(1.0, 8.0, 2.0, 0.0, heights = listOf(5.0, 10.0))
+        val (pts, open) = Platform.profile(Point3(0.0, 0.0, 100.0), Point2(1.0, 0.0), rule, rule, 400.0, ground)
+        assertEquals(false, open)
+        // start, 1st bench (95) in and out, 2nd bench (85) in and out, daylight (80).
+        assertEquals(listOf(100.0, 95.0, 95.0, 85.0, 85.0, 80.0), pts.map { Math.round(it.z * 1000) / 1000.0 })
+        assertEquals(5.0 + 2 + 10 + 2 + 5, pts.last().x, 1e-6)
+    }
 }

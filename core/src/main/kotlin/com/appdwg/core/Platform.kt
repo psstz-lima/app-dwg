@@ -12,10 +12,21 @@ import kotlin.math.sin
 /**
  * Side slope of a cut or a fill: [ratio] horizontal metres per vertical metre (H:V), a bench every
  * [benchHeight] metres of height ([benchHeight] 0 = no benches) [benchWidth] wide, with a cross fall
- * of [benchFall] percent towards the toe of the slope above it.
+ * of [benchFall] percent towards the toe of the slope above it (the bench's inner slope).
+ * [heights], when given, are the heights of the successive slope pieces from the platform out
+ * (first bench, second…); the last one repeats.
  */
-data class SlopeRule(val ratio: Double, val benchHeight: Double = 0.0, val benchWidth: Double = 0.0, val benchFall: Double = 0.0) {
+data class SlopeRule(
+    val ratio: Double,
+    val benchHeight: Double = 0.0,
+    val benchWidth: Double = 0.0,
+    val benchFall: Double = 0.0,
+    val heights: List<Double> = emptyList(),
+) {
     init { require(ratio > 0) { "inclinação do talude deve ser maior que zero" } }
+
+    /** Height of slope piece [k] (0 = next to the platform); 0 means no benches. */
+    fun heightOf(k: Int): Double = heights.filter { it > 0 }.let { h -> if (h.isEmpty()) benchHeight else h[minOf(k, h.size - 1)] }
 }
 
 /**
@@ -174,14 +185,16 @@ object Platform {
         }
         // Stops at the last point still over the terrain when the slope runs off the surface.
         fun offTerrain(dx: Double) = ground(x + dir.x * dx, y + dir.y * dx) == null
+        var piece = 0
         while (run < maxReach) {
             // Slope piece up to the next bench (or a long one without benches).
-            val height = if (rule.benchHeight > 0) rule.benchHeight else maxReach / rule.ratio
+            val benchH = rule.heightOf(piece++)
+            val height = if (benchH > 0) benchH else maxReach / rule.ratio
             val dx = height * rule.ratio
             walk(dx, sign * height)?.let { pts += it; return pts to false }
             if (offTerrain(dx)) return pts to true
             x += dir.x * dx; y += dir.y * dx; z += sign * height; run += dx
-            if (rule.benchHeight <= 0) break
+            if (benchH <= 0) break
             pts += Point3(x, y, z)
             if (rule.benchWidth > 0) {
                 // Bench falls towards the toe of the slope above it: outward in cut, inward in fill.

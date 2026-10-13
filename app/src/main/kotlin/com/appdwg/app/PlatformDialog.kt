@@ -55,21 +55,22 @@ fun PlatformDialog(
     var useVertex by remember { mutableStateOf(p0.useVertexElevations) }
     val f = remember {
         mutableMapOf(
-            "cr" to StationFormat.decimal(p0.cutRatio, 2), "ch" to StationFormat.decimal(p0.cutBenchHeight, 2),
+            "cr" to StationFormat.decimal(p0.cutRatio, 2), "ch" to heightsText(p0.cutHeights, p0.cutBenchHeight),
             "cw" to StationFormat.decimal(p0.cutBenchWidth, 2), "cf" to StationFormat.decimal(p0.cutBenchFall, 1),
-            "fr" to StationFormat.decimal(p0.fillRatio, 2), "fh" to StationFormat.decimal(p0.fillBenchHeight, 2),
+            "fr" to StationFormat.decimal(p0.fillRatio, 2), "fh" to heightsText(p0.fillHeights, p0.fillBenchHeight),
             "fw" to StationFormat.decimal(p0.fillBenchWidth, 2), "ff" to StationFormat.decimal(p0.fillBenchFall, 1),
         )
     }
     var fields by remember { mutableStateOf(f.toMap()) }
     fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
     val ratiosOk = (num(fields["cr"]!!) ?: 0.0) > 0 && (num(fields["fr"]!!) ?: 0.0) > 0 &&
-        listOf("ch", "cw", "cf", "fh", "fw", "ff").all { num(fields[it]!!) != null }
+        listOf("cw", "cf", "fw", "ff").all { num(fields[it]!!) != null } && listOf("ch", "fh").all { heights(fields[it]!!) != null }
     val valid = ratiosOk && (elevation.isBlank() || num(elevation) != null) && num(grade) != null && num(azimuth) != null
     fun params() = PlatformParams(
         num(elevation), num(grade)!!, num(azimuth)!!, useVertex,
-        num(fields["cr"]!!)!!, num(fields["ch"]!!)!!, num(fields["cw"]!!)!!, num(fields["cf"]!!)!!,
-        num(fields["fr"]!!)!!, num(fields["fh"]!!)!!, num(fields["fw"]!!)!!, num(fields["ff"]!!)!!,
+        num(fields["cr"]!!)!!, heights(fields["ch"]!!)!!.first(), num(fields["cw"]!!)!!, num(fields["cf"]!!)!!,
+        num(fields["fr"]!!)!!, heights(fields["fh"]!!)!!.first(), num(fields["fw"]!!)!!, num(fields["ff"]!!)!!,
+        heights(fields["ch"]!!)!!.takeIf { it.size > 1 }.orEmpty(), heights(fields["fh"]!!)!!.takeIf { it.size > 1 }.orEmpty(),
     )
     val decimal = KeyboardOptions(keyboardType = KeyboardType.Text)
 
@@ -127,8 +128,9 @@ fun PlatformDialog(
                 HorizontalDivider()
                 SlopeRow("Corte", "c", fields) { k, value -> fields = fields + (k to value) }
                 SlopeRow("Aterro", "f", fields) { k, value -> fields = fields + (k to value) }
-                Text("Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Altura entre bermas 0 = sem bermas. " +
-                    "O caimento da berma vai para o pé do talude de cima.", style = MaterialTheme.typography.bodySmall)
+                Text("Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Alturas das bermas: uma altura para todas (ex.: 8) " +
+                    "ou a altura de cada berma, da plataforma para fora, separadas por ; (ex.: 6; 8; 10; a última se repete). 0 = sem bermas. " +
+                    "A inclinação interna da berma (%) cai para o pé do talude de cima, levando a água para a canaleta.", style = MaterialTheme.typography.bodySmall)
                 vm.tasks.forEach { LoadProgress(it) }
                 vm.platformMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.platformVolumes?.let { d ->
@@ -151,10 +153,21 @@ private fun SlopeRow(title: String, prefix: String, fields: Map<String, String>,
     val decimal = KeyboardOptions(keyboardType = KeyboardType.Text)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, Modifier.width(70.dp), style = MaterialTheme.typography.labelLarge)
-        listOf("r" to "Talude H:V", "h" to "Altura entre bermas (m)", "w" to "Largura berma (m)", "f" to "Caimento berma %").forEach { (k, label) ->
+        listOf("r" to "Talude H:V", "h" to "Alturas das bermas (m)", "w" to "Largura berma (m)", "f" to "Inclinação interna %").forEach { (k, label) ->
             OutlinedTextField(fields[prefix + k]!!, { onChange(prefix + k, it) }, label = { Text(label) }, singleLine = true,
-                modifier = Modifier.width(if (k == "h") 210.dp else 170.dp), keyboardOptions = decimal)
+                modifier = Modifier.width(if (k == "h") 230.dp else 170.dp), keyboardOptions = decimal,
+                isError = if (k == "h") heights(fields[prefix + k]!!) == null else fields[prefix + k]!!.trim().replace(',', '.').toDoubleOrNull() == null)
         }
     }
     Spacer(Modifier.height(2.dp))
 }
+
+/** "8" or "6; 8; 10" (decimal comma allowed): bench heights, or null when not numbers. */
+private fun heights(s: String): List<Double>? {
+    val parts = s.split(';').map { it.trim() }.filter { it.isNotEmpty() }
+    if (parts.isEmpty()) return null
+    return parts.map { it.replace(',', '.').toDoubleOrNull()?.takeIf { v -> v >= 0 && v.isFinite() } ?: return null }
+}
+
+private fun heightsText(list: List<Double>, single: Double) =
+    (list.ifEmpty { listOf(single) }).joinToString("; ") { StationFormat.decimal(it, 2) }

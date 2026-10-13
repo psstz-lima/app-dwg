@@ -1457,8 +1457,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     t.step("Taludes e bermas")
                     val d = PlatformDesign(
                         outline, base, pp.gradePercent, pp.gradeAzimuth, vertexZ,
-                        cut = SlopeRule(pp.cutRatio, pp.cutBenchHeight, pp.cutBenchWidth, pp.cutBenchFall),
-                        fill = SlopeRule(pp.fillRatio, pp.fillBenchHeight, pp.fillBenchWidth, pp.fillBenchFall),
+                        cut = SlopeRule(pp.cutRatio, pp.cutBenchHeight, pp.cutBenchWidth, pp.cutBenchFall, pp.cutHeights),
+                        fill = SlopeRule(pp.fillRatio, pp.fillBenchHeight, pp.fillBenchWidth, pp.fillBenchFall, pp.fillHeights),
                     )
                     val r = Platform.design(d, terrain, PLATFORM_LABEL)
                     t.step("Volumes")

@@ -292,12 +292,16 @@ data class PlatformParams(
     val fillBenchHeight: Double = 8.0,
     val fillBenchWidth: Double = 3.0,
     val fillBenchFall: Double = 5.0,
+    /** Heights of each bench, first to last (the last repeats); empty = the single height above. */
+    val cutHeights: List<Double> = emptyList(),
+    val fillHeights: List<Double> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         elevation?.let { put("elevation", it) }
         put("gradePercent", gradePercent); put("gradeAzimuth", gradeAzimuth); put("useVertexElevations", useVertexElevations)
         put("cutRatio", cutRatio); put("cutBenchHeight", cutBenchHeight); put("cutBenchWidth", cutBenchWidth); put("cutBenchFall", cutBenchFall)
         put("fillRatio", fillRatio); put("fillBenchHeight", fillBenchHeight); put("fillBenchWidth", fillBenchWidth); put("fillBenchFall", fillBenchFall)
+        put("cutHeights", JSONArray(cutHeights)); put("fillHeights", JSONArray(fillHeights))
     }
 
     companion object {
@@ -306,6 +310,8 @@ data class PlatformParams(
             o.optBoolean("useVertexElevations"),
             o.optDouble("cutRatio", 1.0), o.optDouble("cutBenchHeight", 8.0), o.optDouble("cutBenchWidth", 3.0), o.optDouble("cutBenchFall", 5.0),
             o.optDouble("fillRatio", 1.5), o.optDouble("fillBenchHeight", 8.0), o.optDouble("fillBenchWidth", 3.0), o.optDouble("fillBenchFall", 5.0),
+            o.optJSONArray("cutHeights")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty(),
+            o.optJSONArray("fillHeights")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty(),
         )
     }
 }
