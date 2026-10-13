@@ -38,6 +38,8 @@ fun ExportDialog(
     vm: ProjectViewModel,
     includeSurfaces: Boolean,
     onIncludeSurfaces: (Boolean) -> Unit,
+    includeContours: Boolean,
+    onIncludeContours: (Boolean) -> Unit,
     zone: String,
     onZone: (String) -> Unit,
     onExport: (ExportKind) -> Unit,
@@ -53,6 +55,10 @@ fun ExportDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = includeSurfaces, onCheckedChange = onIncludeSurfaces)
                     Text("Incluir superfícies como 3DFACE (arquivo grande)", style = MaterialTheme.typography.bodySmall)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = includeContours, onCheckedChange = onIncludeContours)
+                    Text("Incluir curvas de nível (camada _CURVAS, superfícies inteiras, com cota)", style = MaterialTheme.typography.bodySmall)
                 }
                 Text("O DXF leva linhas, textos, eixos, pontos _POINTS, a medição (_MEDICAO) e a linha da seção (_SECAO), sem as camadas desligadas.",
                     style = MaterialTheme.typography.bodySmall)

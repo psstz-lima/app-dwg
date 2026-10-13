@@ -119,6 +119,10 @@ fun PlanView(
     focus: Point2? = null,
     /** Bumped to centre on [focus] again even when it did not change. */
     focusKey: Int = 0,
+    /** Contour interval in metres (0 = from the zoom), or null for no contours. */
+    contourInterval: Double? = null,
+    /** Told the interval actually drawn, or null when contours are too dense to draw. */
+    onContours: (Double?) -> Unit = {},
 ) {
     val bounds = project.bounds ?: return
     val origin = bounds.center
@@ -153,6 +157,24 @@ fun PlanView(
             project.surfaces.filter { it.name !in hiddenLayers }
                 .mapNotNull { TerrainImage.detail(it, region, cols, rows) { !job.isActive } }
         }
+    }
+
+    // Contours of the visible area, rebuilt once a gesture settles.
+    var contours by remember(project) { mutableStateOf<ContourPaths?>(null) }
+    LaunchedEffect(project, frame, size, hiddenLayers, contourInterval) {
+        if (contourInterval == null) { contours = null; return@LaunchedEffect }
+        val cam = camera ?: return@LaunchedEffect
+        if (size.width <= 0) return@LaunchedEffect
+        delay(DETAIL_DELAY_MS)
+        val halfW = size.width / cam.scale / 2 * DETAIL_MARGIN
+        val halfH = size.height / cam.scale / 2 * DETAIL_MARGIN
+        val cx = cam.centerX + origin.x
+        val cy = cam.centerY + origin.y
+        val region = Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
+        val surfaces = project.surfaces.filter { it.name !in hiddenLayers }
+        val job = coroutineContext.job
+        contours = withContext(Dispatchers.Default) { ContourPaths.build(surfaces, region, contourInterval, origin) { !job.isActive } }
+        onContours(contours?.interval)
     }
 
     LaunchedEffect(project, size) {
@@ -260,8 +282,13 @@ fun PlanView(
                 if (key.layer in hiddenLayers) continue
                 drawPath(path, key.paint(), style = Stroke(width = 1.5f / s))
             }
+            contours?.let { c ->
+                drawPath(c.minor, CONTOUR_COLOR.copy(alpha = 0.55f), style = Stroke(width = 1f / s))
+                drawPath(c.major, CONTOUR_COLOR, style = Stroke(width = 2f / s))
+            }
             for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
         }
+        contours?.let { c -> drawContourLabels(c, cam) { toScreen(it, cam) } }
 
         drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
@@ -622,5 +649,72 @@ private fun DrawScope.drawCogoPoints(
             val line2 = listOfNotNull(pt.description.takeIf { it.isNotEmpty() }, pt.z.takeIf { !it.isNaN() }?.let { StationFormat.decimal(it, 3) })
             if (line2.isNotEmpty()) canvas.drawText(line2.joinToString("  "), x, sp.y + paint.textSize, paint)
         }
+    }
+}
+
+private val CONTOUR_COLOR = Color(0xFF5D4037)
+
+/** Contours ready to draw: thin and thick (every fifth) lines relative to the plan origin, and label spots. */
+class ContourPaths(val interval: Double, val minor: Path, val major: Path, val labels: List<Pair<Point2, Double>>) {
+    companion object {
+        /** Null when cancelled or too dense; the interval comes from the zoom when [wanted] is 0. */
+        fun build(surfaces: List<com.appdwg.core.Surface>, region: Bounds, wanted: Double, origin: Point2, cancelled: () -> Boolean): ContourPaths? {
+            if (surfaces.isEmpty()) return null
+            val interval = if (wanted > 0) wanted else {
+                // Relief of the view estimated from each surface's range and the share of it in view.
+                val relief = surfaces.maxOf { s ->
+                    val b = s.bounds ?: return@maxOf 0.0
+                    val range = (s.maxElevation ?: 0.0) - (s.minElevation ?: 0.0)
+                    val share = kotlin.math.sqrt((region.width * region.height / (b.width * b.height)).coerceAtMost(1.0))
+                    range * share
+                }
+                com.appdwg.core.Contours.autoInterval(relief)
+            }
+            val minor = Path(); val major = Path()
+            val labels = ArrayList<Pair<Point2, Double>>()
+            var segments = 0
+            for (s in surfaces) {
+                val levels = com.appdwg.core.Contours.segments(s, interval, region, maxSegments = 400_000 - segments, cancelled = cancelled) ?: return null
+                for (lv in levels) {
+                    val isMajor = Math.round(lv.elevation / interval) % 5 == 0L
+                    val path = if (isMajor) major else minor
+                    val seg = lv.segments
+                    for (i in 0 until lv.count) {
+                        path.moveTo((seg[4 * i] - origin.x).toFloat(), (seg[4 * i + 1] - origin.y).toFloat())
+                        path.lineTo((seg[4 * i + 2] - origin.x).toFloat(), (seg[4 * i + 3] - origin.y).toFloat())
+                    }
+                    if (isMajor && lv.count > 0) {
+                        // A few spots per level, spread along its segments.
+                        val step = maxOf(1, lv.count / 6)
+                        var i = lv.count / 2 % step
+                        while (i < lv.count && labels.size < 400) {
+                            labels += Point2(seg[4 * i], seg[4 * i + 1]) to lv.elevation
+                            i += step
+                        }
+                    }
+                    segments += lv.count
+                }
+            }
+            return ContourPaths(interval, minor, major, labels)
+        }
+    }
+}
+
+private fun DrawScope.drawContourLabels(c: ContourPaths, cam: Camera, toScreen: (Point2) -> Offset) {
+    val paint = Paint().apply {
+        isAntiAlias = true
+        textSize = 10.sp.toPx()
+        color = CONTOUR_COLOR.toArgb()
+        setShadowLayer(3f, 0f, 0f, android.graphics.Color.WHITE)
+    }
+    val digits = if (c.interval < 1) 2 else 0
+    var lastX = Float.NaN; var lastY = Float.NaN
+    for ((p, z) in c.labels) {
+        val sp = toScreen(p)
+        if (sp.x < 0 || sp.y < 0 || sp.x > size.width || sp.y > size.height) continue
+        // Skips labels crowding the previous one.
+        if (!lastX.isNaN() && kotlin.math.abs(sp.x - lastX) < 40 && kotlin.math.abs(sp.y - lastY) < 20) continue
+        drawContext.canvas.nativeCanvas.drawText(StationFormat.decimal(z, digits), sp.x, sp.y, paint)
+        lastX = sp.x; lastY = sp.y
     }
 }

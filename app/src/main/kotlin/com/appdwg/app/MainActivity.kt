@@ -254,6 +254,12 @@ private fun ProjectScreen(
     // Export: dialog, chosen kind waiting for the save picker, and the screen picture for PNG/PDF.
     var showExport by remember(fileName) { mutableStateOf(false) }
     var showGoTo by remember(fileName) { mutableStateOf(false) }
+    var showContourDialog by remember(fileName) { mutableStateOf(false) }
+    var showContours by v::showContours
+    var contourInterval by v::contourInterval
+    // Interval the plan drew (null: too dense at this zoom), for the status line.
+    var contourDrawn by remember(fileName) { mutableStateOf<Double?>(null) }
+    var includeContours by remember(fileName) { mutableStateOf(false) }
     // Point the plan centres on after a search; the key repeats it for the same place.
     var focus by remember(fileName) { mutableStateOf<Point2?>(null) }
     var focusKey by remember(fileName) { mutableStateOf(0) }
@@ -268,7 +274,7 @@ private fun ProjectScreen(
         if (uri != null && kind != null) {
             val line = vm.extraLines(sectionLineFor(vm, project))
             when (kind) {
-                ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line)
+                ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
                 ExportKind.POINTS -> vm.exportPoints(uri)
                 ExportKind.KML -> vm.exportKml(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
@@ -408,6 +414,8 @@ private fun ProjectScreen(
             selectedPoint = selectedPoint,
             focus = focus,
             focusKey = focusKey,
+            contourInterval = if (showContours) contourInterval else null,
+            onContours = { contourDrawn = it },
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
@@ -452,6 +460,9 @@ private fun ProjectScreen(
                     }
                     TextButton(onClick = { showCompare = true }) { Text("Comparar") }
                     TextButton(onClick = { showPoints = true }) { Text("Pontos") }
+                    if (project.surfaces.isNotEmpty()) {
+                        TextButton(onClick = { showContourDialog = true }) { Text("Curvas") }
+                    }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
@@ -460,6 +471,15 @@ private fun ProjectScreen(
                     if (project.warnings.isNotEmpty()) {
                         TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos")) }
                     }
+                }
+            }
+            if (showContours && !show3d) {
+                Card(Modifier.padding(top = 8.dp)) {
+                    Text(
+                        contourDrawn?.let { "Curvas de nível a cada ${StationFormat.decimal(it, if (it < 1) 2 else 0)} m (mestras a cada 5)" }
+                            ?: "Curvas densas demais neste zoom: aproxime ou aumente o intervalo",
+                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
             if (differenceOverlay != null && difference != null && !show3d) {
@@ -575,6 +595,32 @@ private fun ProjectScreen(
         )
     }
 
+    if (showContourDialog) {
+        AlertDialog(
+            onDismissRequest = { showContourDialog = false },
+            confirmButton = { TextButton(onClick = { showContourDialog = false }) { Text("Fechar") } },
+            dismissButton = { TextButton(onClick = { showContours = false; showContourDialog = false }) { Text("Desligar") } },
+            title = { Text("Curvas de nível") },
+            text = {
+                Column {
+                    Text("Intervalo")
+                    Row {
+                        listOf(0.0, 0.5, 1.0, 2.0, 5.0, 10.0).forEach { i ->
+                            androidx.compose.material3.FilterChip(
+                                selected = showContours && contourInterval == i,
+                                onClick = { contourInterval = i; showContours = true },
+                                label = { Text(if (i == 0.0) "Auto" else StationFormat.decimal(i, if (i < 1) 1 else 0) + " m") },
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        }
+                    }
+                    Text("\"Auto\" escolhe o intervalo pelo zoom. As curvas são calculadas para a área visível.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            },
+        )
+    }
+
     if (showGoTo) {
         GoToDialog(project.copy(points = vm.userPoints), onGo = { p ->
             showGoTo = false
@@ -592,6 +638,8 @@ private fun ProjectScreen(
             vm,
             includeSurfaces = includeSurfaces,
             onIncludeSurfaces = { includeSurfaces = it },
+            includeContours = includeContours,
+            onIncludeContours = { includeContours = it },
             zone = utmZone,
             onZone = { utmZone = it.trim().uppercase() },
             onExport = { kind ->

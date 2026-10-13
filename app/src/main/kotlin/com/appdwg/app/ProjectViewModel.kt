@@ -30,6 +30,7 @@ import com.appdwg.core.CogoPoint
 import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.PointFile
 import com.appdwg.core.DxfWriter
+import com.appdwg.core.Contours
 import com.appdwg.core.ExportLine
 import com.appdwg.core.KmlWriter
 import com.appdwg.core.LandXmlWriter
@@ -701,10 +702,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun exportDxf(target: Uri, includeSurfaces: Boolean, extra: List<ExportLine>) {
+    /** [contourInterval] adds contour lines of the shown surfaces on layer _CURVAS. */
+    fun exportDxf(target: Uri, includeSurfaces: Boolean, extra: List<ExportLine>, contourInterval: Double? = null) {
         val p = exportProject() ?: return
         val hidden = hiddenLayers()
-        writeTo(target, "DXF") { out -> out.writer(Charsets.UTF_8).let { w -> DxfWriter.write(p, w, hidden, extra, includeSurfaces); w.flush() } }
+        writeTo(target, "DXF") { out ->
+            val contours = contourInterval?.let { iv ->
+                p.surfaces.filter { it.name !in hidden }.flatMap { s ->
+                    Contours.lines(Contours.segments(s, iv, maxSegments = 20_000_000) ?: emptyList())
+                }.map { c -> ExportLine("_CURVAS", List(c.xs.size) { Point2(c.xs[it], c.ys[it]) }, false, 34, c.elevation) }
+            }.orEmpty()
+            out.writer(Charsets.UTF_8).let { w -> DxfWriter.write(p, w, hidden, extra + contours, includeSurfaces); w.flush() }
+        }
     }
 
     fun exportLandXml(target: Uri) {

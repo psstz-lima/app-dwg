@@ -116,6 +116,22 @@ class Surface(
         return if (ok) ElevationGrid(region, cols, rows, values) else null
     }
 
+    /**
+     * Calls [action] once for each triangle that may overlap [region] (all of them when null) until
+     * it returns false; returns false when stopped that way.
+     */
+    fun forEachTriangle(region: Bounds?, action: (Int) -> Boolean): Boolean {
+        if (region == null) {
+            for (t in 0 until triangleCount) if (!action(t)) return false
+            return true
+        }
+        val g = grid ?: return true
+        val seen = BooleanArray(triangleCount)
+        return g.forEachTriangleIn(region) { t ->
+            if (seen[t]) true else { seen[t] = true; action(t) }
+        }
+    }
+
     internal fun interpolate(t: Int, x: Double, y: Double): Double? {
         val i0 = triangles[3 * t]
         val i1 = triangles[3 * t + 1]

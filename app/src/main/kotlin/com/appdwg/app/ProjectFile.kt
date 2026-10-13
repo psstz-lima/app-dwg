@@ -31,6 +31,9 @@ class ViewState(project: LandXmlProject) {
     var showProfile by mutableStateOf(false)
     var profileCursor by mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0)
     var profileRange by mutableStateOf(0.0)
+    var showContours by mutableStateOf(false)
+    /** Contour interval in metres; 0 picks one from the zoom. */
+    var contourInterval by mutableStateOf(0.0)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
 }
@@ -110,6 +113,8 @@ class ProjectDoc(
             put("showProfile", v.showProfile)
             put("profileCursor", v.profileCursor)
             put("profileRange", v.profileRange)
+            put("showContours", v.showContours)
+            put("contourInterval", v.contourInterval)
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
         }
@@ -133,6 +138,8 @@ class ProjectDoc(
             v.showProfile = o.optBoolean("showProfile")
             v.profileCursor = o.optDouble("profileCursor", v.profileCursor)
             v.profileRange = o.optDouble("profileRange", 0.0)
+            v.showContours = o.optBoolean("showContours")
+            v.contourInterval = o.optDouble("contourInterval", 0.0)
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
         }

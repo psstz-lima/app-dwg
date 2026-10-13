@@ -60,6 +60,9 @@ exporta com os dados reais de projeto.
 - Ir para (botão "Ir para"): busca ponto, texto ou alinhamento pelo nome (sem diferenciar acentos),
   vai a uma estaca e afastamento de um alinhamento ou a uma coordenada E/N; a planta centraliza e
   mostra os dados do lugar.
+- Curvas de nível (botão "Curvas"): intervalo automático pelo zoom ou fixo (0,5 a 10 m), mestras a
+  cada 5 com cota, calculadas para a área visível. O DXF exportado pode levá-las (camada `_CURVAS`,
+  com cota).
 - Funciona offline.
 
 ## Como exportar do Civil 3D

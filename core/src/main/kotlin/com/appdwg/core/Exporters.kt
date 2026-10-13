@@ -11,7 +11,7 @@ import kotlin.math.sqrt
 import kotlin.math.tan
 
 /** Extra lines to write with a drawing, such as the measurement or the cross section line. */
-class ExportLine(val layer: String, val points: List<Point2>, val closed: Boolean, val aci: Int)
+class ExportLine(val layer: String, val points: List<Point2>, val closed: Boolean, val aci: Int, val elevation: Double? = null)
 
 /**
  * ASCII DXF in the R12 subset (POLYLINE, TEXT, POINT, 3DFACE), which every CAD program reads.
@@ -95,7 +95,8 @@ object DxfWriter {
             val label = listOf(p.number, p.description, if (p.z.isNaN()) "" else f3(p.z)).filter { it.isNotEmpty() }.joinToString(" ")
             text(POINTS_LAYER, p.x + 0.5, p.y + 0.5, 0.5, label)
         }
-        for (e in extra) polyline(e.layer, DoubleArray(e.points.size) { e.points[it].x }, DoubleArray(e.points.size) { e.points[it].y }, null, e.closed)
+        for (e in extra) polyline(e.layer, DoubleArray(e.points.size) { e.points[it].x }, DoubleArray(e.points.size) { e.points[it].y },
+            e.elevation?.let { z -> DoubleArray(e.points.size) { z } }, e.closed)
         if (includeSurfaces) for (s in project.surfaces) {
             if (s.name in hiddenLayers) continue
             val t = s.triangles
