@@ -91,6 +91,14 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) openFromIntent(intent)
         setContent {
             GromaticTheme(viewModel.themes.choice) {
+                val full = viewModel.fullScreen && viewModel.state is ProjectState.Loaded
+                LaunchedEffect(full) {
+                    val bars = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                    if (full) {
+                        bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        bars.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                    } else bars.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+                }
                 AppScreen(viewModel)
             }
         }
@@ -133,13 +141,15 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
     val openFile = { guarded { picker.launch(arrayOf("*/*")) } }
     val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
-    androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) { guarded { activity?.finish() } }
+    androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) {
+        if (viewModel.fullScreen) viewModel.fullScreen = false else guarded { activity?.finish() }
+    }
 
     val g = LocalG.current
     Scaffold(
         containerColor = g.bg,
         topBar = {
-            Box(Modifier.background(g.topBar).windowInsetsPadding(WindowInsets.statusBars)) {
+            if (!(viewModel.fullScreen && state is ProjectState.Loaded)) Box(Modifier.background(g.topBar).windowInsetsPadding(WindowInsets.statusBars)) {
                 GTopBar(
                     when (state) {
                         is ProjectState.Loaded -> state.fileName
@@ -571,7 +581,8 @@ private fun ProjectScreen(
 
     Column(Modifier.fillMaxSize().background(g.bg)) {
     Row(Modifier.weight(1f).fillMaxWidth().then(if (g.floating) Modifier.padding(top = 4.dp) else Modifier)) {
-        ToolRail(railTools())
+        val full = vm.fullScreen
+        if (!full) ToolRail(railTools())
         Box(
             Modifier.weight(1f).fillMaxHeight()
                 .then(if (g.floating) Modifier.padding(start = 12.dp, end = if (wide) 12.dp else 12.dp, bottom = 12.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
@@ -751,6 +762,8 @@ private fun ProjectScreen(
                     onIn = { planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 1.6) },
                     onOut = { planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 1 / 1.6) },
                     onFit = { planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 0.0) },
+                    fullScreen = vm.fullScreen,
+                    onFullScreen = { vm.fullScreen = !vm.fullScreen },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
                 )
             }
@@ -866,13 +879,13 @@ private fun ProjectScreen(
                         onClose = { showSection = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(0.45f),
                     )
-                } else if (!wide) {
+                } else if (!wide || full) {
                     NarrowCards()
                 }
 
             BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
         }
-        if (wide) SidePanel {
+        if (wide && !full) SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
             if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + " da leitura") }
             if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsInfo, Modifier.fillMaxWidth())
@@ -907,7 +920,7 @@ private fun ProjectScreen(
     // Footer: the tapped point, else the GPS position; station on the axis; plan scale; GPS fix.
     val shown = current ?: gpsInfo
     val metersPerInch = viewport?.let { vp -> if (planWidthPx > 0) vp.width / planWidthPx * xdpi else null }
-    StatusFooter(
+    if (!vm.fullScreen) StatusFooter(
         items = buildList {
             shown?.let { p ->
                 add("E " + StationFormat.decimal(p.position.x, 3)); add("N " + StationFormat.decimal(p.position.y, 3))

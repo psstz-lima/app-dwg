@@ -117,6 +117,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     var state by mutableStateOf<ProjectState>(ProjectState.Empty)
         private set
 
+    /** Plan only: no top bar, rail, side panel, footer or system bars. */
+    var fullScreen by mutableStateOf(false)
+
     /** Raster files loaded for DXF images, by the path the drawing stores. */
     var rasters by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set

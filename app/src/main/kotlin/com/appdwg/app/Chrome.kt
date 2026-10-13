@@ -127,15 +127,14 @@ fun GTopBar(fileName: String?, actions: @Composable RowScope.() -> Unit) {
     ) {
         AppMark(Modifier.size(if (g.choice == ThemeChoice.EARTH) 42.dp else 38.dp))
         Text("Gromatic", color = g.onTopBar, fontSize = 22.sp, fontWeight = if (g.choice == ThemeChoice.EARTH) FontWeight.ExtraBold else FontWeight.Bold)
-        if (fileName != null) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { if (fileName != null) {
             if (g.choice == ThemeChoice.EARTH) {
                 Box(Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(g.chip).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                     Text(fileName, color = g.muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             } else Text(fileName, color = if (g.choice == ThemeChoice.SUN) Color(0xFFE0E0E0) else g.muted, fontSize = 14.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        }
-        Spacer(Modifier.weight(1f))
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        } }
         // On the black bar of the high-contrast theme the outlined buttons are white on black.
         if (g.choice == ThemeChoice.SUN) {
             val onBar = g.copy(text = Color.White, border = Color.White)
@@ -248,10 +247,13 @@ fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modi
 
 /** Zoom in, out and fit, at the plan's lower right. */
 @Composable
-fun ZoomButtons(onIn: () -> Unit, onOut: () -> Unit, onFit: () -> Unit, modifier: Modifier = Modifier) {
+fun ZoomButtons(onIn: () -> Unit, onOut: () -> Unit, onFit: () -> Unit, fullScreen: Boolean, onFullScreen: () -> Unit, modifier: Modifier = Modifier) {
     val g = LocalG.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for ((icon, desc, act) in listOf(Triple(GIcon.PLUS, "Aproximar", onIn), Triple(GIcon.MINUS, "Afastar", onOut), Triple(GIcon.FIT, "Ver tudo", onFit))) {
+        for ((icon, desc, act) in listOf(
+            Triple(if (fullScreen) GIcon.EXIT_FULLSCREEN else GIcon.FULLSCREEN, if (fullScreen) "Sair da tela cheia" else "Tela cheia", onFullScreen),
+            Triple(GIcon.PLUS, "Aproximar", onIn), Triple(GIcon.MINUS, "Afastar", onOut), Triple(GIcon.FIT, "Ver tudo", onFit),
+        )) {
             val shape = if (g.choice == ThemeChoice.EARTH) CircleShape else RoundedCornerShape(if (g.choice == ThemeChoice.SUN) 8.dp else 10.dp)
             val bg = if (g.choice == ThemeChoice.EARTH) g.rail else g.panel
             val fg = if (g.choice == ThemeChoice.EARTH) g.panel else g.text
