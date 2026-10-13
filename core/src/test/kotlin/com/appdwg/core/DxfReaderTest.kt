@@ -219,3 +219,16 @@ class DxfReaderTest {
         assertTrue(p.polylines.isEmpty())
     }
 }
+
+class FastNumberTest {
+    @Test
+    fun fastParsersMatchTheStandardOnes() {
+        for (s in listOf("0", "12", "-7", "  42", "761234.567890123", "-0.000123", "1E3", "1.5e-7", "  3.25 ", "7849000.000000", "1234567890123456789.5")) {
+            kotlin.test.assertEquals(s.trim().toDouble(), fastDouble(s), Math.ulp(s.trim().toDouble()) * 4, s)
+        }
+        kotlin.test.assertEquals(null, fastDoubleOrNull("abc"))
+        kotlin.test.assertEquals(null, fastDoubleOrNull(""))
+        kotlin.test.assertEquals(-256, fastInt(" -256"))
+        kotlin.test.assertEquals(null, fastInt("x"))
+    }
+}

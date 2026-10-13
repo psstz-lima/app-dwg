@@ -29,6 +29,66 @@ import kotlin.math.sqrt
  *
  * Civil 3D objects (alignments, surfaces) stored as custom AECC objects cannot be read from DXF.
  */
+/**
+ * Number readers for DXF values: plain decimals parsed by hand, which on Android is several times
+ * faster than String.toDouble/toDoubleOrNull; anything unusual falls back to those.
+ */
+internal fun fastInt(s: String): Int? {
+    var i = 0; var n = s.length
+    while (i < n && s[i] == ' ') i++
+    while (n > i && (s[n - 1] == ' ' || s[n - 1] == '\r')) n--
+    if (i >= n) return null
+    var neg = false
+    if (s[i] == '-' || s[i] == '+') { neg = s[i] == '-'; i++ }
+    if (i >= n || n - i > 9) return s.trim().toIntOrNull()
+    var v = 0
+    while (i < n) { val c = s[i] - '0'; if (c !in 0..9) return s.trim().toIntOrNull(); v = v * 10 + c; i++ }
+    return if (neg) -v else v
+}
+
+private val POW10 = DoubleArray(23) { Math.pow(10.0, it.toDouble()) }
+
+internal fun fastDoubleOrNull(s: String): Double? {
+    var i = 0; var n = s.length
+    while (i < n && s[i] == ' ') i++
+    while (n > i && (s[n - 1] == ' ' || s[n - 1] == '\r')) n--
+    if (i >= n) return null
+    var neg = false
+    if (s[i] == '-' || s[i] == '+') { neg = s[i] == '-'; i++ }
+    var mant = 0L; var digits = 0; var frac = 0; var seenDot = false; var any = false
+    while (i < n) {
+        val ch = s[i]
+        if (ch in '0'..'9') {
+            any = true
+            if (digits < 18) { mant = mant * 10 + (ch - '0'); digits++; if (seenDot) frac++ }
+            else if (!seenDot) frac-- // digits beyond precision before the point still scale
+        } else if (ch == '.' && !seenDot) seenDot = true
+        else break
+        i++
+    }
+    if (!any) return null
+    var exp = -frac
+    if (i < n) {
+        if (s[i] != 'e' && s[i] != 'E') return s.trim().toDoubleOrNull()
+        i++
+        var eneg = false
+        if (i < n && (s[i] == '-' || s[i] == '+')) { eneg = s[i] == '-'; i++ }
+        var e = 0; var ed = false
+        while (i < n && s[i] in '0'..'9') { e = e * 10 + (s[i] - '0'); i++; ed = true }
+        if (!ed || i < n) return s.trim().toDoubleOrNull()
+        exp += if (eneg) -e else e
+    }
+    val v = when {
+        exp == 0 -> mant.toDouble()
+        exp in 1..22 -> mant.toDouble() * POW10[exp]
+        exp in -22..-1 -> mant.toDouble() / POW10[-exp]
+        else -> return s.trim().toDoubleOrNull()
+    }
+    return if (neg) -v else v
+}
+
+internal fun fastDouble(s: String): Double = fastDoubleOrNull(s) ?: throw NumberFormatException("número inválido: $s")
+
 class DxfReader(private val input: BufferedReader) {
 
     private val polylines = ArrayList<Polyline>()
@@ -95,7 +155,7 @@ class DxfReader(private val input: BufferedReader) {
         while (true) {
             val codeLine = input.readLine() ?: break
             val value = input.readLine()?.trim() ?: break
-            val code = codeLine.trim().toIntOrNull() ?: error("DXF inválido perto de \"${codeLine.take(40)}\"")
+            val code = fastInt(codeLine) ?: error("DXF inválido perto de \"${codeLine.take(40)}\"")
 
             if (expectSectionName) {
                 expectSectionName = false
@@ -118,7 +178,7 @@ class DxfReader(private val input: BufferedReader) {
                 "ENTITIES", "TABLES", "BLOCKS", "OBJECTS" -> pending?.add(code, value)
                 "HEADER" -> when {
                     code == 9 -> headerVariable = value
-                    headerVariable == "\$INSUNITS" && code == 70 -> linearUnit = INSUNITS[value.toIntOrNull()]
+                    headerVariable == "\$INSUNITS" && code == 70 -> linearUnit = INSUNITS[fastInt(value)]
                 }
             }
         }
@@ -131,7 +191,7 @@ class DxfReader(private val input: BufferedReader) {
         // A negative color means the layer is off; flag 1 means frozen.
         if (aci < 0) layersOff += name
         if (e.i(70) and 1 != 0) layersFrozen += name
-        layerColors[name] = e.s(420)?.toIntOrNull()?.let { trueColor(it) } ?: aciColor(abs(aci))
+        layerColors[name] = e.s(420)?.let(::fastInt)?.let { trueColor(it) } ?: aciColor(abs(aci))
     }
 
     // ---- Drawing: entities to plan geometry ----
@@ -157,7 +217,7 @@ class DxfReader(private val input: BufferedReader) {
                 }
                 "CIRCLE" -> readArc(e, 0.0, 2 * PI, out)
                 "ARC" -> readArc(e, Math.toRadians(e.d(50)), Math.toRadians(e.d(51)), out)
-                "ELLIPSE" -> out.line(ellipse(e.d(10), e.d(20), e.d(11), e.d(21), e.d(40), e.d(41), e.s(42)?.toDoubleOrNull() ?: (2 * PI), true), false)
+                "ELLIPSE" -> out.line(ellipse(e.d(10), e.d(20), e.d(11), e.d(21), e.d(40), e.d(41), e.s(42)?.let(::fastDoubleOrNull) ?: (2 * PI), true), false)
                 "SPLINE" -> {
                     // Fit points lie on the curve; without them the control polygon is a close enough outline.
                     out.line(e.points(11, 21).ifEmpty { e.points(10, 20) }, e.i(70) and 1 != 0)
@@ -190,7 +250,7 @@ class DxfReader(private val input: BufferedReader) {
             return
         }
         out.line(listOf(Point2(e.d(13), e.d(23)), Point2(e.d(14), e.d(24))), false)
-        val measured = e.s(42)?.toDoubleOrNull()
+        val measured = e.s(42)?.let(::fastDoubleOrNull)
         val text = e.s(1)?.takeIf { it.isNotEmpty() && it != "<>" }?.let { decodeMText(it) }
             ?: measured?.let { StationFormat.decimal(it) } ?: return
         out.text(Point2(e.d(11), e.d(21)), 2.5, 0.0, text, 1, PlanText.MIDDLE)
@@ -237,9 +297,9 @@ class DxfReader(private val input: BufferedReader) {
         val name = e.s(2) ?: return
         val block = blocks[name] ?: return
         if (depth > 8) return
-        val sx = e.s(41)?.toDoubleOrNull() ?: 1.0
-        val sy = e.s(42)?.toDoubleOrNull() ?: 1.0
-        val sz = e.s(43)?.toDoubleOrNull() ?: 1.0
+        val sx = e.s(41)?.let(::fastDoubleOrNull) ?: 1.0
+        val sy = e.s(42)?.let(::fastDoubleOrNull) ?: 1.0
+        val sz = e.s(43)?.let(::fastDoubleOrNull) ?: 1.0
         val rot = Math.toRadians(e.d(50))
         val cols = max(1, e.i(70))
         val rows = max(1, e.i(71))
@@ -269,9 +329,9 @@ class DxfReader(private val input: BufferedReader) {
         val bulges = ArrayList<Double>()
         e.forEach { code, value ->
             when (code) {
-                10 -> { xs += value.toDouble(); bulges += 0.0 }
-                20 -> ys += value.toDouble()
-                42 -> if (bulges.isNotEmpty()) bulges[bulges.size - 1] = value.toDouble()
+                10 -> { xs += fastDouble(value); bulges += 0.0 }
+                20 -> ys += fastDouble(value)
+                42 -> if (bulges.isNotEmpty()) bulges[bulges.size - 1] = fastDouble(value)
             }
         }
         val closed = e.i(70) and 1 != 0
@@ -365,8 +425,8 @@ class DxfReader(private val input: BufferedReader) {
             return null
         }
 
-        private fun nextD(code: Int) = next(code)?.toDoubleOrNull() ?: 0.0
-        private fun nextI(code: Int) = next(code)?.trim()?.toIntOrNull() ?: 0
+        private fun nextD(code: Int) = next(code)?.let(::fastDoubleOrNull) ?: 0.0
+        private fun nextI(code: Int) = next(code)?.let(::fastInt) ?: 0
 
         fun loops(): List<List<Point2>> {
             val count = nextI(91)
@@ -381,7 +441,7 @@ class DxfReader(private val input: BufferedReader) {
                     val bulges = ArrayList<Double>()
                     repeat(n) {
                         pts += Point2(nextD(10), nextD(20))
-                        bulges += if (hasBulge && k < e.size && e.code(k) == 42) e.value(k++).toDouble() else 0.0
+                        bulges += if (hasBulge && k < e.size && e.code(k) == 42) fastDouble(e.value(k++)) else 0.0
                     }
                     loops += withBulges(pts, bulges, true)
                 } else {
@@ -469,8 +529,8 @@ class DxfReader(private val input: BufferedReader) {
      * "by layer" and 0 "by block" (the insert's color).
      */
     private fun colorOf(e: Entity, layer: String, ctx: Context): Pair<Int?, Boolean> {
-        e.s(420)?.toIntOrNull()?.let { return trueColor(it) to false }
-        return when (val aci = e.s(62)?.trim()?.toIntOrNull() ?: 256) {
+        e.s(420)?.let(::fastInt)?.let { return trueColor(it) to false }
+        return when (val aci = e.s(62)?.let(::fastInt) ?: 256) {
             256 -> layerColors[layer] to true
             0 -> ctx.color to (ctx.byLayer && layer == ctx.layer)
             else -> aciColor(abs(aci)) to false
@@ -544,8 +604,8 @@ class DxfReader(private val input: BufferedReader) {
         val layer get() = s(8) ?: "0"
 
         fun s(code: Int): String? = codes.indexOf(code).let { if (it < 0) null else values[it] }
-        fun d(code: Int): Double = s(code)?.toDoubleOrNull() ?: 0.0
-        fun i(code: Int): Int = s(code)?.trim()?.toIntOrNull() ?: 0
+        fun d(code: Int): Double = s(code)?.let(::fastDoubleOrNull) ?: 0.0
+        fun i(code: Int): Int = s(code)?.let(::fastInt) ?: 0
 
         inline fun forEach(action: (Int, String) -> Unit) {
             for (k in codes.indices) action(codes[k], values[k])
@@ -555,8 +615,8 @@ class DxfReader(private val input: BufferedReader) {
             val xs = ArrayList<Double>()
             val ys = ArrayList<Double>()
             forEach { code, value ->
-                if (code == xCode) xs += value.toDouble()
-                if (code == yCode) ys += value.toDouble()
+                if (code == xCode) xs += fastDouble(value)
+                if (code == yCode) ys += fastDouble(value)
             }
             return (0 until minOf(xs.size, ys.size)).map { Point2(xs[it], ys[it]) }
         }
@@ -620,7 +680,7 @@ class DxfReader(private val input: BufferedReader) {
             private val WORLD = Ocs(0.0, 0.0, 1.0)
 
             fun of(e: Entity): Ocs {
-                val z = e.s(230)?.toDoubleOrNull() ?: return WORLD
+                val z = e.s(230)?.let(::fastDoubleOrNull) ?: return WORLD
                 val x = e.d(210)
                 val y = e.d(220)
                 return if (x == 0.0 && y == 0.0 && z > 0) WORLD else Ocs(x, y, z)

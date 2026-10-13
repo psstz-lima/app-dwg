@@ -1454,12 +1454,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         run {
             state = try {
                 val (project, terrain) = withContext(Dispatchers.IO) {
+                    val t0 = System.nanoTime()
                     val p = read(uri, task)
+                    val t1 = System.nanoTime()
                     // Builds each surface's lookup index now, so the first tap on the plan is instant.
                     if (p.surfaces.isNotEmpty()) task.step("Preparando consulta de cotas")
                     p.surfaces.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
+                    val t2 = System.nanoTime()
                     if (p.surfaces.isNotEmpty()) task.step("Gerando imagem do terreno")
-                    p to p.surfaces.mapNotNull { TerrainImage.of(it) }
+                    val images = p.surfaces.mapNotNull { TerrainImage.of(it) }
+                    android.util.Log.i("AppDWG", "abrir $name: leitura ${(t1 - t0) / 1_000_000} ms, índice ${(t2 - t1) / 1_000_000} ms, " +
+                        "imagem ${(System.nanoTime() - t2) / 1_000_000} ms")
+                    p to images
                 }
                 if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
                     project.polylines.isEmpty()
