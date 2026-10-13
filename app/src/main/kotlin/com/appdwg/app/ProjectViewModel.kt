@@ -1331,6 +1331,30 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Recent files ----
+
+    private val recentPrefs = app.getSharedPreferences("recent", Context.MODE_PRIVATE)
+
+    /** Files opened lately (name, URI), newest first. */
+    var recent by mutableStateOf(loadRecent())
+        private set
+
+    private fun loadRecent(): List<Pair<String, String>> = runCatching {
+        val a = org.json.JSONArray(recentPrefs.getString("list", "[]"))
+        List(a.length()) { a.getJSONObject(it).let { o -> o.getString("name") to o.getString("uri") } }
+    }.getOrDefault(emptyList())
+
+    private fun remember(uri: Uri) {
+        val list = (listOf(displayName(uri) to uri.toString()) + recent.filter { it.second != uri.toString() }).take(12)
+        recent = list
+        recentPrefs.edit().putString("list", org.json.JSONArray(list.map { (n, u) -> JSONObject().put("name", n).put("uri", u) }).toString()).apply()
+    }
+
+    fun forgetRecent(uri: String) {
+        recent = recent.filter { it.second != uri }
+        recentPrefs.edit().putString("list", org.json.JSONArray(recent.map { (n, u) -> JSONObject().put("name", n).put("uri", u) }).toString()).apply()
+    }
+
     /** Opens a drawing or, when [uri] is a project file, the drawing and everything saved with it. */
     fun open(uri: Uri) {
         runCatching {
@@ -1345,7 +1369,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }.getOrNull().orEmpty()
             }
-            if (ProjectDoc.looksLikeProject(head)) openProject(uri) else if (openNow(uri)) {
+            if (ProjectDoc.looksLikeProject(head)) { openProject(uri); if (state is ProjectState.Loaded) remember(uri) } else if (openNow(uri)) {
+                remember(uri)
                 projectUri = null
                 savedJson = currentDoc()?.toJson()?.toString()
             }

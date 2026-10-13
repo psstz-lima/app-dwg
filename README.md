@@ -111,6 +111,11 @@ exporta com os dados reais de projeto.
 - Anotações (botão "Anotar"): toque na planta ou use a posição do GPS; texto, cota e foto da câmera
   ou da galeria (guardada no app). Aparecem como alfinetes; tocar mostra texto, coordenadas e foto.
   Entram no projeto salvo e exportam em KMZ (Google Earth, com as fotos) e CSV.
+- Cálculos de campo (botão "Cálculos"): inverso (distância, azimute, ΔE/ΔN, desnível, rampa), irradiação,
+  interseção azimute × azimute, distância × distância e azimute × distância, área/perímetro por lista de
+  pontos e conversões (estaca ↔ metros, ângulo grau/minuto/segundo ↔ decimal ↔ grados, rampa % ↔ H:V).
+  Pontos de entrada pelo número (`_POINTS` ou COGO) ou "E N"; resultados viram pontos `_POINTS`.
+- Arquivos recentes (botão "Recentes"): os últimos desenhos e projetos abertos.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

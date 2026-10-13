@@ -111,6 +111,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     val state = viewModel.state
     // "Open" and back ask first when the project has unsaved changes.
     var confirm by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showRecent by remember { mutableStateOf(false) }
     var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
@@ -145,11 +146,31 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         TextButton(onClick = { save() }) { Text("Salvar") }
                         TextButton(onClick = { afterSave = null; saver.launch(projectName()) }) { Text("Salvar como") }
                     }
+                    if (viewModel.recent.isNotEmpty()) TextButton(onClick = { showRecent = true }) { Text("Recentes") }
                     TextButton(onClick = openFile) { Text("Abrir") }
                 },
             )
         },
     ) { padding ->
+        if (showRecent) {
+            AlertDialog(
+                onDismissRequest = { showRecent = false },
+                confirmButton = { TextButton(onClick = { showRecent = false }) { Text("Fechar") } },
+                title = { Text("Arquivos recentes") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        viewModel.recent.forEach { (name, uri) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }, modifier = Modifier.weight(1f)) {
+                                    Text(name, maxLines = 1, modifier = Modifier.fillMaxWidth())
+                                }
+                                TextButton(onClick = { viewModel.forgetRecent(uri) }) { Text("Tirar") }
+                            }
+                        }
+                    }
+                },
+            )
+        }
         confirm?.let { action ->
             AlertDialog(
                 onDismissRequest = { confirm = null },
@@ -255,6 +276,7 @@ private fun ProjectScreen(
     // Export: dialog, chosen kind waiting for the save picker, and the screen picture for PNG/PDF.
     var showExport by remember(fileName) { mutableStateOf(false) }
     var showGoTo by remember(fileName) { mutableStateOf(false) }
+    var showCalc by remember(fileName) { mutableStateOf(false) }
     // GNSS: dialog, following the position, the project's UTM zone and the position in project coordinates.
     var showGps by remember(fileName) { mutableStateOf(false) }
     // Field notes: placing mode, the note being edited (with whether it is new) and a tapped one.
@@ -623,6 +645,7 @@ private fun ProjectScreen(
                     TextButton(onClick = { showModels = true }) { Text("Modelos 3D") }
                     TextButton(onClick = { addingNote = true; measuring = false; show3d = false }) { Text("Anotar") }
                     TextButton(onClick = { showGps = true }) { Text(if (vm.gnss.connected) "GPS ●" else "GPS") }
+                    TextButton(onClick = { showCalc = true }) { Text("Cálculos") }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
@@ -928,6 +951,8 @@ private fun ProjectScreen(
             onPickReplay = { replayPicker.launch(arrayOf("*/*")) },
             onDismiss = { showGps = false })
     }
+
+    if (showCalc) CalcDialog(vm, project, onDismiss = { showCalc = false })
 
     if (showGoTo) {
         GoToDialog(project.copy(points = vm.userPoints), onGo = { p ->
