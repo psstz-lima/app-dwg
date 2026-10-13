@@ -788,6 +788,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
 
+    /** Receiver connection; lives with the view model so rotating the screen keeps it. */
+    val gnss = GnssManager(app)
+
+    override fun onCleared() { gnss.disconnect() }
+
     // ---- Road (corridor) design ----
 
     var road by mutableStateOf<CorridorResult?>(null)

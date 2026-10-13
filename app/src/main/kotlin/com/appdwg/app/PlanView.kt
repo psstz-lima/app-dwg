@@ -142,6 +142,10 @@ fun PlanView(
     selectedLines: List<Int> = emptyList(),
     /** Lines an edit would produce, drawn before it is applied. */
     previewLines: List<Polyline> = emptyList(),
+    /** Receiver position, its horizontal precision (m) and the colour of its fix. */
+    gps: Point2? = null,
+    gpsAccuracy: Double? = null,
+    gpsColor: Color = Color.Gray,
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -374,6 +378,13 @@ fun PlanView(
             val b = toScreen(sectionLine.second, cam)
             drawLine(SECTION_LINE_COLOR, a, b, strokeWidth = 4f)
             drawCircle(SECTION_LINE_COLOR, 5.sp.toPx(), (a + b) / 2f)
+        }
+
+        if (gps != null) {
+            val g = toScreen(gps, cam)
+            gpsAccuracy?.let { acc -> drawCircle(gpsColor.copy(alpha = 0.18f), radius = maxOf((acc * cam.scale).toFloat(), 4f), center = g) }
+            drawCircle(Color.White, radius = 9.sp.toPx(), center = g)
+            drawCircle(gpsColor, radius = 7.sp.toPx(), center = g)
         }
 
         if (marker != null) {

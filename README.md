@@ -102,6 +102,12 @@ exporta com os dados reais de projeto.
   No eixo de projeto, o perfil longitudinal edita o greide: arraste os PVIs, ajuste ±0,10, adicione ou
   remova e recalcule. O LandXML exportado leva o eixo (retas, curvas e espirais), o greide, as seções
   transversais com áreas e as superfícies com breaklines e limite; a nota de serviço sai também em PDF.
+- GPS (botão "GPS"): antena Bluetooth com NMEA (ex.: Hi-Target V200, pareada no Android), GPS do
+  aparelho ou arquivo NMEA gravado (simulação). Mostra a posição na planta (cor pelo fix: verde RTK
+  fixo, amarelo flutuante), círculo de precisão, cartão com fix, satélites, precisão H/V (GST), E/N/cota
+  na zona UTM do projeto, estaca/afastamento no eixo mais próximo e cota da antena menos o terreno;
+  opção de seguir a posição. Cliente NTRIP (caster, porta, mountpoint, usuário e senha) repassa as
+  correções RTCM à antena e envia a posição (GGA) ao caster a cada 10 s.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

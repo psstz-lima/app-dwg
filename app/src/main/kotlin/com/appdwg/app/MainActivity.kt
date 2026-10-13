@@ -255,6 +255,19 @@ private fun ProjectScreen(
     // Export: dialog, chosen kind waiting for the save picker, and the screen picture for PNG/PDF.
     var showExport by remember(fileName) { mutableStateOf(false) }
     var showGoTo by remember(fileName) { mutableStateOf(false) }
+    // GNSS: dialog, following the position, the project's UTM zone and the position in project coordinates.
+    var showGps by remember(fileName) { mutableStateOf(false) }
+    var gpsFollow by remember(fileName) { mutableStateOf(true) }
+    var gpsZone by remember(fileName) { mutableStateOf((com.appdwg.core.Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
+    val gnssFix = vm.gnss.fix
+    val gpsPoint = gnssFix?.let { f -> gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull()?.let { z -> com.appdwg.core.UtmForward.fromGeographic(f.latitude, f.longitude, z) } }
+    var pendingPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val permissionAsker = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.all { it }) pendingPermission?.invoke() else vm.gnss.let { }
+        pendingPermission = null
+    }
+    val replayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.gnss.replay(uri) }
+
     var showContourDialog by remember(fileName) { mutableStateOf(false) }
     var showPlatform by remember(fileName) { mutableStateOf(false) }
     var showRoad by remember(fileName) { mutableStateOf(false) }
@@ -375,6 +388,8 @@ private fun ProjectScreen(
         // Frozen layers are left out of the elevation lookup, as if they were not in the drawing.
         tapped?.let { PointQuery.at(project, it, frozenLayers.toSet()) }
     }
+    val gpsInfo = remember(project, gpsPoint, frozenLayers) { gpsPoint?.let { PointQuery.at(project, it, frozenLayers.toSet()) } }
+    LaunchedEffect(gpsPoint, gpsFollow) { if (gpsFollow && gpsPoint != null) { focus = gpsPoint; focusKey++ } }
     val sectionAxis = project.alignments.getOrNull(sectionAlignment)
     val section = remember(project, sectionAxis, sectionStation, sectionHalfWidth, frozenLayers, showSection) {
         if (!showSection || sectionAxis == null) null
@@ -492,6 +507,9 @@ private fun ProjectScreen(
                 (editing && edit.pick == EditPick.SELECT),
             selectedLines = if (editing) edit.selected else emptyList(),
             previewLines = if (editing) edit.preview else emptyList(),
+            gps = gpsPoint,
+            gpsAccuracy = gnssFix?.sigmaH ?: gnssFix?.hdop?.let { it * 3 },
+            gpsColor = fixColor(gnssFix?.quality),
             onLineSelected = { ref ->
                 roadTargetPick?.let { (i, side) ->
                     com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
@@ -592,6 +610,7 @@ private fun ProjectScreen(
                         }) { Text(if (editing) "Fechar edição" else "Linhas") }
                     }
                     TextButton(onClick = { showModels = true }) { Text("Modelos 3D") }
+                    TextButton(onClick = { showGps = true }) { Text(if (vm.gnss.connected) "GPS ●" else "GPS") }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
@@ -755,6 +774,9 @@ private fun ProjectScreen(
             }
             InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
+        if (gpsPoint != null && !show3d) {
+            GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsInfo, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp).widthIn(max = 420.dp))
+        }
         BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(8.dp).widthIn(max = 360.dp))
     }
 
@@ -867,6 +889,19 @@ private fun ProjectScreen(
                 }
             },
         )
+    }
+
+    if (showGps) {
+        GpsDialog(vm.gnss, gpsZone, { gpsZone = it.trim().uppercase() }, gpsFollow, { gpsFollow = it },
+            onNeedPermissions = { src, then ->
+                val perms = if (src == GnssSource.BLUETOOTH && android.os.Build.VERSION.SDK_INT >= 31)
+                    arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.ACCESS_FINE_LOCATION)
+                else arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                pendingPermission = then
+                permissionAsker.launch(perms)
+            },
+            onPickReplay = { replayPicker.launch(arrayOf("*/*")) },
+            onDismiss = { showGps = false })
     }
 
     if (showGoTo) {
