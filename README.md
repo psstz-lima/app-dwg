@@ -75,6 +75,12 @@ exporta com os dados reais de projeto.
   ou em malha (polígono desenhado, polilinha fechada, área visível ou limite da superfície; espaçamento
   X/Y e rotação, que pode vir de uma linha). Cota da linha 3D, da superfície ou fixa, mais altura
   referencial; numeração continua a existente; pré-visualização na planta antes de criar e desfazer.
+- Editar linhas (botão "Linhas"): seleção por toque ou janela; mover e copiar (ΔX/ΔY, distância +
+  azimute ou ponto a ponto, com ΔZ e cópias múltiplas), offset (vários de uma vez, direita/esquerda/
+  ambos, com ΔZ e rampa em % ou H:V para crista/pé de talude), ΔZ, projetar na superfície (drape,
+  densificando), achatar numa cota, girar, espelhar, inverter, unir, explodir, dividir (N partes ou a
+  cada X m), trocar camada/cor e apagar; propriedades (comprimento 2D/3D, cotas, rampa); pré-
+  visualização, desfazer/refazer, salvo no projeto e exportado no DXF. Linhas novas vão para `_EDICAO`.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

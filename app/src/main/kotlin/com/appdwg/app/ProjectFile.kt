@@ -58,6 +58,8 @@ class ProjectDoc(
     val unloaded: List<String>,
     val detached: List<String>,
     val pathEdits: Map<String, String>,
+    val userLines: List<com.appdwg.core.Polyline> = emptyList(),
+    val hiddenLines: List<Int> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -76,6 +78,14 @@ class ProjectDoc(
         put("unloaded", JSONArray(unloaded))
         put("detached", JSONArray(detached))
         put("pathEdits", JSONObject(pathEdits as Map<*, *>))
+        put("userLines", JSONArray(userLines.map { l ->
+            JSONObject().put("layer", l.layer).put("closed", l.closed).apply {
+                l.color?.let { put("color", it) }
+                put("xs", JSONArray(l.xs.toList())); put("ys", JSONArray(l.ys.toList()))
+                l.zs?.let { put("zs", JSONArray(it.toList())) }
+            }
+        }))
+        put("hiddenLines", JSONArray(hiddenLines))
     }
 
     companion object {
@@ -96,10 +106,20 @@ class ProjectDoc(
                 }
             }.orEmpty()
             val edits = o.optJSONObject("pathEdits")?.let { e -> e.keys().asSequence().associateWith { e.getString(it) } }.orEmpty()
+            fun doubles(a: JSONArray) = DoubleArray(a.length()) { a.getDouble(it) }
+            val lines = o.optJSONArray("userLines")?.let { a ->
+                List(a.length()) {
+                    val l = a.getJSONObject(it)
+                    val color = if (l.has("color")) l.getInt("color") else null
+                    com.appdwg.core.Polyline(l.getString("layer"), doubles(l.getJSONArray("xs")), doubles(l.getJSONArray("ys")),
+                        l.optBoolean("closed"), color, color == null, l.optJSONArray("zs")?.let(::doubles))
+                }
+            }.orEmpty()
+            val hidden = o.optJSONArray("hiddenLines")?.let { a -> List(a.length()) { a.getInt(it) } }.orEmpty()
             return ProjectDoc(
                 o.getString("main"), files, o.optBoolean("pointsSurface"), strings("drape"), o.optBoolean("drapeVisible", true),
                 points, o.optJSONObject("view") ?: JSONObject(), o.optBoolean("compareShown"), strings("cross"),
-                strings("unloaded"), strings("detached"), edits,
+                strings("unloaded"), strings("detached"), edits, lines, hidden,
             )
         }
 

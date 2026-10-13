@@ -259,6 +259,10 @@ private fun ProjectScreen(
     var showPlatform by remember(fileName) { mutableStateOf(false) }
     // Generate points: settings, dialog, what is being picked on the plan and the visible area.
     val gen = remember(fileName) { GenState() }
+    // Line editor: on/off, its settings and the operation dialog.
+    val edit = remember(fileName) { EditState() }
+    var editing by remember(fileName) { mutableStateOf(false) }
+    var showLineOp by remember(fileName) { mutableStateOf(false) }
     var showGen by remember(fileName) { mutableStateOf(false) }
     // The preview is drawn on the plan, so the dialog steps aside while it is checked.
     var genReview by remember(fileName) { mutableStateOf(false) }
@@ -404,6 +408,28 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    editing && edit.pick == EditPick.WINDOW -> {
+                        val c = edit.windowCorner
+                        if (c == null) edit.windowCorner = it else {
+                            val minX = minOf(c.x, it.x); val maxX = maxOf(c.x, it.x); val minY = minOf(c.y, it.y); val maxY = maxOf(c.y, it.y)
+                            val hidden = offLayers.toSet() + frozenLayers
+                            val inside = project.polylines.indices.filter { i ->
+                                val l = project.polylines[i]
+                                l.layer !in hidden && l.xs.indices.any { k -> l.xs[k] in minX..maxX && l.ys[k] in minY..maxY }
+                            }
+                            edit.selected = (edit.selected + inside).distinct()
+                            edit.windowCorner = null; edit.pick = EditPick.SELECT
+                        }
+                    }
+                    editing && edit.pick == EditPick.FROM_TO -> {
+                        edit.picked = edit.picked + it
+                        if (edit.picked.size >= 2) { edit.pick = EditPick.SELECT; showLineOp = true }
+                    }
+                    editing && edit.pick == EditPick.AXIS -> {
+                        edit.picked = edit.picked + it
+                        if (edit.picked.size >= 2) { edit.pick = EditPick.SELECT; showLineOp = true }
+                    }
+                    editing && edit.pick == EditPick.CENTER -> { edit.picked = listOf(it); edit.pick = EditPick.SELECT; showLineOp = true }
                     genPick == GenPick.AREA_DRAW -> if (it != gen.drawnArea.lastOrNull()) gen.drawnArea = gen.drawnArea + it
                     drawingPlatform -> if (it != platformOutline.lastOrNull()) platformOutline = platformOutline + it
                     addingPoints -> {
@@ -420,9 +446,20 @@ private fun ProjectScreen(
             modifier = Modifier.fillMaxSize(),
             measure = if (measuring) measurePoints else if (drawingPlatform) platformOutline
                 else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
-            snap = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW,
-            selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION,
+            snap = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW ||
+                (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS)),
+            selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION ||
+                (editing && edit.pick == EditPick.SELECT),
+            selectedLines = if (editing) edit.selected else emptyList(),
+            previewLines = if (editing) edit.preview else emptyList(),
             onLineSelected = { ref ->
+                if (editing) {
+                    if (ref is com.appdwg.core.LineRef.Drawing) {
+                        edit.selected = if (ref.index in edit.selected) edit.selected - ref.index else edit.selected + ref.index
+                        edit.preview = emptyList()
+                    }
+                    return@PlanView
+                }
                 when (genPick) {
                     GenPick.LINE -> gen.line = ref
                     GenPick.AREA_LINE -> gen.areaLine = ref
@@ -495,6 +532,12 @@ private fun ProjectScreen(
                         TextButton(onClick = { showContourDialog = true }) { Text("Curvas") }
                         TextButton(onClick = { showPlatform = true }) { Text("Projeto") }
                     }
+                    if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) {
+                        TextButton(onClick = {
+                            editing = !editing; measuring = false; showSection = false; showProfile = false; show3d = false
+                            edit.pick = EditPick.SELECT
+                        }) { Text(if (editing) "Fechar edição" else "Linhas") }
+                    }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
@@ -526,6 +569,9 @@ private fun ProjectScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
             )
+        } else if (editing) {
+            EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
         } else if (genReview) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -661,6 +707,10 @@ private fun ProjectScreen(
             onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
         )
+    }
+
+    if (showLineOp) {
+        LineOpDialog(edit, vm, project, onPick = { p -> showLineOp = false; edit.pick = p }, onDismiss = { showLineOp = false })
     }
 
     if (showGen) {

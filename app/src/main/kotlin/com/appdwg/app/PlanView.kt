@@ -138,6 +138,10 @@ fun PlanView(
     previewPoints: List<Point2> = emptyList(),
     /** Told the area on screen after each gesture. */
     onViewport: (Bounds) -> Unit = {},
+    /** Lines picked for editing, drawn highlighted (shown line indices). */
+    selectedLines: List<Int> = emptyList(),
+    /** Lines an edit would produce, drawn before it is applied. */
+    previewLines: List<Polyline> = emptyList(),
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -341,6 +345,15 @@ fun PlanView(
                 drawPath(path, Color(0xFFFF6D00), style = Stroke(width = 6f))
             }
         }
+        fun drawPolyline(l: Polyline, c: Color, w: Float) {
+            if (l.xs.size < 2) return
+            val path = Path()
+            for (i in l.xs.indices) { val sp = toScreen(Point2(l.xs[i], l.ys[i]), cam); if (i == 0) path.moveTo(sp.x, sp.y) else path.lineTo(sp.x, sp.y) }
+            if (l.closed) path.close()
+            drawPath(path, c, style = Stroke(width = w))
+        }
+        for (i in selectedLines) project.polylines.getOrNull(i)?.let { drawPolyline(it, Color(0xFFFF6D00), 6f) }
+        for (l in previewLines) drawPolyline(l, Color(0xFF00E5FF), 3f)
         if (previewPoints.isNotEmpty()) {
             val r = 3.sp.toPx()
             for (p in previewPoints) {

@@ -34,6 +34,7 @@ import com.appdwg.core.Platform
 import com.appdwg.core.PlatformDesign
 import com.appdwg.core.PlatformResult
 import com.appdwg.core.Point3
+import com.appdwg.core.Polyline
 import com.appdwg.core.SlopeRule
 import com.appdwg.core.SurfaceSource
 import com.appdwg.core.Contours
@@ -577,6 +578,65 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Rebuilds the shown project from the base drawing and the loaded, attached xrefs. */
     private var refreshJob: kotlinx.coroutines.Job? = null
+    private val terrainCache = java.util.IdentityHashMap<DoubleArray, TerrainImage>()
+
+    // ---- Line editing ----
+
+    /** Lines created or changed by the user, drawn after the drawing's own. */
+    var userLines by mutableStateOf<List<Polyline>>(emptyList())
+        private set
+    /** Indices (in the drawing before edits) of lines removed or replaced by an edit. */
+    var hiddenOriginals by mutableStateOf<Set<Int>>(emptySet())
+        private set
+    /** Drawing line kept at each shown index before the user lines; filled on each rebuild. */
+    private var keptOriginals: List<Int> = emptyList()
+    private val undoStack = ArrayDeque<Pair<List<Polyline>, Set<Int>>>()
+    private val redoStack = ArrayDeque<Pair<List<Polyline>, Set<Int>>>()
+    var canUndo by mutableStateOf(false)
+        private set
+    var canRedo by mutableStateOf(false)
+        private set
+
+    /** Shown line at [index] (as [LineRef.Drawing] numbers them). */
+    fun shownLine(index: Int): Polyline? = (state as? ProjectState.Loaded)?.project?.polylines?.getOrNull(index)
+
+    /**
+     * Applies an edit: the shown lines at [sources] are removed when [replace], and [results] added.
+     * Returns how many lines were added.
+     */
+    fun editLines(sources: List<Int>, results: List<Polyline>, replace: Boolean) {
+        undoStack.addLast(userLines to hiddenOriginals)
+        if (undoStack.size > 50) undoStack.removeFirst()
+        redoStack.clear()
+        if (replace) {
+            val users = ArrayList(userLines)
+            val hidden = HashSet(hiddenOriginals)
+            val userIdx = sources.filter { it >= keptOriginals.size }.map { it - keptOriginals.size }.toSet()
+            sources.filter { it < keptOriginals.size }.forEach { hidden += keptOriginals[it] }
+            userLines = users.filterIndexed { i, _ -> i !in userIdx } + results
+            hiddenOriginals = hidden
+        } else {
+            userLines = userLines + results
+        }
+        canUndo = true; canRedo = false
+        refreshProject()
+    }
+
+    fun undoLines() {
+        val prev = undoStack.removeLastOrNull() ?: return
+        redoStack.addLast(userLines to hiddenOriginals)
+        userLines = prev.first; hiddenOriginals = prev.second
+        canUndo = undoStack.isNotEmpty(); canRedo = true
+        refreshProject()
+    }
+
+    fun redoLines() {
+        val next = redoStack.removeLastOrNull() ?: return
+        undoStack.addLast(userLines to hiddenOriginals)
+        userLines = next.first; hiddenOriginals = next.second
+        canUndo = true; canRedo = redoStack.isNotEmpty()
+        refreshProject()
+    }
 
     /** Rebuilds the project in the background; a newer rebuild replaces one still running. */
     private fun refreshProject() {
@@ -609,9 +669,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         },
                     )
                 }
+                // Line edits: originals the user removed or changed are left out, edited lines added.
+                keptOriginals = p.polylines.indices.filter { it !in hiddenOriginals }
+                p = p.copy(polylines = keptOriginals.map { p.polylines[it] } + userLines)
                 val extra = p.surfaces.filter { s -> baseTerrain.none { it.name == s.name } }
-                extra.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
-                p to baseTerrain + extra.mapNotNull { TerrainImage.of(it) }
+                // Pictures of added surfaces are kept by their point arrays, so an edit does not redraw them.
+                val images = extra.mapNotNull { s ->
+                    synchronized(terrainCache) { terrainCache[s.xs] }?.takeIf { it.name == s.name } ?: run {
+                        s.bounds?.let { s.elevationAt(it.center) }
+                        TerrainImage.of(s)?.also { synchronized(terrainCache) { terrainCache[s.xs] = it } }
+                    }
+                }
+                p to baseTerrain + images
             } }
             loadedXrefs = xrefDrawings.keys
             state = (state as? ProjectState.Loaded ?: current).copy(project = project, terrain = terrain)
@@ -930,6 +999,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             unloaded = unloaded.toList(),
             detached = detached.toList(),
             pathEdits = pathEdits,
+            userLines = userLines,
+            hiddenLines = hiddenOriginals.toList(),
         )
     }
 
@@ -1013,6 +1084,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             if (addedFiles.size == before) problems += label
         }
         userPoints = doc.points
+        userLines = doc.userLines
+        hiddenOriginals = doc.hiddenLines.toSet()
         if (doc.pointsSurface) surfaceFromPointsNow()
         refreshJob?.cancel()
         refreshNow()
@@ -1081,6 +1154,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     matrix = emptyMap()
                     stageProgress = null
                     drapeUris = emptyList()
+                    userLines = emptyList()
+                    hiddenOriginals = emptySet()
+                    keptOriginals = project.polylines.indices.toList()
+                    undoStack.clear(); redoStack.clear(); canUndo = false; canRedo = false
                     platform = null
                     platformVolumes = null
                     platformMessage = null
