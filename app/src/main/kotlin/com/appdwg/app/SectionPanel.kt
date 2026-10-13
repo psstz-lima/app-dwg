@@ -41,6 +41,11 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -130,7 +135,16 @@ private fun StationField(station: Double, onStation: (Double) -> Unit) {
         onValueChange = { text = it },
         singleLine = true,
         isError = StationFormat.parse(text) == null,
-        modifier = Modifier.width(140.dp),
+        // A hardware Enter applies the station and is consumed here, down and up, so the key-up
+        // does not land on whatever takes focus next (it used to switch on Medir).
+        modifier = Modifier.width(140.dp).onPreviewKeyEvent { e ->
+            if (e.key != Key.Enter && e.key != Key.NumPadEnter) return@onPreviewKeyEvent false
+            if (e.type == KeyEventType.KeyDown) {
+                StationFormat.parse(text)?.let(onStation)
+                focus.clearFocus()
+            }
+            true
+        },
         textStyle = MaterialTheme.typography.bodyMedium,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = {
