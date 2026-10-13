@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import com.appdwg.core.Alignment
 import com.appdwg.core.Bounds
 import com.appdwg.core.CogoPoint
+import com.appdwg.core.LineRef
+import com.appdwg.core.PointGen
 import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.PlanImage
@@ -127,6 +129,15 @@ fun PlanView(
     designLines: List<List<Point2>> = emptyList(),
     /** Identity of the opened drawing; the view resets only when it changes. */
     viewKey: Any = project,
+    /** Taps pick the nearest line instead ([onLineSelected]). */
+    selectLine: Boolean = false,
+    onLineSelected: (LineRef) -> Unit = {},
+    /** Line drawn highlighted. */
+    selectedLine: LineRef? = null,
+    /** Points shown before they are created. */
+    previewPoints: List<Point2> = emptyList(),
+    /** Told the area on screen after each gesture. */
+    onViewport: (Bounds) -> Unit = {},
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -183,6 +194,15 @@ fun PlanView(
         onContours(contours?.interval)
     }
 
+    LaunchedEffect(frame, size) {
+        val cam = camera ?: return@LaunchedEffect
+        if (size.width <= 0) return@LaunchedEffect
+        delay(DETAIL_DELAY_MS)
+        val halfW = size.width / cam.scale / 2
+        val halfH = size.height / cam.scale / 2
+        onViewport(Bounds(cam.centerX + origin.x - halfW, cam.centerY + origin.y - halfH, cam.centerX + origin.x + halfW, cam.centerY + origin.y + halfH))
+    }
+
     LaunchedEffect(project, size) {
         if (camera == null && size.width > 0 && size.height > 0) {
             val w = maxOf(bounds.width, 1.0)
@@ -226,7 +246,7 @@ fun PlanView(
                     frame++
                 }
             }
-            .pointerInput(project, snap, hiddenLayers, points, onPointTap != null) {
+            .pointerInput(project, snap, hiddenLayers, points, onPointTap != null, selectLine) {
                 detectTapGestures(
                     // Double tap zooms in 2x around the finger, handy with one hand.
                     onDoubleTap = { offset ->
@@ -244,6 +264,10 @@ fun PlanView(
                         val radius = SNAP_DP * density / cam.scale
                         val showPoints = POINTS_LAYER !in hiddenLayers
                         val hit = if (!snap && onPointTap != null && showPoints) nearestPoint(points, world, radius) else null
+                        if (selectLine) {
+                            PointGen.nearestLine(project, world, radius * 1.5, hiddenLayers)?.let(onLineSelected)
+                            return@detectTapGestures
+                        }
                         when {
                             hit != null -> onPointTap!!(hit)
                             snap -> onTap(snapTarget(project, if (showPoints) points else emptyList(), world, radius, hiddenLayers) ?: world)
@@ -308,6 +332,22 @@ fun PlanView(
             // Edge red, daylight green, benches blue.
             val c = when (k) { 0 -> Color(0xFFD32F2F); 1 -> Color(0xFF2E7D32); else -> Color(0xFF1565C0) }
             drawPath(path, c, style = Stroke(width = if (k < 2) 3f else 2f))
+        }
+        selectedLine?.let { ref ->
+            PointGen.path(project, ref)?.let { pth ->
+                val path = Path()
+                for (i in pth.xs.indices) { val sp = toScreen(Point2(pth.xs[i], pth.ys[i]), cam); if (i == 0) path.moveTo(sp.x, sp.y) else path.lineTo(sp.x, sp.y) }
+                if (pth.closed) path.close()
+                drawPath(path, Color(0xFFFF6D00), style = Stroke(width = 6f))
+            }
+        }
+        if (previewPoints.isNotEmpty()) {
+            val r = 3.sp.toPx()
+            for (p in previewPoints) {
+                val sp = toScreen(p, cam)
+                if (sp.x < -10 || sp.y < -10 || sp.x > size.width + 10 || sp.y > size.height + 10) continue
+                drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
+            }
         }
         if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
         if (sectionLine != null) {

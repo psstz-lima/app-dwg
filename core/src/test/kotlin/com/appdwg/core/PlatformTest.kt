@@ -34,7 +34,7 @@ class PlatformTest {
     fun cutWithBenchesBreaksTheProfile() {
         // Platform 12 m below the ground; 1:1 cut, bench every 5 m, 3 m wide, flat.
         val d = PlatformDesign(square, 88.0, cut = SlopeRule(1.0, benchHeight = 5.0, benchWidth = 3.0), fill = SlopeRule(2.0), step = 5.0)
-        val (pts, unresolved) = Platform.profile(Point3(0.0, -10.0, 88.0), Point2(0.0, -1.0), d, flat(100.0))
+        val (pts, unresolved) = Platform.profile(Point3(0.0, -10.0, 88.0), Point2(0.0, -1.0), d.cut, d.fill, d.maxReach, flat(100.0))
         assertEquals(false, unresolved)
         // Start, bench 1 (two edges), bench 2 (two edges), daylight.
         assertEquals(6, pts.size)

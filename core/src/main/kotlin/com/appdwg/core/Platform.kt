@@ -102,7 +102,7 @@ object Platform {
 
         var unresolved = 0
         val profiles = starts.indices.map { i ->
-            val p = profile(starts[i], dirs[i], d, terrain)
+            val p = profile(starts[i], dirs[i], d.cut, d.fill, d.maxReach, terrain)
             if (p.second) unresolved++
             p.first
         }
@@ -146,10 +146,10 @@ object Platform {
      * Breaks of the slope profile from [start] outward along [dir] until it meets the terrain: the
      * start, the bench edges and the daylight point. The flag is true when it never met the terrain.
      */
-    fun profile(start: Point3, dir: Point2, d: PlatformDesign, terrain: Surface): Pair<List<Point3>, Boolean> {
+    fun profile(start: Point3, dir: Point2, cutRule: SlopeRule, fillRule: SlopeRule, maxReach: Double, terrain: Surface): Pair<List<Point3>, Boolean> {
         val ground0 = terrain.elevationAt(Point2(start.x, start.y)) ?: return listOf(start) to true
         val cut = ground0 > start.z
-        val rule = if (cut) d.cut else d.fill
+        val rule = if (cut) cutRule else fillRule
         val sign = if (cut) 1.0 else -1.0
         val pts = arrayListOf(start)
         var x = start.x; var y = start.y; var z = start.z; var run = 0.0
@@ -174,9 +174,9 @@ object Platform {
         }
         // Stops at the last point still over the terrain when the slope runs off the surface.
         fun offTerrain(dx: Double) = ground(x + dir.x * dx, y + dir.y * dx) == null
-        while (run < d.maxReach) {
+        while (run < maxReach) {
             // Slope piece up to the next bench (or a long one without benches).
-            val height = if (rule.benchHeight > 0) rule.benchHeight else d.maxReach / rule.ratio
+            val height = if (rule.benchHeight > 0) rule.benchHeight else maxReach / rule.ratio
             val dx = height * rule.ratio
             walk(dx, sign * height)?.let { pts += it; return pts to false }
             if (offTerrain(dx)) return pts to true

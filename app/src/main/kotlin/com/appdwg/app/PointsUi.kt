@@ -40,6 +40,7 @@ fun PointsDialog(
     onImport: () -> Unit,
     onExport: () -> Unit,
     onCreate: () -> Unit,
+    onGenerate: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -57,9 +58,13 @@ fun PointsDialog(
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onCreate) { Text("Criar ponto na planta") }
+                    OutlinedButton(onClick = onGenerate) { Text("Gerar pontos…") }
                     OutlinedButton(onClick = { vm.surfaceFromPoints() }, enabled = vm.userPoints.count { !it.z.isNaN() } >= 3) {
                         Text("Gerar superfície")
                     }
+                }
+                if (vm.lastGenerated.isNotEmpty()) {
+                    TextButton(onClick = { vm.undoGenerated() }) { Text("Desfazer última geração (${vm.lastGenerated.size} pontos)") }
                 }
                 vm.pointsMessage?.let {
                     Spacer(Modifier.height(8.dp))

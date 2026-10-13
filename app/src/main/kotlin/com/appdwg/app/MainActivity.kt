@@ -256,6 +256,11 @@ private fun ProjectScreen(
     var showGoTo by remember(fileName) { mutableStateOf(false) }
     var showContourDialog by remember(fileName) { mutableStateOf(false) }
     var showPlatform by remember(fileName) { mutableStateOf(false) }
+    // Generate points: settings, dialog, what is being picked on the plan and the visible area.
+    val gen = remember(fileName) { GenState() }
+    var showGen by remember(fileName) { mutableStateOf(false) }
+    var genPick by remember(fileName) { mutableStateOf<GenPick?>(null) }
+    var viewport by remember(fileName) { mutableStateOf<com.appdwg.core.Bounds?>(null) }
     var drawingPlatform by v::drawingPlatform
     var platformOutline by v::platformOutline
     var showContours by v::showContours
@@ -396,6 +401,7 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    genPick == GenPick.AREA_DRAW -> if (it != gen.drawnArea.lastOrNull()) gen.drawnArea = gen.drawnArea + it
                     drawingPlatform -> if (it != platformOutline.lastOrNull()) platformOutline = platformOutline + it
                     addingPoints -> {
                         val z = PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation ?: Double.NaN
@@ -409,8 +415,23 @@ private fun ProjectScreen(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            measure = if (measuring) measurePoints else if (drawingPlatform) platformOutline else emptyList(),
-            snap = measuring || drawingPlatform,
+            measure = if (measuring) measurePoints else if (drawingPlatform) platformOutline
+                else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
+            snap = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW,
+            selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION,
+            onLineSelected = { ref ->
+                when (genPick) {
+                    GenPick.LINE -> gen.line = ref
+                    GenPick.AREA_LINE -> gen.areaLine = ref
+                    GenPick.ROTATION -> lineRotation(project, ref)?.let { gen.rotation = StationFormat.decimal(it, 3) }
+                    else -> {}
+                }
+                genPick = null
+                showGen = true
+            },
+            selectedLine = if (genPick == null && !showGen) null else if (gen.grid) gen.areaLine?.takeIf { gen.area == GridArea.LINE } else gen.line,
+            previewPoints = gen.preview.map { Point2(it.x, it.y) },
+            onViewport = { viewport = it },
             designLines = vm.platform?.let { r -> listOf(r.edge, r.daylight) + r.benches }?.map { l -> l.map { Point2(it.x, it.y) } }.orEmpty(),
             sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) } ?: profileMark,
             overlay = differenceOverlay,
@@ -501,6 +522,22 @@ private fun ProjectScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
             )
+        } else if (genPick != null) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(when (genPick) {
+                        GenPick.AREA_DRAW -> "Toque os vértices do polígono da malha (${gen.drawnArea.size})."
+                        GenPick.AREA_LINE -> "Toque numa polilinha fechada."
+                        GenPick.ROTATION -> "Toque na linha que dá a direção da malha."
+                        else -> "Toque na linha, polilinha 3D ou eixo."
+                    }, style = MaterialTheme.typography.bodyMedium)
+                    if (genPick == GenPick.AREA_DRAW) {
+                        TextButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text("Desfazer") }
+                        TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text("Limpar") }
+                    }
+                    TextButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) "Concluir" else "Cancelar") }
+                }
+            }
         } else if (drawingPlatform) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -582,6 +619,7 @@ private fun ProjectScreen(
             onImport = { pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) },
             onExport = { pointExporter.launch("pontos.txt") },
             onCreate = { addingPoints = true; measuring = false; showSection = false; showPoints = false },
+            onGenerate = { showPoints = false; showGen = true },
             onDismiss = { showPoints = false },
         )
     }
@@ -609,6 +647,19 @@ private fun ProjectScreen(
             onAddFile = { filePicker.launch(arrayOf("*/*")) },
             onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
+        )
+    }
+
+    if (showGen) {
+        GeneratePointsDialog(
+            gen, project, vm.userPoints, viewport,
+            onPick = { pick ->
+                showGen = false; measuring = false; showSection = false; showProfile = false; show3d = false
+                if (pick == GenPick.AREA_DRAW) gen.drawnArea = emptyList()
+                genPick = pick
+            },
+            onConfirm = { pts -> vm.addGenerated(pts); showGen = false },
+            onDismiss = { showGen = false },
         )
     }
 
