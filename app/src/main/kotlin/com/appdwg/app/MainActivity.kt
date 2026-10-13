@@ -277,6 +277,7 @@ private fun ProjectScreen(
     var showExport by remember(fileName) { mutableStateOf(false) }
     var showGoTo by remember(fileName) { mutableStateOf(false) }
     var showCalc by remember(fileName) { mutableStateOf(false) }
+    var showBasemap by remember { mutableStateOf(false) }
     // GNSS: dialog, following the position, the project's UTM zone and the position in project coordinates.
     var showGps by remember(fileName) { mutableStateOf(false) }
     // Field notes: placing mode, the note being edited (with whether it is new) and a tapped one.
@@ -543,6 +544,9 @@ private fun ProjectScreen(
             gpsColor = fixColor(gnssFix?.quality),
             notes = vm.notes,
             onNoteTap = if (measuring || addingPoints || editing) null else { n -> openNote = n; tapped = null; selectedPoint = null },
+            basemap = vm.basemap.takeIf { it.enabled && gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull() in 1..60 },
+            basemapZone = gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull() ?: 23,
+            basemapSouth = !gpsZone.endsWith("N", true),
             onLineSelected = { ref ->
                 roadTargetPick?.let { (i, side) ->
                     com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
@@ -646,6 +650,7 @@ private fun ProjectScreen(
                     TextButton(onClick = { addingNote = true; measuring = false; show3d = false }) { Text("Anotar") }
                     TextButton(onClick = { showGps = true }) { Text(if (vm.gnss.connected) "GPS ●" else "GPS") }
                     TextButton(onClick = { showCalc = true }) { Text("Cálculos") }
+                    TextButton(onClick = { showBasemap = true }) { Text(if (vm.basemap.enabled) "Mapa ●" else "Mapa") }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
@@ -953,6 +958,7 @@ private fun ProjectScreen(
     }
 
     if (showCalc) CalcDialog(vm, project, onDismiss = { showCalc = false })
+    if (showBasemap) BasemapDialog(vm.basemap, gpsZone, { gpsZone = it.trim().uppercase() }, project.bounds, viewport, onDismiss = { showBasemap = false })
 
     if (showGoTo) {
         GoToDialog(project.copy(points = vm.userPoints), onGo = { p ->

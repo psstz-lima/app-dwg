@@ -151,6 +151,10 @@ fun PlanView(
     /** Field notes, drawn as pins; a tap on one calls [onNoteTap]. */
     notes: List<FieldNote> = emptyList(),
     onNoteTap: ((FieldNote) -> Unit)? = null,
+    /** Background map drawn under everything, in the project's UTM [basemapZone]; null hides it. */
+    basemap: BasemapStore? = null,
+    basemapZone: Int = 23,
+    basemapSouth: Boolean = true,
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -300,6 +304,14 @@ fun PlanView(
         val cam = camera ?: return@Canvas
         val s = cam.scale.toFloat()
 
+        if (basemap != null) {
+            basemap.version // redraw as tiles arrive
+            val halfW = size.width / 2.0 / cam.scale; val halfH = size.height / 2.0 / cam.scale
+            val cx = cam.centerX + origin.x; val cy = cam.centerY + origin.y
+            val tiles = basemap.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale, basemapZone, basemapSouth)
+            drawBasemap(tiles, basemap.opacity) { toScreen(it, cam) }
+        }
+
         for (img in project.images) {
             if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], colors) { toScreen(it, cam) }
         }
@@ -422,6 +434,40 @@ fun PlanView(
  * Draws a drawing image: the picture, when loaded, mapped onto its plan position and clipped to its
  * boundary; otherwise a dashed outline with the file name.
  */
+private val basemapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+private val basemapMatrix = android.graphics.Matrix()
+
+private fun DrawScope.drawBasemap(tiles: List<BasemapTile>, opacity: Float, toScreen: (Point2) -> Offset) {
+    val canvas = drawContext.canvas.nativeCanvas
+    // Tiles drawn opaque in one layer faded as a whole, so their slight overlap shows no seams.
+    canvas.saveLayerAlpha(0f, 0f, size.width, size.height, (opacity * 255).roundToInt().coerceIn(0, 255))
+    val src = FloatArray(8); val dst = FloatArray(8)
+    for (t in tiles) {
+        val r = t.src
+        src[0] = r.left.toFloat(); src[1] = r.top.toFloat(); src[2] = r.right.toFloat(); src[3] = r.top.toFloat()
+        src[4] = r.right.toFloat(); src[5] = r.bottom.toFloat(); src[6] = r.left.toFloat(); src[7] = r.bottom.toFloat()
+        val c = t.corners
+        for ((i, p) in listOf(c.nw, c.ne, c.se, c.sw).withIndex()) { val o = toScreen(p); dst[2 * i] = o.x; dst[2 * i + 1] = o.y }
+        // Grow the quad by about a pixel so neighbours overlap instead of leaving a hairline.
+        val mx = (dst[0] + dst[2] + dst[4] + dst[6]) / 4; val my = (dst[1] + dst[3] + dst[5] + dst[7]) / 4
+        for (i in 0 until 4) {
+            val dx = dst[2 * i] - mx; val dy = dst[2 * i + 1] - my
+            val d = kotlin.math.hypot(dx, dy)
+            if (d > 1f) { dst[2 * i] += dx / d * 0.8f; dst[2 * i + 1] += dy / d * 0.8f }
+        }
+        basemapMatrix.setPolyToPoly(src, 0, dst, 0, 4)
+        val cropped = r.left != 0 || r.top != 0 || r.right != t.bitmap.width || r.bottom != t.bitmap.height
+        if (!cropped) { canvas.drawBitmap(t.bitmap, basemapMatrix, basemapPaint); continue }
+        canvas.save()
+        // Clip to the tile so a cropped coarser tile does not spill over its neighbours.
+        val clip = android.graphics.Path().apply { moveTo(dst[0], dst[1]); lineTo(dst[2], dst[3]); lineTo(dst[4], dst[5]); lineTo(dst[6], dst[7]); close() }
+        canvas.clipPath(clip)
+        canvas.drawBitmap(t.bitmap, basemapMatrix, basemapPaint)
+        canvas.restore()
+    }
+    canvas.restore()
+}
+
 private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: PlanColors, toScreen: (Point2) -> Offset) {
     val outline = android.graphics.Path()
     val b = img.boundary
