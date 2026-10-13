@@ -95,7 +95,11 @@ exporta com os dados reais de projeto.
   (giro no eixo); seções a cada X m e nos pontos notáveis. Gera as superfícies "Corredor" (acabada) e
   "Corredor (terraplenagem)", o eixo com greide (que funciona na seção e no perfil), o mapa de corte/
   aterro, volumes por áreas médias com fator de empolamento, diagrama de Brückner, nota de serviço em
-  CSV e as linhas de bordo, acostamento, crista e pé no DXF.
+  CSV e as linhas de bordo, acostamento, crista e pé no DXF. Regiões mudam as larguras a partir de uma
+  estaca, com transição linear, e o bordo pode seguir uma linha-alvo tocada; a superelevação pode ser
+  calculada pelas curvas (velocidade e e máx., critério do DNIT, com giro da pista externa primeiro).
+  No eixo de projeto, o perfil longitudinal edita o greide: arraste os PVIs, ajuste ±0,10, adicione ou
+  remova e recalcule.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

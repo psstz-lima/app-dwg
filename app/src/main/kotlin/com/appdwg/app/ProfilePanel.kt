@@ -15,6 +15,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -55,7 +59,12 @@ fun ProfilePanel(
     onRange: (Double) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier,
+    /** PVIs of the road being designed, editable here; null shows the profile read-only. */
+    editPvis: List<com.appdwg.core.Profile.Pvi>? = null,
+    onPvis: (List<com.appdwg.core.Profile.Pvi>) -> Unit = {},
+    onRecalc: () -> Unit = {},
 ) {
+    var selected by remember { mutableStateOf<Int?>(null) }
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -68,13 +77,47 @@ fun ProfilePanel(
                     TextButton(onClick = onClose) { Text("Fechar") }
                 }
             }
-            ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f))
+            if (editPvis != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Greide: arraste um PVI (bolinha vermelha) para mudar a cota; toque para escolher.", style = MaterialTheme.typography.labelMedium)
+                TextButton(onClick = {
+                    // New PVI at the cursor, on the current grade.
+                    val z = profile.design?.let { profile.interpolate(it, cursor) }?.takeIf { !it.isNaN() }
+                        ?: profile.lines.firstOrNull()?.let { profile.interpolate(it.elevations, cursor) }?.takeIf { !it.isNaN() } ?: 0.0
+                    onPvis((editPvis + com.appdwg.core.Profile.Pvi(cursor, z)).sortedBy { it.station })
+                }) { Text("PVI no cursor") }
+                selected?.let { i ->
+                    if (i in editPvis.indices) {
+                        TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
+                        TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
+                        TextButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text("Remover PVI") }
+                        Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.decimal(editPvis[i].elevation, 3)}",
+                            style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                TextButton(onClick = onRecalc) { Text("Recalcular estrada") }
+            }
+            ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected) { selected = it }
         }
     }
 }
 
 @Composable
-private fun ProfileChart(p: LongProfile, cursor: Double, onCursor: (Double) -> Unit, range: Double, modifier: Modifier) {
+private fun ProfileChart(
+    p: LongProfile,
+    cursor: Double,
+    onCursor: (Double) -> Unit,
+    range: Double,
+    modifier: Modifier,
+    editPvis: List<com.appdwg.core.Profile.Pvi>? = null,
+    onPvis: (List<com.appdwg.core.Profile.Pvi>) -> Unit = {},
+    selected: Int? = null,
+    onSelect: (Int?) -> Unit = {},
+) {
+    // Mapping of the last drawing (left, right, top, bottom, zMin, zMax), so gestures can turn
+    // touches into station and elevation; frozen while a PVI is dragged.
+    val map = remember { DoubleArray(6) }
+    var dragging by remember { mutableStateOf<Int?>(null) }
+    val frozen = remember { DoubleArray(2) }
     val fg = MaterialTheme.colorScheme.onSurface
     val grid = MaterialTheme.colorScheme.outlineVariant
     // Visible stations: the whole alignment or a window around the cursor kept inside it.
@@ -87,12 +130,42 @@ private fun ProfileChart(p: LongProfile, cursor: Double, onCursor: (Double) -> U
 
     Canvas(
         modifier
-            .pointerInput(s0, s1) {
-                detectTapGestures { onCursor(pick(it.x, size.width.toFloat(), 64.dp.toPx(), size.width - 16.dp.toPx())) }
+            .pointerInput(s0, s1, editPvis) {
+                fun nearPvi(o: Offset): Int? {
+                    val pv = editPvis ?: return null
+                    if (map[1] <= map[0]) return null
+                    fun x(st: Double) = map[0] + (st - s0) / (s1 - s0) * (map[1] - map[0])
+                    fun y(z: Double) = map[3] - (z - map[4]) / (map[5] - map[4]) * (map[3] - map[2])
+                    return pv.indices.minByOrNull { kotlin.math.hypot(x(pv[it].station) - o.x, y(pv[it].elevation) - o.y) }
+                        ?.takeIf { kotlin.math.hypot(x(pv[it].station) - o.x, y(pv[it].elevation) - o.y) < 36.dp.toPx() }
+                }
+                detectTapGestures { o ->
+                    val hit = nearPvi(o)
+                    if (hit != null) onSelect(hit) else onCursor(pick(o.x, size.width.toFloat(), 64.dp.toPx(), size.width - 16.dp.toPx()))
+                }
             }
-            .pointerInput(s0, s1, "drag") {
-                detectDragGestures { change, _ ->
-                    onCursor(pick(change.position.x, size.width.toFloat(), 64.dp.toPx(), size.width - 16.dp.toPx()))
+            .pointerInput(s0, s1, "drag", editPvis) {
+                detectDragGestures(
+                    onDragStart = { o ->
+                        val pv = editPvis
+                        dragging = null
+                        if (pv != null && map[1] > map[0]) {
+                            fun x(st: Double) = map[0] + (st - s0) / (s1 - s0) * (map[1] - map[0])
+                            fun y(z: Double) = map[3] - (z - map[4]) / (map[5] - map[4]) * (map[3] - map[2])
+                            dragging = pv.indices.minByOrNull { kotlin.math.hypot(x(pv[it].station) - o.x, y(pv[it].elevation) - o.y) }
+                                ?.takeIf { kotlin.math.hypot(x(pv[it].station) - o.x, y(pv[it].elevation) - o.y) < 36.dp.toPx() }
+                            if (dragging != null) { frozen[0] = map[4]; frozen[1] = map[5]; onSelect(dragging) }
+                        }
+                    },
+                    onDragEnd = { dragging = null },
+                    onDragCancel = { dragging = null },
+                ) { change, _ ->
+                    val d = dragging
+                    val pv = editPvis
+                    if (d != null && pv != null) {
+                        val z = frozen[0] + (map[3] - change.position.y) / (map[3] - map[2]) * (frozen[1] - frozen[0])
+                        onPvis(pv.toMutableList().also { l -> l[d] = l[d].copy(elevation = Math.round(z * 1000) / 1000.0) })
+                    } else onCursor(pick(change.position.x, size.width.toFloat(), 64.dp.toPx(), size.width - 16.dp.toPx()))
                 }
             },
     ) {
@@ -116,6 +189,9 @@ private fun ProfileChart(p: LongProfile, cursor: Double, onCursor: (Double) -> U
         var zMax = values.max()
         val pad = max((zMax - zMin) * 0.08, 0.5)
         zMin -= pad; zMax += pad
+        // While a PVI moves, the vertical scale stays put under the finger.
+        if (dragging != null) { zMin = frozen[0]; zMax = frozen[1] }
+        map[0] = left.toDouble(); map[1] = right.toDouble(); map[2] = top.toDouble(); map[3] = bottom.toDouble(); map[4] = zMin; map[5] = zMax
         fun x(s: Double) = (left + (s - s0) / (s1 - s0) * (right - left)).toFloat()
         fun y(z: Double) = (bottom - (z - zMin) / (zMax - zMin) * (bottom - top)).toFloat()
 
@@ -150,7 +226,8 @@ private fun ProfileChart(p: LongProfile, cursor: Double, onCursor: (Double) -> U
         // PVIs with their station and, between them, the grade in percent.
         p.pvis.forEachIndexed { k, v ->
             if (v.station in s0..s1) {
-                drawCircle(GRADE_COLOR, 6f, Offset(x(v.station), y(v.elevation)))
+                drawCircle(GRADE_COLOR, if (editPvis != null) 10f else 6f, Offset(x(v.station), y(v.elevation)))
+                if (k == selected) drawCircle(fg, 16f, Offset(x(v.station), y(v.elevation)), style = Stroke(width = 3f))
                 if (v.curveLength > 0) text("CV ${StationFormat.decimal(v.curveLength, 0)}", x(v.station) + 6f, y(v.elevation) - 10f, GRADE_COLOR, small = true)
             }
             if (k > 0) {

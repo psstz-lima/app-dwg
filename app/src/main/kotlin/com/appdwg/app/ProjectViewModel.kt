@@ -833,7 +833,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.Default) {
                     t.step("Seções e taludes")
                     val tpl = Template(rp.left, rp.right, rp.cut, rp.fill, rp.pavement)
-                    Corridor.build(axis, terrain, listOf(Region(axis.startStation, axis.endStation, tpl)), rp.superelevation, rp.step, rp.swell, ROAD_LABEL)
+                    val regions = listOf(Region(axis.startStation, axis.endStation, tpl)) + rp.regions.sortedBy { it.from }.map { r ->
+                        Region(r.from, axis.endStation, tpl.copy(left = r.left, right = r.right), r.transition, r.leftTarget, r.rightTarget)
+                    }
+                    Corridor.build(axis, terrain, regions, rp.superelevation, rp.step, rp.swell, ROAD_LABEL)
                 }
             }
             road = r

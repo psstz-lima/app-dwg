@@ -255,6 +255,10 @@ data class RoadParams(
     val swell: Double = 1.0,
     val superelevation: List<com.appdwg.core.Superelevation> = emptyList(),
     val terrain: String? = null,
+    /** Stretches with their own lane and shoulder widths, after the first (which uses [left]/[right]). */
+    val regions: List<RoadRegion> = emptyList(),
+    val speed: Double = 60.0,
+    val emax: Double = 8.0,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("alignmentIndex", alignmentIndex)
@@ -264,8 +268,10 @@ data class RoadParams(
         put("left", side(left)); put("right", side(right))
         put("cut", rule(cut)); put("fill", rule(fill))
         put("pavement", pavement); put("step", step); put("swell", swell)
-        put("superelevation", JSONArray(superelevation.map { JSONArray().put(it.station).put(it.percent) }))
+        put("superelevation", JSONArray(superelevation.map { JSONArray().put(it.station).put(it.left).put(it.right) }))
         terrain?.let { put("terrain", it) }
+        put("regions", JSONArray(regions.map { it.toJson() }))
+        put("speed", speed); put("emax", emax)
     }
 
     companion object {
@@ -286,9 +292,42 @@ data class RoadParams(
                 sideOf(o.optJSONArray("left")) ?: d.left, sideOf(o.optJSONArray("right")) ?: d.right,
                 ruleOf(o.optJSONArray("cut")) ?: d.cut, ruleOf(o.optJSONArray("fill")) ?: d.fill,
                 o.optDouble("pavement", d.pavement), o.optDouble("step", d.step), o.optDouble("swell", d.swell),
-                pairs("superelevation").map { com.appdwg.core.Superelevation(it.getDouble(0), it.getDouble(1)) },
+                pairs("superelevation").map {
+                    // Older files kept one value, rising to the right.
+                    if (it.length() >= 3) com.appdwg.core.Superelevation(it.getDouble(0), it.getDouble(1), it.getDouble(2))
+                    else com.appdwg.core.Superelevation(it.getDouble(0), -it.getDouble(1), it.getDouble(1))
+                },
                 o.optString("terrain").ifEmpty { null },
+                o.optJSONArray("regions")?.let { a -> List(a.length()) { RoadRegion.fromJson(a.getJSONObject(it)) } }.orEmpty(),
+                o.optDouble("speed", 60.0), o.optDouble("emax", 8.0),
             )
+        }
+    }
+}
+
+/** Road stretch from [from] on, with its own sides, a width transition and optional edge target lines. */
+data class RoadRegion(
+    val from: Double,
+    val left: com.appdwg.core.SideTemplate,
+    val right: com.appdwg.core.SideTemplate,
+    val transition: Double = 20.0,
+    val leftTarget: List<Point2>? = null,
+    val rightTarget: List<Point2>? = null,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("from", from); put("transition", transition)
+        put("left", JSONArray(listOf(left.laneWidth, left.laneSlope, left.shoulderWidth, left.shoulderSlope, left.gutterWidth, left.gutterDepth, left.ditchWidth, left.ditchDepth)))
+        put("right", JSONArray(listOf(right.laneWidth, right.laneSlope, right.shoulderWidth, right.shoulderSlope, right.gutterWidth, right.gutterDepth, right.ditchWidth, right.ditchDepth)))
+        leftTarget?.let { put("leftTarget", JSONArray(it.map { p -> JSONArray().put(p.x).put(p.y) })) }
+        rightTarget?.let { put("rightTarget", JSONArray(it.map { p -> JSONArray().put(p.x).put(p.y) })) }
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject): RoadRegion {
+            fun side(a: JSONArray) = com.appdwg.core.SideTemplate(a.getDouble(0), a.getDouble(1), a.getDouble(2), a.getDouble(3), a.getDouble(4), a.getDouble(5), a.getDouble(6), a.getDouble(7))
+            fun line(a: JSONArray?) = a?.let { List(it.length()) { k -> it.getJSONArray(k).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } } }
+            return RoadRegion(o.getDouble("from"), side(o.getJSONArray("left")), side(o.getJSONArray("right")), o.optDouble("transition", 20.0),
+                line(o.optJSONArray("leftTarget")), line(o.optJSONArray("rightTarget")))
         }
     }
 }

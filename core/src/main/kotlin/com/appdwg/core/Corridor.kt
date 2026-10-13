@@ -107,11 +107,81 @@ data class Template(
     val pavement: Double = 0.5,
 )
 
-/** Template used between two stations. */
-data class Region(val from: Double, val to: Double, val template: Template)
+/**
+ * Template used between two stations. Lane widths blend from the previous region's over the first
+ * [transition] metres; a target line, when given, sets the lane edge on that side instead (the
+ * width becomes the distance from the axis to the line, square to the axis).
+ */
+data class Region(
+    val from: Double,
+    val to: Double,
+    val template: Template,
+    val transition: Double = 0.0,
+    val leftTarget: List<Point2>? = null,
+    val rightTarget: List<Point2>? = null,
+)
 
-/** Superelevation at a station, percent rising to the right (negative: left side up). */
-data class Superelevation(val station: Double, val percent: Double)
+/** Lane cross slopes at a station, percent; negative falls away from the axis on that side. */
+data class Superelevation(val station: Double, val left: Double, val right: Double)
+
+object Superelevations {
+    /** Side friction by design speed (km/h), as in the Brazilian road manual (DNIT). */
+    private val FRICTION = sortedMapOf(30 to 0.20, 40 to 0.18, 50 to 0.16, 60 to 0.15, 70 to 0.15, 80 to 0.14, 90 to 0.14, 100 to 0.13, 110 to 0.12, 120 to 0.11)
+
+    /** Superelevation in percent for radius [r] at [speed] km/h with maximum [emax] percent; at least the crown. */
+    fun rate(r: Double, speed: Double, emax: Double, crown: Double = 2.0): Double {
+        val f = FRICTION.entries.lastOrNull { it.key <= speed }?.value ?: 0.20
+        val rmin = speed * speed / (127 * (emax / 100 + f))
+        if (r <= rmin) return emax
+        val e = emax * (2 * rmin / r - (rmin / r) * (rmin / r))
+        return e.coerceIn(crown, emax)
+    }
+
+    /**
+     * Superelevation table for every curve of [a]: normal crown on tangents, the outer lane levelled
+     * over the tangent runout, then both lanes rotated to the full rate over the spiral (or over a
+     * runoff two thirds before and one third into a simple curve).
+     */
+    fun auto(a: Alignment, speed: Double, emax: Double, crown: Double = 2.0, runoff: Double = 40.0): List<Superelevation> {
+        val out = ArrayList<Superelevation>()
+        val els = a.elements
+        val starts = els.runningFold(a.startStation) { acc, e -> acc + e.length }
+        out += Superelevation(a.startStation, -crown, -crown)
+        var i = 0
+        while (i < els.size) {
+            val e = els[i]
+            if (e is AlignmentElement.Arc) {
+                val spiralIn = (els.getOrNull(i - 1) as? AlignmentElement.Spiral)
+                val spiralOut = (els.getOrNull(i + 1) as? AlignmentElement.Spiral)
+                val rate = rate(e.radius, speed, emax, crown)
+                val right = e.clockwise // right-hand curve: the left lane is the outer one
+                val startRot: Double; val fullIn: Double; val fullOut: Double; val endRot: Double
+                if (spiralIn != null && spiralOut != null) {
+                    startRot = starts[i - 1]; fullIn = starts[i]; fullOut = starts[i + 1]; endRot = starts[i + 2]
+                } else {
+                    startRot = starts[i] - runoff * 2 / 3; fullIn = starts[i] + runoff / 3
+                    fullOut = starts[i + 1] - runoff / 3; endRot = starts[i + 1] + runoff * 2 / 3
+                }
+                val lr = fullIn - startRot
+                val lt = lr * crown / rate // tangent runout before the rotation starts
+                fun put(st: Double, outer: Double, inner: Double) {
+                    out += if (right) Superelevation(st, outer, inner) else Superelevation(st, inner, outer)
+                }
+                put(startRot - lt, -crown, -crown)
+                put(startRot, 0.0, -crown)
+                put(startRot + lr * crown / rate, crown, -crown)
+                put(fullIn, rate, -rate)
+                put(fullOut, rate, -rate)
+                put(endRot - lr * crown / rate, crown, -crown)
+                put(endRot, 0.0, -crown)
+                put(endRot + lt, -crown, -crown)
+            }
+            i++
+        }
+        out += Superelevation(a.endStation, -crown, -crown)
+        return out.sortedBy { it.station }.distinctBy { it.station }
+    }
+}
 
 /** Point of a cross section: offset from the axis (right positive), elevation and what it marks. */
 data class SectionPoint(val offset: Double, val z: Double, val code: String)
@@ -179,8 +249,24 @@ object Corridor {
         val stas = stations.filter { it >= alignment.startStation - 1e-6 && it <= alignment.endStation + 1e-6 && profile.elevationAt(it) != null }
 
         var unresolved = 0
+        val sorted = regions.sortedBy { it.from }
         val sections = stas.mapNotNull { sta ->
-            val tpl = regions.lastOrNull { sta >= it.from - 1e-6 && sta <= it.to + 1e-6 }?.template ?: regions.first().template
+            val ri = sorted.indexOfLast { sta >= it.from - 1e-6 }.coerceAtLeast(0)
+            val region = sorted[ri]
+            var tpl = region.template
+            // Width transition from the previous region.
+            if (ri > 0 && region.transition > 0 && sta < region.from + region.transition) {
+                val t = ((sta - region.from) / region.transition).coerceIn(0.0, 1.0)
+                tpl = blend(sorted[ri - 1].template, tpl, t)
+            }
+            if (region.leftTarget != null || region.rightTarget != null) {
+                val c = alignment.pointAt(sta)!!
+                val a = alignment.pointAt(sta - 0.5)!!; val b = alignment.pointAt(sta + 0.5)!!
+                val len = hypot(b.x - a.x, b.y - a.y)
+                val right = Point2((b.y - a.y) / len, -(b.x - a.x) / len)
+                region.leftTarget?.let { line -> reach(c, Point2(-right.x, -right.y), line)?.let { w -> tpl = tpl.copy(left = tpl.left.copy(laneWidth = w)) } }
+                region.rightTarget?.let { line -> reach(c, right, line)?.let { w -> tpl = tpl.copy(right = tpl.right.copy(laneWidth = w)) } }
+            }
             val se = interpolateSe(superelevation, sta)
             section(alignment, profile, terrain, tpl, sta, se)?.also { if (it.second) unresolved++ }?.first
         }
@@ -216,18 +302,42 @@ object Corridor {
 
     private fun name(code: String, side: Int) = code + if (side < 0) " E" else " D"
 
-    private fun interpolateSe(table: List<Superelevation>, sta: Double): Double? {
+    private fun interpolateSe(table: List<Superelevation>, sta: Double): Pair<Double, Double>? {
         if (table.isEmpty()) return null
         val t = table.sortedBy { it.station }
-        if (sta <= t.first().station) return t.first().percent
-        if (sta >= t.last().station) return t.last().percent
+        if (sta <= t.first().station) return t.first().left to t.first().right
+        if (sta >= t.last().station) return t.last().left to t.last().right
         val i = t.indexOfLast { it.station <= sta }
         val a = t[i]; val b = t[i + 1]
-        return a.percent + (b.percent - a.percent) * (sta - a.station) / (b.station - a.station)
+        val f = (sta - a.station) / (b.station - a.station)
+        return (a.left + (b.left - a.left) * f) to (a.right + (b.right - a.right) * f)
+    }
+
+    private fun blend(a: Template, b: Template, t: Double): Template {
+        fun side(x: SideTemplate, y: SideTemplate) = y.copy(
+            laneWidth = x.laneWidth + (y.laneWidth - x.laneWidth) * t,
+            shoulderWidth = x.shoulderWidth + (y.shoulderWidth - x.shoulderWidth) * t,
+        )
+        return b.copy(left = side(a.left, b.left), right = side(a.right, b.right))
+    }
+
+    /** Distance along the ray from [c] towards [dir] to the first crossing of [line], or null. */
+    private fun reach(c: Point2, dir: Point2, line: List<Point2>): Double? {
+        var best: Double? = null
+        for (i in 0 until line.size - 1) {
+            val p = line[i]; val q = line[i + 1]
+            val ex = q.x - p.x; val ey = q.y - p.y
+            val den = dir.x * ey - dir.y * ex
+            if (abs(den) < 1e-12) continue
+            val t = ((p.x - c.x) * ey - (p.y - c.y) * ex) / den
+            val u = ((p.x - c.x) * dir.y - (p.y - c.y) * dir.x) / den
+            if (t > 0 && u in 0.0..1.0 && (best == null || t < best)) best = t
+        }
+        return best
     }
 
     /** Section at [sta]; the flag is true when a slope never met the terrain. */
-    fun section(alignment: Alignment, profile: Profile, terrain: Surface, tpl: Template, sta: Double, se: Double?): Pair<RoadSection, Boolean>? {
+    fun section(alignment: Alignment, profile: Profile, terrain: Surface, tpl: Template, sta: Double, se: Pair<Double, Double>?): Pair<RoadSection, Boolean>? {
         val c = alignment.pointAt(sta) ?: return null
         val a = alignment.pointAt(sta - 0.5)!!; val b = alignment.pointAt(sta + 0.5)!!
         val len = hypot(b.x - a.x, b.y - a.y).takeIf { it > 0 } ?: return null
@@ -236,8 +346,9 @@ object Corridor {
         var unresolved = false
         fun side(t: SideTemplate, sign: Int): Pair<List<SectionPoint>, List<SectionPoint>> {
             val top = ArrayList<SectionPoint>(); val datum = ArrayList<SectionPoint>()
-            // Lanes rotate about the axis with superelevation: one plane across both sides.
-            val laneSlope = se?.let { it * sign } ?: t.laneSlope
+            // Superelevation gives each lane's slope; the shoulder follows a lane that rises outward.
+            val laneSlope = se?.let { if (sign < 0) it.first else it.second } ?: t.laneSlope
+            val shoulderSlope = if (se == null) t.shoulderSlope else if (laneSlope >= 0) laneSlope else minOf(laneSlope, t.shoulderSlope)
             var o = 0.0; var z = grade
             fun add(dw: Double, dz: Double, code: String, paved: Boolean) {
                 o += dw * sign; z += dz
@@ -245,7 +356,7 @@ object Corridor {
                 datum += SectionPoint(o, if (paved) z - tpl.pavement else z, code)
             }
             add(t.laneWidth, t.laneWidth * laneSlope / 100, "bordo", true)
-            if (t.shoulderWidth > 0) add(t.shoulderWidth, t.shoulderWidth * (se?.let { s -> if (s * sign > 0) s * sign else t.shoulderSlope } ?: t.shoulderSlope) / 100, "acostamento", true)
+            if (t.shoulderWidth > 0) add(t.shoulderWidth, t.shoulderWidth * shoulderSlope / 100, "acostamento", true)
             if (t.gutterWidth > 0) add(t.gutterWidth, -t.gutterDepth, "sarjeta", false)
             // Hinge: cut or fill decided against the terrain here.
             val hinge = Point2(c.x + right.x * o, c.y + right.y * o)

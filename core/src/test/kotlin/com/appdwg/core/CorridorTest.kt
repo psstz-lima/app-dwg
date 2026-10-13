@@ -67,12 +67,49 @@ class CorridorTest {
             DoubleArray(4) { 100.0 }, intArrayOf(0, 1, 2, 0, 2, 3))
         val profile = Profile("G", listOf(Profile.Pvi(0.0, 101.0), Profile.Pvi(300.0, 101.0)))
         val axis = Alignment("E", 0.0, listOf(AlignmentElement.Line(Point2(0.0, 0.0), Point2(300.0, 0.0))), profile)
-        val (sec, _) = Corridor.section(axis, profile, ground, Template(pavement = 0.0), 100.0, 6.0)!!
+        val (sec, _) = Corridor.section(axis, profile, ground, Template(pavement = 0.0), 100.0, -6.0 to 6.0)!!
         val edgeL = sec.top.first { it.code == "bordo" && it.offset < 0 }
         val edgeR = sec.top.first { it.code == "bordo" && it.offset > 0 }
         assertEquals(101.0 - 3.5 * 0.06, edgeL.z, 1e-9)
         assertEquals(101.0 + 3.5 * 0.06, edgeR.z, 1e-9)
         assertEquals(30.0, AlignmentBuilder.curvesFromK(listOf(Profile.Pvi(0.0, 0.0), Profile.Pvi(100.0, 2.0), Profile.Pvi(200.0, 1.0)), 10.0)[1].curveLength, 1e-9)
         assertTrue(hypot(sec.right.x, sec.right.y) > 0.999)
+    }
+
+    @Test
+    fun automaticSuperelevationRotatesTheOuterLaneFirst() {
+        // Left-hand 200 m curve with 60 m spirals at 60 km/h, emax 8 %.
+        val a = AlignmentBuilder.fromPis("E", listOf(Pi(Point2(0.0, 0.0)), Pi(Point2(500.0, 0.0), 200.0, 60.0), Pi(Point2(500.0, 500.0))))
+        val rate = Superelevations.rate(200.0, 60.0, 8.0)
+        assertTrue(rate > 2.0 && rate <= 8.0)
+        val t = Superelevations.auto(a, 60.0, 8.0)
+        val starts = a.elements.runningFold(0.0) { acc, e -> acc + e.length }
+        val sc = t.first { abs(it.station - starts[2]) < 1e-6 }
+        // Left turn: the right lane is outside and rises outward.
+        assertEquals(rate, sc.right, 1e-9)
+        assertEquals(-rate, sc.left, 1e-9)
+        val ts = t.first { abs(it.station - starts[1]) < 1e-6 }
+        assertEquals(0.0, ts.right, 1e-9)
+        assertEquals(-2.0, ts.left, 1e-9)
+    }
+
+    @Test
+    fun widthTransitionAndTargetLine() {
+        val ground = Surface("T", doubleArrayOf(-100.0, 400.0, 400.0, -100.0), doubleArrayOf(-200.0, -200.0, 200.0, 200.0),
+            DoubleArray(4) { 100.0 }, intArrayOf(0, 1, 2, 0, 2, 3))
+        val profile = Profile("G", listOf(Profile.Pvi(0.0, 100.0), Profile.Pvi(300.0, 100.0)))
+        val axis = Alignment("E", 0.0, listOf(AlignmentElement.Line(Point2(0.0, 0.0), Point2(300.0, 0.0))), profile)
+        val narrow = Template(SideTemplate(3.0, 0.0, 0.0), SideTemplate(3.0, 0.0, 0.0), pavement = 0.0)
+        val wide = Template(SideTemplate(5.0, 0.0, 0.0), SideTemplate(5.0, 0.0, 0.0), pavement = 0.0)
+        // Right edge follows a line 7 m south of the axis from station 200 on.
+        val target = listOf(Point2(150.0, -7.0), Point2(350.0, -7.0))
+        val r = Corridor.build(axis, ground, listOf(Region(0.0, 100.0, narrow), Region(100.0, 200.0, wide, transition = 40.0),
+            Region(200.0, 300.0, wide, rightTarget = target)), step = 20.0)
+        fun edge(sta: Double, side: Int) = r.sections.first { it.station == sta }.top.first { it.code == "bordo" && it.offset * side > 0 }.offset
+        assertEquals(3.0, edge(100.0, 1), 1e-9)
+        assertEquals(4.0, edge(120.0, 1), 1e-9)
+        assertEquals(5.0, edge(160.0, 1), 1e-9)
+        assertEquals(7.0, edge(240.0, 1), 1e-9)
+        assertEquals(-5.0, edge(240.0, -1), 1e-9)
     }
 }

@@ -46,7 +46,7 @@ import com.appdwg.core.SlopeRule
 import com.appdwg.core.StationFormat
 import com.appdwg.core.Superelevation
 
-private enum class RoadTab(val label: String) { AXIS("Eixo"), GRADE("Greide"), SECTION("Seção tipo"), SLOPES("Taludes"), SE("Superelevação"), RESULT("Resultado") }
+private enum class RoadTab(val label: String) { AXIS("Eixo"), GRADE("Greide"), SECTION("Seção tipo"), REGIONS("Regiões"), SLOPES("Taludes"), SE("Superelevação"), RESULT("Resultado") }
 
 private fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
 private fun f(v: Double, d: Int = 2) = StationFormat.decimal(v, d)
@@ -54,7 +54,15 @@ private fun f(v: Double, d: Int = 2) = StationFormat.decimal(v, d)
 /** Road (corridor) design: axis, grade, typical section, slopes, superelevation and the results. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun RoadDialog(vm: ProjectViewModel, project: LandXmlProject, onDrawAxis: () -> Unit, onServiceNote: () -> Unit, onDismiss: () -> Unit) {
+fun RoadDialog(
+    vm: ProjectViewModel,
+    project: LandXmlProject,
+    onDrawAxis: () -> Unit,
+    onServiceNote: () -> Unit,
+    /** Asks the plan for a line to be the edge target of region [index] on the left (−1) or right (1). */
+    onPickTarget: (index: Int, side: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val v = vm.view ?: return
     var rp by remember { mutableStateOf(v.roadParams) }
     var tab by remember { mutableStateOf(if (vm.road != null) RoadTab.RESULT else RoadTab.AXIS) }
@@ -172,20 +180,57 @@ fun RoadDialog(vm: ProjectViewModel, project: LandXmlProject, onDrawAxis: () -> 
                         numField(rp.swell, "Fator de empolamento/compactação do aterro", 330) { rp = rp.copy(swell = it) }
                     }
                     RoadTab.SE -> {
-                        Text("Superelevação por estaca, em % (positivo: lado direito mais alto). Interpolada entre as estacas; sem linhas, abaulamento normal.",
-                            style = MaterialTheme.typography.bodySmall)
+                        Text("Caimento de cada pista por estaca, em % (negativo desce para fora; positivo sobe para fora). Interpolado entre as estacas; " +
+                            "sem linhas, vale o caimento da seção tipo.", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            numField(rp.speed, "Velocidade (km/h)") { rp = rp.copy(speed = it) }
+                            numField(rp.emax, "e máx. (%)") { rp = rp.copy(emax = it) }
+                            val axis = vm.roadAxis(rp, project)
+                            OutlinedButton(enabled = axis != null, onClick = {
+                                rp = rp.copy(superelevation = com.appdwg.core.Superelevations.auto(axis!!, rp.speed, rp.emax, -rp.left.laneSlope.coerceAtMost(0.0).let { if (it == 0.0) 2.0 else it }))
+                            }) { Text("Calcular pelas curvas (DNIT)") }
+                        }
                         rp.superelevation.forEachIndexed { i, e ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 var st by remember(i, e.station) { mutableStateOf(StationFormat.estaca(e.station)) }
                                 OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(station = s) }) } },
                                     label = { Text("Estaca") }, singleLine = true, modifier = Modifier.width(150.dp))
-                                numField(e.percent, "Superelevação %") { pct -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(percent = pct) }) }
+                                numField(e.left, "Pista esquerda %") { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(left = v2) }) }
+                                numField(e.right, "Pista direita %") { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(right = v2) }) }
                                 TextButton(onClick = { rp = rp.copy(superelevation = rp.superelevation.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
                             }
                         }
-                        TextButton(onClick = { rp = rp.copy(superelevation = rp.superelevation + Superelevation((rp.superelevation.lastOrNull()?.station ?: 0.0) + 20, 0.0)) }) {
-                            Text("Adicionar estaca")
+                        Row {
+                            TextButton(onClick = { rp = rp.copy(superelevation = rp.superelevation + Superelevation((rp.superelevation.lastOrNull()?.station ?: 0.0) + 20, -2.0, -2.0)) }) {
+                                Text("Adicionar estaca")
+                            }
+                            if (rp.superelevation.isNotEmpty()) TextButton(onClick = { rp = rp.copy(superelevation = emptyList()) }) { Text("Limpar") }
                         }
+                    }
+                    RoadTab.REGIONS -> {
+                        Text("A seção tipo vale do início do eixo. Cada região muda as larguras a partir da sua estaca, com transição linear; " +
+                            "um alvo (linha tocada na planta) faz o bordo da pista seguir essa linha.", style = MaterialTheme.typography.bodySmall)
+                        rp.regions.forEachIndexed { i, r ->
+                            HorizontalDivider()
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                var st by remember(i, r.from) { mutableStateOf(StationFormat.estaca(r.from)) }
+                                OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(from = s) }) } },
+                                    label = { Text("A partir da estaca") }, singleLine = true, modifier = Modifier.width(170.dp))
+                                numField(r.transition, "Transição (m)") { t -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(transition = t) }) }
+                                OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, -1) }) { Text(if (r.leftTarget != null) "Alvo E ✓ (trocar)" else "Alvo bordo E") }
+                                OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, 1) }) { Text(if (r.rightTarget != null) "Alvo D ✓ (trocar)" else "Alvo bordo D") }
+                                if (r.leftTarget != null || r.rightTarget != null) TextButton(onClick = {
+                                    rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(leftTarget = null, rightTarget = null) })
+                                }) { Text("Sem alvos") }
+                                TextButton(onClick = { rp = rp.copy(regions = rp.regions.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                            }
+                            SideEditor("Esquerda", r.left) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(left = sd) }) }
+                            SideEditor("Direita", r.right) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(right = sd) }) }
+                        }
+                        TextButton(onClick = {
+                            val last = rp.regions.lastOrNull()
+                            rp = rp.copy(regions = rp.regions + RoadRegion((last?.from ?: 0.0) + 100, last?.left ?: rp.left, last?.right ?: rp.right))
+                        }) { Text("Adicionar região") }
                     }
                     RoadTab.RESULT -> {
                         vm.tasks.forEach { LoadProgress(it) }

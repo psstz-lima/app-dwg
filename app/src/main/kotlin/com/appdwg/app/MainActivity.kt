@@ -259,6 +259,8 @@ private fun ProjectScreen(
     var showPlatform by remember(fileName) { mutableStateOf(false) }
     var showRoad by remember(fileName) { mutableStateOf(false) }
     var drawingRoad by v::drawingRoad
+    // Region and side whose edge target line is being tapped.
+    var roadTargetPick by remember(fileName) { mutableStateOf<Pair<Int, Int>?>(null) }
     val noteSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) vm.exportServiceNote(uri)
     }
@@ -370,9 +372,17 @@ private fun ProjectScreen(
         if (!showSection || sectionAxis == null) null
         else CrossSection.at(sectionAxis, sectionStation, project.surfaces.filter { it.name !in frozenLayers }, sectionHalfWidth)
     }
-    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile) {
+    // On the road's own axis, the profile shows (and edits) the PVIs typed for the road.
+    val roadPvis = v.roadParams.pvis.sortedBy { it.station }.takeIf { it.size >= 2 && sectionAxis?.name?.endsWith(ROAD_SUFFIX) == true }
+    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile, roadPvis, v.roadParams.kValue) {
         if (!showProfile || sectionAxis == null) null
-        else LongProfile.of(sectionAxis, project.surfaces.filter { it.name !in frozenLayers })
+        else {
+            val axis = if (roadPvis == null) sectionAxis else com.appdwg.core.Alignment(sectionAxis.name, sectionAxis.startStation, sectionAxis.elements,
+                com.appdwg.core.Profile("Greide", com.appdwg.core.AlignmentBuilder.curvesFromK(roadPvis, v.roadParams.kValue).mapIndexed { i, pv ->
+                    roadPvis[i].takeIf { it.curveLength > 0 } ?: pv
+                }))
+            LongProfile.of(axis, project.surfaces.filter { it.name !in frozenLayers && !it.name.startsWith(ROAD_LABEL) })
+        }
     }
     val profileMark = remember(sectionAxis, profileCursor, showProfile) {
         if (!showProfile || sectionAxis == null) null
@@ -467,11 +477,23 @@ private fun ProjectScreen(
                 else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
             snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
                 (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS)),
-            selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION ||
+            selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||
                 (editing && edit.pick == EditPick.SELECT),
             selectedLines = if (editing) edit.selected else emptyList(),
             previewLines = if (editing) edit.preview else emptyList(),
             onLineSelected = { ref ->
+                roadTargetPick?.let { (i, side) ->
+                    com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
+                        val line = List(pth.xs.size) { k -> Point2(pth.xs[k], pth.ys[k]) }
+                        val rp = v.roadParams
+                        v.roadParams = rp.copy(regions = rp.regions.toMutableList().also { l ->
+                            l[i] = if (side < 0) l[i].copy(leftTarget = line) else l[i].copy(rightTarget = line)
+                        })
+                    }
+                    roadTargetPick = null
+                    showRoad = true
+                    return@PlanView
+                }
                 if (editing) {
                     if (ref is com.appdwg.core.LineRef.Drawing) {
                         edit.selected = if (ref.index in edit.selected) edit.selected - ref.index else edit.selected + ref.index
@@ -593,6 +615,13 @@ private fun ProjectScreen(
         } else if (editing) {
             EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
+        } else if (roadTargetPick != null) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toque na linha que o bordo da pista deve seguir.", style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { roadTargetPick = null; showRoad = true }) { Text("Cancelar") }
+                }
+            }
         } else if (drawingRoad) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -669,6 +698,9 @@ private fun ProjectScreen(
                 onRange = { profileRange = it },
                 onClose = { showProfile = false },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(0.45f),
+                editPvis = roadPvis,
+                onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list) },
+                onRecalc = { vm.designRoad() },
             )
         } else if (showSection && sectionAxis != null) {
             SectionPanel(
@@ -783,7 +815,9 @@ private fun ProjectScreen(
             showRoad = false; measuring = false; showSection = false; showProfile = false; show3d = false
             v.roadParams = v.roadParams.copy(alignmentIndex = -1)
             drawingRoad = true
-        }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") }, onDismiss = { showRoad = false })
+        }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") },
+            onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
+            onDismiss = { showRoad = false })
     }
 
     if (showPlatform) {
