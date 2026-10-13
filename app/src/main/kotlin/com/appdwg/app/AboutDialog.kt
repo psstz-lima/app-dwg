@@ -2,6 +2,8 @@ package com.appdwg.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -9,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -20,7 +23,12 @@ fun AboutDialog(onDismiss: () -> Unit) {
     val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sobre o Gromatic") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GromaticLogo(Modifier.size(44.dp))
+                Text("Sobre o Gromatic")
+            }
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Versão $version")
@@ -46,6 +54,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     "kXML2 (incluído no Android)" to "MIT",
                 )) Text("$name — licença $licence")
                 Text("Texto da licença Apache 2.0: apache.org/licenses/LICENSE-2.0", style = MaterialTheme.typography.bodySmall)
+                Text("Fontes: Barlow, JetBrains Mono, IBM Plex Sans e Mono, Manrope, DM Mono e Atkinson Hyperlegible — licença SIL Open Font License 1.1 (openfontlicense.org)")
 
                 Text("Sistemas de coordenadas: SIRGAS 2000 / UTM (GRS80). Conversões pelas séries de Krüger.", style = MaterialTheme.typography.bodySmall)
             }

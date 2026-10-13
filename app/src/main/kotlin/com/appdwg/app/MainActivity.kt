@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.appdwg.core.DxfReader
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,8 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,9 +84,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) openFromIntent(intent)
         setContent {
-            val dark = isSystemInDarkTheme()
-            MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
-                AppScreen(viewModel)
+            var theme by remember { mutableStateOf(ThemeStore.load(this)) }
+            GromaticTheme(theme) {
+                AppScreen(viewModel, theme) { theme = it; ThemeStore.save(this, it) }
             }
         }
     }
@@ -105,7 +103,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppScreen(viewModel: ProjectViewModel) {
+private fun AppScreen(viewModel: ProjectViewModel, theme: AppTheme, onTheme: (AppTheme) -> Unit) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.open(uri)
     }
@@ -115,6 +113,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     var confirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showRecent by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showAppearance by remember { mutableStateOf(false) }
     var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
@@ -135,14 +134,16 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        when (state) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        GromaticLogo(Modifier.size(34.dp))
+                        Text("Gromatic", style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                        val file = when (state) {
                             is ProjectState.Loaded -> state.fileName
                             is ProjectState.Loading -> state.fileName
-                            else -> "Gromatic"
-                        },
-                        maxLines = 1,
-                    )
+                            else -> null
+                        }
+                        if (file != null) Text(file, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
                 },
                 actions = {
                     if (state is ProjectState.Loaded) {
@@ -151,12 +152,15 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     }
                     if (viewModel.recent.isNotEmpty()) TextButton(onClick = { showRecent = true }) { Text("Recentes") }
                     TextButton(onClick = openFile) { Text("Abrir") }
+                    TextButton(onClick = { showAppearance = true }) { Text("Aparência") }
                     TextButton(onClick = { showAbout = true }) { Text("Sobre") }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
     ) { padding ->
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+        if (showAppearance) AppearanceDialog(theme, onPick = onTheme, onDismiss = { showAppearance = false })
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
@@ -457,15 +461,15 @@ private fun ProjectScreen(
         if (measurePoints.isEmpty()) null
         else Measure.of(measurePoints, measurePoints.map { PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation })
     }
-    val scheme = MaterialTheme.colorScheme
+    val pal = LocalGromatic.current
     val colors = PlanColors(
-        background = scheme.background,
-        mesh = Color(0x66000000),
-        alignment = Color(0xFFE53935),
-        drawing = scheme.onBackground,
-        stations = scheme.onBackground,
-        points = Color(0xFF1E88E5),
-        marker = Color(0xFFFF9800),
+        background = pal.canvas,
+        mesh = pal.contourIndex.copy(alpha = 0.6f),
+        alignment = pal.alignment,
+        drawing = pal.text,
+        stations = pal.text,
+        points = pal.points,
+        marker = pal.marker,
     )
 
     var show3d by v::show3d
