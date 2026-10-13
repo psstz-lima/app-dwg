@@ -461,6 +461,7 @@ private fun ProjectScreen(
         if (measurePoints.isEmpty()) null
         else Measure.of(measurePoints, measurePoints.map { PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation })
     }
+    val scheme = MaterialTheme.colorScheme
     val pal = LocalGromatic.current
     val colors = PlanColors(
         background = pal.canvas,

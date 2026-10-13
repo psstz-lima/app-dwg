@@ -187,7 +187,7 @@ private fun AppTheme.corner(systemDark: Boolean): Dp = when (palette(systemDark)
     else -> 6.dp
 }
 
-private fun scheme(p: GromaticPalette): ColorScheme {
+private fun gromaticScheme(p: GromaticPalette): ColorScheme {
     val base = if (p.dark) darkColorScheme() else lightColorScheme()
     // Theme D keeps black as the strong color so yellow only marks what is selected.
     val primary = if (p === altoContraste) Color.Black else p.accent
@@ -231,7 +231,7 @@ fun GromaticTheme(theme: AppTheme, content: @Composable () -> Unit) {
     val r = theme.corner(systemDark)
     CompositionLocalProvider(LocalGromatic provides p) {
         MaterialTheme(
-            colorScheme = scheme(p),
+            colorScheme = gromaticScheme(p),
             typography = typography(theme.body(systemDark), bigger = p === altoContraste),
             shapes = Shapes(
                 extraSmall = RoundedCornerShape(r / 2), small = RoundedCornerShape(r),
