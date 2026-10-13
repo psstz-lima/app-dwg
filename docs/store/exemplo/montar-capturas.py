@@ -4,9 +4,9 @@ S, F, OUT = sys.argv[1:4]
 scenes = [
  ("n1_3d", "Superfícies do Civil 3D em 3D, no campo", "Civil 3D surfaces in 3D, in the field"),
  ("r2_info_eng", "Toque e veja estaca, afastamento, greide e corte", "Tap for station, offset, grade and cut"),
- ("n3_plan", "LandXML e DXF abertos direto no tablet", "Open LandXML and DXF right on the tablet"),
+ ("r11_corredor_dark", "Projeto de estrada com mapa de corte e aterro", "Road design with a cut and fill map"),
  ("r4_perfil_eng", "Perfil longitudinal com greide e curvas verticais", "Profiles with grade line and vertical curves"),
- ("r5_secao_dark", "Seção transversal em qualquer estaca", "Cross sections at any station"),
+ ("r5_secao_dark", "Seção com terreno e projeto em qualquer estaca", "Ground and design sections at any station"),
  ("n6_curvas", "Curvas de nível automáticas", "Automatic contour lines"),
  ("r7_full_sun", "Tela cheia e alto contraste para sol forte", "Full screen and high contrast for bright sun"),
  ("r6_temas_dark", "Quatro temas: escuro, claro, terra e sol", "Four looks: dark, light, earth and sun"),

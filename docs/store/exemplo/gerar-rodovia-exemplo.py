@@ -89,5 +89,45 @@ for e in elems:
 w('      </CoordGeom>\n      <Profile name="GREIDE">\n        <ProfAlign name="GREIDE">\n')
 w(f'          <PVI>0.000 {gz[0]:.3f}</PVI>\n')
 for s, z in zip(pv[1:-1], gz[1:-1]): w(f'          <ParaCurve length="160.000">{s:.3f} {z:.3f}</ParaCurve>\n')
-w(f'          <PVI>{length:.3f} {gz[-1]:.3f}</PVI>\n        </ProfAlign>\n      </Profile>\n    </Alignment>\n  </Alignments>\n</LandXML>\n')
+w(f'          <PVI>{length:.3f} {gz[-1]:.3f}</PVI>\n        </ProfAlign>\n      </Profile>\n')
+
+def grade(s):
+    # Tangents between PVIs with symmetric parabolas of 160 m.
+    for k in range(1, len(pv) - 1):
+        L = 160.0; g1 = (gz[k] - gz[k - 1]) / (pv[k] - pv[k - 1]); g2 = (gz[k + 1] - gz[k]) / (pv[k + 1] - pv[k])
+        if abs(s - pv[k]) <= L / 2:
+            x = s - (pv[k] - L / 2); return gz[k] - g1 * L / 2 + g1 * x + (g2 - g1) * x * x / (2 * L)
+    for k in range(1, len(pv)):
+        if s <= pv[k]: return gz[k - 1] + (gz[k] - gz[k - 1]) * (s - pv[k - 1]) / (pv[k] - pv[k - 1])
+    return gz[-1]
+
+def ground(s, off):
+    p = at(s); q = at(min(s + 0.5, length)); r = at(max(s - 0.5, 0))
+    d = norm(sub(q, r)); x, y = p[0] + d[1] * off, p[1] - d[0] * off   # positive offset to the right
+    return terrain(x - E0, y - N0)
+
+w('      <CrossSects>\n')
+s = 0.0
+while s <= length + 1e-6:
+    z = grade(s)
+    base = [(0.0, z, "eixo"), (3.5, z - 0.07, "bordo"), (6.0, z - 0.195, "acostamento")]
+    def side(sign):
+        out = [(sign * o, e, c) for o, e, c in base]
+        o, e = 6.0, z - 0.195
+        if ground(s, sign * o) > e:  # ditch, then 1:1 cut slope up to the ground
+            out += [(sign * 6.5, e - 0.5, "valeta"), (sign * 7.0, e, "valeta borda")]
+            for k in range(1, 400):
+                oo, ee = 7.0 + 0.1 * k, e + 0.1 * k
+                if ee >= ground(s, sign * oo): out.append((sign * oo, ee, "crista")); break
+        else:  # 1.5:1 fill slope down to the ground
+            for k in range(1, 600):
+                oo, ee = o + 0.15 * k, e - 0.1 * k
+                if ee <= ground(s, sign * oo): out.append((sign * oo, ee, "pé")); break
+        return out
+    allp = sorted({(round(o, 3), round(e, 3), c) for o, e, c in side(-1) + side(1)}, key=lambda t: t[0])
+    w(f'        <CrossSect sta="{s:.3f}">\n          <DesignCrossSectSurf name="Acabada">')
+    for o, e, c in allp: w(f'<CrossSectPnt code="{c}">{o + 0.0:.3f} {e:.3f}</CrossSectPnt>')
+    w('</DesignCrossSectSurf>\n        </CrossSect>\n')
+    s += 20.0
+w('      </CrossSects>\n    </Alignment>\n  </Alignments>\n</LandXML>\n')
 print(f"len {length:.1f} pts {len(pts)} faces {len(faces)}", file=sys.stderr)
