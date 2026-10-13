@@ -101,6 +101,8 @@ class ProjectDoc(
     val notes: List<com.appdwg.core.FieldNote> = emptyList(),
     /** File name of [main], to name it when it cannot be opened. */
     val mainName: String? = null,
+    /** Surfaces made by editing (Editar sup.), stored whole since they come from no file; already encoded. */
+    val edited: List<JSONObject> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -132,6 +134,7 @@ class ProjectDoc(
             JSONObject().put("id", n.id).put("x", n.x).put("y", n.y).put("text", n.text).put("time", n.time)
                 .apply { if (!n.z.isNaN()) put("z", n.z); n.photo?.let { put("photo", it) } }
         }))
+        if (edited.isNotEmpty()) put("edited", JSONArray(edited))
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -189,6 +192,7 @@ class ProjectDoc(
                     }
                 }.orEmpty(),
                 o.optString("mainName").ifEmpty { null },
+                edited = o.optJSONArray("edited")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
             )
         }
 
@@ -409,5 +413,30 @@ data class RoadRegion(
             return RoadRegion(o.getDouble("from"), side(o.getJSONArray("left")), side(o.getJSONArray("right")), o.optDouble("transition", 20.0),
                 line(o.optJSONArray("leftTarget")), line(o.optJSONArray("rightTarget")))
         }
+    }
+}
+
+/** Compact storage of a surface in a project: binary arrays, deflated, in base64. */
+object SurfaceCodec {
+    fun encode(s: com.appdwg.core.Surface): JSONObject {
+        val ox = s.xs.firstOrNull() ?: 0.0; val oy = s.ys.firstOrNull() ?: 0.0
+        val bb = java.nio.ByteBuffer.allocate(8 + 24 * s.vertexCount + 4 * s.triangles.size).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        bb.putInt(s.vertexCount).putInt(s.triangles.size)
+        for (i in 0 until s.vertexCount) { bb.putDouble(s.xs[i] - ox); bb.putDouble(s.ys[i] - oy); bb.putDouble(s.zs[i]) }
+        for (t in s.triangles) bb.putInt(t)
+        val out = java.io.ByteArrayOutputStream()
+        java.util.zip.DeflaterOutputStream(out, java.util.zip.Deflater(java.util.zip.Deflater.BEST_SPEED)).use { it.write(bb.array()) }
+        return JSONObject().put("name", s.name).put("ox", ox).put("oy", oy)
+            .put("data", android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP))
+    }
+
+    fun decode(o: JSONObject): com.appdwg.core.Surface {
+        val raw = java.util.zip.InflaterInputStream(android.util.Base64.decode(o.getString("data"), android.util.Base64.NO_WRAP).inputStream()).readBytes()
+        val bb = java.nio.ByteBuffer.wrap(raw).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val n = bb.getInt(); val t = bb.getInt()
+        val ox = o.getDouble("ox"); val oy = o.getDouble("oy")
+        val xs = DoubleArray(n); val ys = DoubleArray(n); val zs = DoubleArray(n)
+        for (i in 0 until n) { xs[i] = bb.getDouble() + ox; ys[i] = bb.getDouble() + oy; zs[i] = bb.getDouble() }
+        return com.appdwg.core.Surface(o.getString("name"), xs, ys, zs, IntArray(t) { bb.getInt() })
     }
 }

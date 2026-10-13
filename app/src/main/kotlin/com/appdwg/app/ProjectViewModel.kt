@@ -1703,8 +1703,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             hiddenLines = hiddenOriginals.toList(),
             models = models.map { m -> m.uris.map { it.toString() } to m.placement },
             notes = notes,
+            edited = addedFiles.filter { it.uri == null && it.label.endsWith(EDITED_SUFFIX) }
+                .flatMap { f -> f.project.surfaces }.map { s -> synchronized(encodedSurfaces) { encodedSurfaces.getOrPut(s) { SurfaceCodec.encode(s) } } },
         )
     }
+
+    /** Encoded edited surfaces, so checking for unsaved changes does not encode them again. */
+    private val encodedSurfaces = java.util.IdentityHashMap<Surface, org.json.JSONObject>()
 
     /** True when something changed since the drawing was opened or the project saved. */
     fun isDirty(): Boolean {
@@ -1838,6 +1843,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             if (addedFiles.size == before) problems += label
         }
         userPoints = doc.points
+        for (e in doc.edited) {
+            try {
+                val s = withContext(Dispatchers.Default) { SurfaceCodec.decode(e) }
+                synchronized(encodedSurfaces) { encodedSurfaces[s] = e }
+                addedFiles = addedFiles.filter { it.label != s.name } + AddedFile(s.name, LandXmlProject(null, null, listOf(s), emptyList(), emptyList(), emptyList()), null)
+            } catch (ex: Exception) {
+                problems += e.optString("name")
+            }
+        }
         for ((uris, placement) in doc.models) {
             val list = uris.map(Uri::parse)
             val named = list.map { it to displayName(it) }
