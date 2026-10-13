@@ -110,7 +110,24 @@
     <string name="bm_remove">Remover</string>
     <string name="bm_empty">Sem itens. Use "Itens do projeto de estrada" ou adicione à mão.</string>
 
-    <!-- As-built check -->
+    <!-- Slope and flow maps -->
+    <string name="ta_tool">Declividade</string>
+    <string name="ta_title">Declividade e escoamento</string>
+    <string name="ta_surface">Superfície</string>
+    <string name="ta_mode">Mostrar na planta</string>
+    <string name="ta_off">Nada</string>
+    <string name="ta_slope">Declividade</string>
+    <string name="ta_flow">Escoamento</string>
+    <string name="ta_both">Os dois</string>
+    <string name="ta_min_area">Área de contribuição mínima dos talvegues</string>
+    <string name="ta_flow_hint">Setas: sentido da água em cada trecho (maior descida). Linhas azuis: talvegues, onde a água de pelo menos essa área se junta.</string>
+    <string name="ta_slope_hint">Classes de relevo da Embrapa, pela declividade em %.</string>
+    <string name="ta_legend">Declividade (%)</string>
+    <string name="ta_class_row">%1$s · %2$s ha</string>
+    <string name="ta_running">Analisando o terreno</string>
+    <string name="ta_cell">Malha de %1$s m</string>
+
+
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>
     <string name="asbuilt_intro">Compara os pontos levantados com a superfície de projeto: diferença de cota em cada ponto, dentro ou fora da tolerância.</string>

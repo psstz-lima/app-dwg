@@ -361,6 +361,7 @@ private fun ProjectScreen(
     var showRoad by remember(fileName) { mutableStateOf(false) }
     var showAsBuilt by remember(fileName) { mutableStateOf(false) }
     var showVolume by remember(fileName) { mutableStateOf(false) }
+    var showAnalysis by remember(fileName) { mutableStateOf(false) }
     var showBulletin by remember(fileName) { mutableStateOf(false) }
     val bulletinPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri != null) vm.exportBulletinPdf(uri, fileName)
@@ -559,6 +560,7 @@ private fun ProjectScreen(
     val asBuiltLabel = androidx.compose.ui.res.stringResource(R.string.asbuilt_tool)
     val calibLabel = androidx.compose.ui.res.stringResource(R.string.calib_tool)
     val volumeLabel = androidx.compose.ui.res.stringResource(R.string.vol_tool)
+    val analysisLabel = androidx.compose.ui.res.stringResource(R.string.ta_tool)
     val bulletinLabel = androidx.compose.ui.res.stringResource(R.string.bm_tool)
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
@@ -578,6 +580,7 @@ private fun ProjectScreen(
             add(RailTool(GIcon.ROAD, "Estrada", drawingRoad || v.roadBuilt) { showRoad = true })
         }
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, "Modelos") { showModels = true })
@@ -765,7 +768,9 @@ private fun ProjectScreen(
                     onViewport = { viewport = it },
                     designLines = vm.platform?.let { r -> listOf(r.edge, r.daylight) + r.benches }?.map { l -> l.map { Point2(it.x, it.y) } }.orEmpty(),
                     sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) } ?: profileMark,
-                    overlay = differenceOverlay,
+                    overlay = vm.slopeImage.takeIf { vm.analysisMode == 1 || vm.analysisMode == 3 } ?: differenceOverlay,
+                    channels = if (vm.analysisMode >= 2) vm.flowChannels else emptyList(),
+                    arrows = if (vm.analysisMode >= 2) vm.flowArrows else emptyList(),
                     points = vm.userPoints,
                     onPointTap = if (measuring || addingPoints) null else { pt -> selectedPoint = pt; tapped = null },
                     selectedPoint = selectedPoint,
@@ -972,6 +977,7 @@ private fun ProjectScreen(
                 InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
             }
             if (differenceOverlay != null && difference != null && !show3d) DifferenceLegend(difference, Modifier)
+            if ((vm.analysisMode == 1 || vm.analysisMode == 3) && !show3d) SlopeLegend(vm, Modifier)
             if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
                 Text("Toque na planta para ver estaca, afastamento e cotas.", style = MaterialTheme.typography.bodyMedium, color = g.muted)
             }
@@ -999,6 +1005,8 @@ private fun ProjectScreen(
         BulletinDialog(vm, onPdf = { bulletinPdf.launch("$baseName-boletim-${v.bulletinNumber}.pdf") },
             onCsv = { bulletinCsv.launch("$baseName-boletim-${v.bulletinNumber}.csv") }, onDismiss = { showBulletin = false })
     }
+
+    if (showAnalysis) AnalysisDialog(vm, project, onDismiss = { showAnalysis = false })
 
     if (showVolume) {
         VolumeDialog(vm, project, volumeState, measurePoints, onDraw = {

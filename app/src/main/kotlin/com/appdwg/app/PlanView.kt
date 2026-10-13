@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -164,6 +165,10 @@ fun PlanView(
     zoom: ZoomRequest? = null,
     /** Rings around checked points (as-built), each in its status colour. */
     marks: List<Pair<Point2, Color>> = emptyList(),
+    /** Drainage lines (talvegues): segment ends and the area draining through, m². */
+    channels: List<Triple<Point2, Point2, Double>> = emptyList(),
+    /** Downhill direction arrows: position and angle (radians, counterclockwise from east). */
+    arrows: List<Pair<Point2, Double>> = emptyList(),
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -381,6 +386,39 @@ fun PlanView(
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors) { toScreen(it, cam) }
         if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors) { toScreen(it, cam) }
+        if (channels.isNotEmpty()) {
+            val maxA = channels.maxOf { it.third }
+            val minA = channels.minOf { it.third }
+            for ((a, b, area) in channels) {
+                val sa = toScreen(a, cam); val sb = toScreen(b, cam)
+                if ((sa.x < 0 && sb.x < 0) || (sa.y < 0 && sb.y < 0) || (sa.x > size.width && sb.x > size.width) || (sa.y > size.height && sb.y > size.height)) continue
+                // Wider where more water gathers, on a log scale.
+                val t = if (maxA > minA) (kotlin.math.ln(area / minA) / kotlin.math.ln(maxA / minA)).toFloat() else 1f
+                drawLine(Color(0xFF0D47A1), sa, sb, strokeWidth = 1.5f + 4f * t, cap = StrokeCap.Round)
+                drawLine(Color(0xFF42A5F5), sa, sb, strokeWidth = 0.5f + 2.5f * t, cap = StrokeCap.Round)
+            }
+        }
+        if (arrows.isNotEmpty()) {
+            val len = 9.sp.toPx()
+            // One arrow per screen cell of about 3 arrow lengths, whatever the zoom.
+            val spacing = len * 3.2f
+            val taken = HashSet<Long>()
+            for ((p, ang) in arrows) {
+                val c = toScreen(p, cam)
+                if (c.x < -len || c.y < -len || c.x > size.width + len || c.y > size.height + len) continue
+                if (!taken.add((c.x / spacing).toLong() shl 32 or ((c.y / spacing).toLong() and 0xffffffffL))) continue
+                // Screen y grows downwards, so the plan angle is mirrored.
+                val d = Offset(kotlin.math.cos(ang).toFloat(), -kotlin.math.sin(ang).toFloat())
+                val tip = c + d * len; val tail = c - d * len
+                val n = Offset(-d.y, d.x) * (len * 0.45f)
+                val back = tip - d * (len * 0.7f)
+                for ((col, w) in listOf(Color.Black.copy(alpha = 0.55f) to 4f, Color.White to 2f)) {
+                    drawLine(col, tail, tip, strokeWidth = w, cap = StrokeCap.Round)
+                    drawLine(col, tip, back + n, strokeWidth = w, cap = StrokeCap.Round)
+                    drawLine(col, tip, back - n, strokeWidth = w, cap = StrokeCap.Round)
+                }
+            }
+        }
         if (marks.isNotEmpty()) {
             val r = 7.sp.toPx()
             for ((p, c) in marks) {

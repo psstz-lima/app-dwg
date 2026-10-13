@@ -1011,6 +1011,61 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Slope and flow maps ----
+
+    /** 0 off, 1 slope, 2 flow, 3 both. */
+    var analysisMode by mutableStateOf(0)
+    var analysisSurface by mutableStateOf<String?>(null)
+    var slopeImage by mutableStateOf<TerrainImage?>(null)
+        private set
+    var slopeClasses by mutableStateOf<List<com.appdwg.core.SlopeClass>>(emptyList())
+        private set
+    var flowArrows by mutableStateOf<List<Pair<com.appdwg.core.Point2, Double>>>(emptyList())
+        private set
+    var flowChannels by mutableStateOf<List<Triple<com.appdwg.core.Point2, com.appdwg.core.Point2, Double>>>(emptyList())
+        private set
+    var flowMinArea by mutableStateOf(10_000.0)
+        private set
+    var analysisCell by mutableStateOf(0.0)
+        private set
+    private var flowGrid: com.appdwg.core.FlowGrid? = null
+    private var analysisJob: Job? = null
+
+    fun runAnalysis(surface: Surface) {
+        analysisJob?.cancel()
+        val app = getApplication<Application>()
+        analysisJob = viewModelScope.launch {
+            val result = tracked(app.getString(R.string.ta_running)) {
+                withContext(Dispatchers.Default) {
+                    val g = surface.rasterize(512) ?: return@withContext null
+                    val slopes = com.appdwg.core.TerrainAnalysis.slopes(g)
+                    val px = IntArray(slopes.size) { i -> val s = slopes[i]; if (s.isNaN()) 0 else
+                        (com.appdwg.core.TerrainAnalysis.CLASSES[com.appdwg.core.TerrainAnalysis.classOf(s.toDouble())].third and 0x00FFFFFF) or (0xD8 shl 24) }
+                    val bmp = android.graphics.Bitmap.createBitmap(px, g.cols, g.rows, android.graphics.Bitmap.Config.ARGB_8888)
+                    val img = TerrainImage(surface.name, g.bounds, bmp.asImageBitmap())
+                    // About 128 arrows across the longer side; the plan thins them out by the zoom.
+                    val step = maxOf(1, maxOf(g.cols, g.rows) / 128)
+                    val arrows = ArrayList<Pair<com.appdwg.core.Point2, Double>>()
+                    for (r in step / 2 until g.rows step step) for (c in step / 2 until g.cols step step) {
+                        val a = com.appdwg.core.TerrainAnalysis.aspect(g, c, r)
+                        if (!a.isNaN()) arrows += com.appdwg.core.Point2(g.bounds.minX + (c + 0.5) * g.cellSize, g.bounds.maxY - (r + 0.5) * g.cellSize) to a
+                    }
+                    val flow = com.appdwg.core.TerrainAnalysis.flow(g) { !isActive }
+                    Triple(Triple(img, com.appdwg.core.TerrainAnalysis.classes(g, slopes), arrows), flow, g.cellSize)
+                }
+            } ?: return@launch
+            slopeImage = result.first.first; slopeClasses = result.first.second; flowArrows = result.first.third
+            flowGrid = result.second; analysisCell = result.third
+            analysisSurface = surface.name
+            flowChannels = flowGrid?.channels(flowMinArea).orEmpty()
+        }
+    }
+
+    fun changeFlowMinArea(a: Double) {
+        flowMinArea = a
+        flowChannels = flowGrid?.channels(a).orEmpty()
+    }
+
     // ---- Measurement bulletin ----
 
     private fun bulletinRows(): Pair<List<String>, List<List<String>>> {
@@ -1785,6 +1840,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     platform = null
                     asBuilt = null
                     volume = null
+                    analysisMode = 0; slopeImage = null; flowGrid = null; flowChannels = emptyList(); flowArrows = emptyList(); slopeClasses = emptyList()
                     road = null
                     roadMessage = null
                     platformVolumes = null
