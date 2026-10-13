@@ -31,6 +31,14 @@ import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.PointFile
 import com.appdwg.core.DxfWriter
 import com.appdwg.core.Platform
+import com.appdwg.core.Alignment
+import com.appdwg.core.AlignmentBuilder
+import com.appdwg.core.Corridor
+import com.appdwg.core.CorridorResult
+import com.appdwg.core.Pi
+import com.appdwg.core.Profile
+import com.appdwg.core.Region
+import com.appdwg.core.Template
 import com.appdwg.core.PlatformDesign
 import com.appdwg.core.PlatformResult
 import com.appdwg.core.Point3
@@ -79,6 +87,10 @@ data class ModelEntry(val name: String, val uris: List<Uri>, val model: Model3D,
 
 /** Name of the designed platform surface. */
 const val PLATFORM_LABEL = "Plataforma"
+
+/** Name of the designed road surfaces and the suffix of its axis. */
+const val ROAD_LABEL = "Corredor"
+const val ROAD_SUFFIX = " (projeto)"
 
 /** File laid over the open project; [uri] is null for a surface the app generated. */
 data class AddedFile(val label: String, val project: LandXmlProject, val uri: Uri?)
@@ -677,7 +689,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     p = p.copy(
                         alignments = p.alignments + drawing.alignments,
                         surfaces = p.surfaces.map { s ->
-                            if (s.name == "$label|$label") Surface(label, s.xs, s.ys, s.zs, s.triangles) else s
+                            // "Corredor|Corredor (terraplenagem)" reads better as "Corredor (terraplenagem)".
+                            val inner = s.name.removePrefix("$label|")
+                            if (s.name.startsWith("$label|") && inner.startsWith(label)) Surface(inner, s.xs, s.ys, s.zs, s.triangles) else s
                         },
                     )
                 }
@@ -772,6 +786,111 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
+    }
+
+    // ---- Road (corridor) design ----
+
+    var road by mutableStateOf<CorridorResult?>(null)
+        private set
+    var roadMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** Designs the road of the view settings and lays its surfaces and axis over the project. */
+    fun designRoad() { viewModelScope.launch { designRoadNow() } }
+
+    /** Alignment the road settings describe, with the file's profile if any; null when not defined yet. */
+    fun roadAxis(rp: RoadParams, project: LandXmlProject): Alignment? {
+        if (rp.alignmentIndex >= 0) return project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }.getOrNull(rp.alignmentIndex)
+        if (rp.pis.size < 2) return null
+        return AlignmentBuilder.fromPis("Eixo", rp.pis.mapIndexed { i, p ->
+            if (i == 0 || i == rp.pis.size - 1) Pi(p) else Pi(p, rp.radius, rp.spiral)
+        })
+    }
+
+    private suspend fun designRoadNow() {
+        val v = view ?: return
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val rp = v.roadParams
+        roadMessage = null
+        val terrain = project.surfaces.firstOrNull { it.name == rp.terrain }
+            ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) && !it.name.startsWith(PLATFORM_LABEL) }
+            ?: run { roadMessage = "Abra ou adicione uma superfície de terreno."; return }
+        val axis0 = roadAxis(rp, project) ?: run {
+            roadMessage = if (rp.alignmentIndex >= 0) "Alinhamento escolhido não existe mais." else "Desenhe o eixo com 2 PIs ou mais."
+            return
+        }
+        val profile = when {
+            rp.pvis.size >= 2 -> Profile("Greide", AlignmentBuilder.curvesFromK(rp.pvis.sortedBy { it.station }, rp.kValue).mapIndexed { i, p ->
+                // A curve length typed by the user wins over K.
+                rp.pvis.sortedBy { it.station }[i].takeIf { it.curveLength > 0 } ?: p
+            })
+            axis0.profile != null -> axis0.profile
+            else -> { roadMessage = "Defina o greide: ao menos 2 PVIs (estaca e cota)."; return }
+        }
+        val axis = Alignment(axis0.name + ROAD_SUFFIX, axis0.startStation, axis0.elements, profile)
+        try {
+            val r = tracked("Projetando estrada") { t ->
+                withContext(Dispatchers.Default) {
+                    t.step("Seções e taludes")
+                    val tpl = Template(rp.left, rp.right, rp.cut, rp.fill, rp.pavement)
+                    Corridor.build(axis, terrain, listOf(Region(axis.startStation, axis.endStation, tpl)), rp.superelevation, rp.step, rp.swell, ROAD_LABEL)
+                }
+            }
+            road = r
+            v.roadBuilt = true
+            v.roadParams = rp.copy(terrain = terrain.name)
+            addedFiles = addedFiles.filter { it.label != ROAD_LABEL } +
+                AddedFile(ROAD_LABEL, LandXmlProject(null, null, listOf(r.top, r.datum), listOf(r.alignment), emptyList(), emptyList()), null)
+            refreshJob?.cancel(); refreshNow()
+            // Earthwork against the terrain, as a map.
+            withContext(Dispatchers.Default) { SurfaceCompare.difference(terrain, r.datum) }?.let { d ->
+                difference = d
+                differenceImage = withContext(Dispatchers.Default) { DifferenceImage.of(d) }
+                differenceVisible = true
+            }
+            roadMessage = if (r.unresolved > 0) "${r.unresolved} seção(ões) com talude que não encontrou o terreno." else null
+        } catch (e: OutOfMemoryError) {
+            roadMessage = "Memória insuficiente para projetar."
+        } catch (e: Exception) {
+            roadMessage = "Não foi possível projetar: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    fun removeRoad() {
+        road = null
+        view?.roadBuilt = false
+        if (difference?.otherName?.startsWith(ROAD_LABEL) == true) clearDifference()
+        addedFiles = addedFiles.filter { it.label != ROAD_LABEL }
+        refreshProject()
+    }
+
+    /** Edges, shoulders, crest and toe lines of the road for DXF, in 3D. */
+    fun roadLines(): List<ExportLine> = road?.features?.flatMap { (code, runs) ->
+        runs.map { pts -> ExportLine("_ESTRADA_" + code.uppercase().replace(' ', '_'), pts.map { Point2(it.x, it.y) }, false, 3, zs = pts.map { it.z }) }
+    }.orEmpty()
+
+    /** Service note ("nota de serviço") per station, CSV with semicolons and decimal commas. */
+    fun exportServiceNote(target: Uri) {
+        val r = road ?: return
+        fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: ""
+        val text = buildString {
+            append("Estaca;Estaca (m);Terreno eixo;Greide;Corte/aterro eixo;Bordo E afast.;Bordo E cota;Bordo D afast.;Bordo D cota;" +
+                "Offset E tipo;Offset E afast.;Offset E cota;Offset D tipo;Offset D afast.;Offset D cota;Área corte (m2);Área aterro (m2)\r\n")
+            for (s in r.sections) {
+                val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
+                val oe = s.top.first(); val od = s.top.last()
+                val ca = s.terrainAxis?.let { s.grade - it }
+                append(listOf(StationFormat.estaca(s.station), n(s.station), n(s.terrainAxis), n(s.grade),
+                    ca?.let { (if (it >= 0) "A " else "C ") + StationFormat.decimal(kotlin.math.abs(it), 3) } ?: "",
+                    n(be?.offset?.let { -it }), n(be?.z), n(bd?.offset), n(bd?.z),
+                    oe.code, n(-oe.offset), n(oe.z), od.code, n(od.offset), n(od.z), n(s.cutArea), n(s.fillArea)).joinToString(";"))
+                append("\r\n")
+            }
+            append("\r\nEstaca;Corte (m3);Aterro (m3);Acumulado (Brückner, m3)\r\n")
+            for (row in r.volumes) append("${StationFormat.estaca(row.station)};${n(row.cut)};${n(row.fill)};${n(row.accumulated)}\r\n")
+            append("Total;${n(r.totalCut)};${n(r.totalFill)};\r\n")
+        }
+        writeTo(target, "nota de serviço") { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
     }
 
     // ---- 3D models ----
@@ -1199,6 +1318,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             drapeVisible = doc.drapeVisible
         }
         if (view?.platformBuilt == true) designPlatformNow()
+        if (view?.roadBuilt == true) designRoadNow()
         val v = view
         if (doc.compareShown && v != null && v.compareOther != PLATFORM_LABEL) {
             val project = (state as? ProjectState.Loaded)?.project
@@ -1259,6 +1379,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     keptOriginals = project.polylines.indices.toList()
                     undoStack.clear(); redoStack.clear(); canUndo = false; canRedo = false
                     platform = null
+                    road = null
+                    roadMessage = null
                     platformVolumes = null
                     platformMessage = null
                     view = ViewState(project)

@@ -88,6 +88,14 @@ exporta com os dados reais de projeto.
   de inserção (digitado ou tocado, cota do terreno), rotação, escala e unidade. Aparece no 3D e na planta
   (projeção), mostra nome/tipo/GlobalId ao tocar, liga/desliga por camada, entra no projeto salvo e no
   DXF (3DFACE). FBX/DWG 3D/Revit: exporte em OBJ, glTF ou IFC.
+- Estrada/corredor (botão "Estrada"): eixo do arquivo ou novo por PIs (desenhados ou dos `_POINTS`) com
+  curvas circulares e espirais (clotoides); greide do arquivo ou por PVIs digitados/gerados no terreno,
+  com curvas verticais por comprimento ou K; seção tipo por lado (pista, acostamento, sarjeta, valeta
+  em corte), pavimento, taludes de corte e aterro com bermas até o terreno; superelevação por estaca
+  (giro no eixo); seções a cada X m e nos pontos notáveis. Gera as superfícies "Corredor" (acabada) e
+  "Corredor (terraplenagem)", o eixo com greide (que funciona na seção e no perfil), o mapa de corte/
+  aterro, volumes por áreas médias com fator de empolamento, diagrama de Brückner, nota de serviço em
+  CSV e as linhas de bordo, acostamento, crista e pé no DXF.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

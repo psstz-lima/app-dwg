@@ -40,6 +40,9 @@ class ViewState(project: LandXmlProject) {
     var platformParams by mutableStateOf(PlatformParams())
     var platformTerrain by mutableStateOf<String?>(null)
     var platformBuilt by mutableStateOf(false)
+    var roadParams by mutableStateOf(RoadParams())
+    var roadBuilt by mutableStateOf(false)
+    var drawingRoad by mutableStateOf(false)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
 }
@@ -160,6 +163,8 @@ class ProjectDoc(
             put("platformParams", v.platformParams.toJson())
             v.platformTerrain?.let { put("platformTerrain", it) }
             put("platformBuilt", v.platformBuilt)
+            put("roadParams", v.roadParams.toJson())
+            put("roadBuilt", v.roadBuilt)
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
         }
@@ -191,6 +196,8 @@ class ProjectDoc(
             o.optJSONObject("platformParams")?.let { v.platformParams = PlatformParams.fromJson(it) }
             v.platformTerrain = o.optString("platformTerrain").ifEmpty { null }
             v.platformBuilt = o.optBoolean("platformBuilt")
+            o.optJSONObject("roadParams")?.let { v.roadParams = RoadParams.fromJson(it) }
+            v.roadBuilt = o.optBoolean("roadBuilt")
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
         }
@@ -226,5 +233,62 @@ data class PlatformParams(
             o.optDouble("cutRatio", 1.0), o.optDouble("cutBenchHeight", 8.0), o.optDouble("cutBenchWidth", 3.0), o.optDouble("cutBenchFall", 5.0),
             o.optDouble("fillRatio", 1.5), o.optDouble("fillBenchHeight", 8.0), o.optDouble("fillBenchWidth", 3.0), o.optDouble("fillBenchFall", 5.0),
         )
+    }
+}
+
+/** Road (corridor) design settings as typed in the road dialog. */
+data class RoadParams(
+    /** Alignment of the drawing to use, or −1 for one built from [pis]. */
+    val alignmentIndex: Int = -1,
+    val pis: List<Point2> = emptyList(),
+    val radius: Double = 200.0,
+    val spiral: Double = 40.0,
+    /** PVIs typed by the user; empty uses the alignment's own profile. */
+    val pvis: List<com.appdwg.core.Profile.Pvi> = emptyList(),
+    val kValue: Double = 20.0,
+    val left: com.appdwg.core.SideTemplate = com.appdwg.core.SideTemplate(),
+    val right: com.appdwg.core.SideTemplate = com.appdwg.core.SideTemplate(),
+    val cut: com.appdwg.core.SlopeRule = com.appdwg.core.SlopeRule(1.0, 8.0, 3.0, 5.0),
+    val fill: com.appdwg.core.SlopeRule = com.appdwg.core.SlopeRule(1.5, 8.0, 3.0, 5.0),
+    val pavement: Double = 0.5,
+    val step: Double = 20.0,
+    val swell: Double = 1.0,
+    val superelevation: List<com.appdwg.core.Superelevation> = emptyList(),
+    val terrain: String? = null,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("alignmentIndex", alignmentIndex)
+        put("pis", JSONArray(pis.map { JSONArray().put(it.x).put(it.y) }))
+        put("radius", radius); put("spiral", spiral); put("kValue", kValue)
+        put("pvis", JSONArray(pvis.map { JSONArray().put(it.station).put(it.elevation).put(it.curveLength) }))
+        put("left", side(left)); put("right", side(right))
+        put("cut", rule(cut)); put("fill", rule(fill))
+        put("pavement", pavement); put("step", step); put("swell", swell)
+        put("superelevation", JSONArray(superelevation.map { JSONArray().put(it.station).put(it.percent) }))
+        terrain?.let { put("terrain", it) }
+    }
+
+    companion object {
+        private fun side(s: com.appdwg.core.SideTemplate) = JSONArray(listOf(s.laneWidth, s.laneSlope, s.shoulderWidth, s.shoulderSlope, s.gutterWidth, s.gutterDepth, s.ditchWidth, s.ditchDepth))
+        private fun rule(r: com.appdwg.core.SlopeRule) = JSONArray(listOf(r.ratio, r.benchHeight, r.benchWidth, r.benchFall))
+        private fun sideOf(a: JSONArray?) = a?.let { com.appdwg.core.SideTemplate(it.getDouble(0), it.getDouble(1), it.getDouble(2), it.getDouble(3), it.getDouble(4), it.getDouble(5), it.getDouble(6), it.getDouble(7)) }
+        private fun ruleOf(a: JSONArray?) = a?.let { com.appdwg.core.SlopeRule(it.getDouble(0), it.getDouble(1), it.getDouble(2), it.getDouble(3)) }
+
+        fun fromJson(o: JSONObject): RoadParams {
+            fun pairs(name: String) = o.optJSONArray(name)?.let { a -> List(a.length()) { a.getJSONArray(it) } }.orEmpty()
+            val d = RoadParams()
+            return RoadParams(
+                o.optInt("alignmentIndex", -1),
+                pairs("pis").map { Point2(it.getDouble(0), it.getDouble(1)) },
+                o.optDouble("radius", d.radius), o.optDouble("spiral", d.spiral),
+                pairs("pvis").map { com.appdwg.core.Profile.Pvi(it.getDouble(0), it.getDouble(1), it.optDouble(2, 0.0)) },
+                o.optDouble("kValue", d.kValue),
+                sideOf(o.optJSONArray("left")) ?: d.left, sideOf(o.optJSONArray("right")) ?: d.right,
+                ruleOf(o.optJSONArray("cut")) ?: d.cut, ruleOf(o.optJSONArray("fill")) ?: d.fill,
+                o.optDouble("pavement", d.pavement), o.optDouble("step", d.step), o.optDouble("swell", d.swell),
+                pairs("superelevation").map { com.appdwg.core.Superelevation(it.getDouble(0), it.getDouble(1)) },
+                o.optString("terrain").ifEmpty { null },
+            )
+        }
     }
 }

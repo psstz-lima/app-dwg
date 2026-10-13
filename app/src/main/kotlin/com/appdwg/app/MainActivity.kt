@@ -257,6 +257,11 @@ private fun ProjectScreen(
     var showGoTo by remember(fileName) { mutableStateOf(false) }
     var showContourDialog by remember(fileName) { mutableStateOf(false) }
     var showPlatform by remember(fileName) { mutableStateOf(false) }
+    var showRoad by remember(fileName) { mutableStateOf(false) }
+    var drawingRoad by v::drawingRoad
+    val noteSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportServiceNote(uri)
+    }
     // Generate points: settings, dialog, what is being picked on the plan and the visible area.
     val gen = remember(fileName) { GenState() }
     // Line editor: on/off, its settings and the operation dialog.
@@ -296,7 +301,7 @@ private fun ProjectScreen(
         val kind = pendingExport
         pendingExport = null
         if (uri != null && kind != null) {
-            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines()
+            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines() + vm.roadLines()
             when (kind) {
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
@@ -417,6 +422,7 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    drawingRoad -> v.roadParams = v.roadParams.copy(pis = (v.roadParams.pis + it).let { l -> if (l.size > 1 && l[l.size - 2] == it) l.dropLast(1) else l })
                     modelPickFor != null -> { modelPoint = it; modelPickFor = null; showModels = true }
                     editing && edit.pick == EditPick.WINDOW -> {
                         val c = edit.windowCorner
@@ -457,9 +463,9 @@ private fun ProjectScreen(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            measure = if (measuring) measurePoints else if (drawingPlatform) platformOutline
+            measure = if (measuring) measurePoints else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                 else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
-            snap = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
+            snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
                 (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS)),
             selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION ||
                 (editing && edit.pick == EditPick.SELECT),
@@ -544,6 +550,7 @@ private fun ProjectScreen(
                     if (project.surfaces.isNotEmpty()) {
                         TextButton(onClick = { showContourDialog = true }) { Text("Curvas") }
                         TextButton(onClick = { showPlatform = true }) { Text("Projeto") }
+                        TextButton(onClick = { showRoad = true }) { Text("Estrada") }
                     }
                     if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) {
                         TextButton(onClick = {
@@ -586,6 +593,15 @@ private fun ProjectScreen(
         } else if (editing) {
             EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
+        } else if (drawingRoad) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toque os PIs do eixo, do início ao fim (${v.roadParams.pis.size}).", style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text("Desfazer") }
+                    TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text("Limpar") }
+                    TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text("Concluir") }
+                }
+            }
         } else if (modelPickFor != null) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -760,6 +776,14 @@ private fun ProjectScreen(
             onConfirm = { pts -> vm.addGenerated(pts); showGen = false },
             onDismiss = { showGen = false },
         )
+    }
+
+    if (showRoad) {
+        RoadDialog(vm, project, onDrawAxis = {
+            showRoad = false; measuring = false; showSection = false; showProfile = false; show3d = false
+            v.roadParams = v.roadParams.copy(alignmentIndex = -1)
+            drawingRoad = true
+        }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") }, onDismiss = { showRoad = false })
     }
 
     if (showPlatform) {
