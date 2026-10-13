@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -109,6 +110,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (uri != null) viewModel.open(uri)
     }
     val state = viewModel.state
+    val locator = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) viewModel.relocate(uri) }
     // "Open" and back ask first when the project has unsaved changes.
     var confirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showRecent by remember { mutableStateOf(false) }
@@ -117,7 +119,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
     }
-    fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".appdwg"
+    fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".gromatic"
     fun save(then: () -> Unit = {}) {
         val target = viewModel.projectUri
         if (target != null) viewModel.saveProject(target, then) else { afterSave = then; saver.launch(projectName()) }
@@ -137,7 +139,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         when (state) {
                             is ProjectState.Loaded -> state.fileName
                             is ProjectState.Loading -> state.fileName
-                            else -> "App DWG"
+                            else -> "Gromatic"
                         },
                         maxLines = 1,
                     )
@@ -200,7 +202,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                 is ProjectState.Loading -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     LoadProgress(state.task)
                 }
-                is ProjectState.Failed -> Message(state.message, openFile)
+                is ProjectState.Failed -> Message(state.message, openFile, viewModel.relocating?.let { { locator.launch(arrayOf("*/*")) } })
                 is ProjectState.Loaded -> ProjectScreen(state.fileName, state.project, state.terrain, viewModel)
             }
         }
@@ -226,7 +228,7 @@ private fun EmptyState(openFile: () -> Unit) {
 }
 
 @Composable
-private fun Message(text: String, openFile: () -> Unit) {
+private fun Message(text: String, openFile: () -> Unit, locate: (() -> Unit)? = null) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -234,7 +236,11 @@ private fun Message(text: String, openFile: () -> Unit) {
     ) {
         Text(text, textAlign = TextAlign.Center)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = openFile) { Text("Abrir outro arquivo") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (locate != null) Button(onClick = locate) { Text("Localizar desenho") }
+            if (locate != null) OutlinedButton(onClick = openFile) { Text("Abrir outro arquivo") }
+            else Button(onClick = openFile) { Text("Abrir outro arquivo") }
+        }
     }
 }
 

@@ -172,7 +172,7 @@ object LandXmlWriter {
         out.write("<LandXML xmlns=\"http://www.landxml.org/schema/LandXML-1.2\" version=\"1.2\">\n")
         out.write("  <Units><Metric linearUnit=\"meter\" areaUnit=\"squareMeter\" volumeUnit=\"cubicMeter\" angularUnit=\"decimal degrees\"/></Units>\n")
         if (epsg != null) out.write("  <CoordinateSystem epsgCode=\"${esc(epsg)}\"/>\n")
-        out.write("  <Application name=\"App DWG\"/>\n")
+        out.write("  <Application name=\"Gromatic\"/>\n")
         if (points.isNotEmpty() || cgPoints.isNotEmpty()) {
             out.write("  <CgPoints>\n")
             // LandXML stores northing first.

@@ -826,7 +826,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun exportNotesKmz(target: Uri, zone: Int, south: Boolean) {
         val list = notes
         val dir = notesDir
-        val name = (state as? ProjectState.Loaded)?.fileName ?: "App DWG"
+        val name = (state as? ProjectState.Loaded)?.fileName ?: "Gromatic"
         writeTo(target, "KMZ de anotações") { out -> NotesExport.kmz(list, zone, south, name, out) { f -> java.io.File(dir, f).takeIf { it.exists() }?.readBytes() } }
     }
 
@@ -1202,7 +1202,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportKml(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
         val p = exportProject() ?: return
-        val name = (state as? ProjectState.Loaded)?.fileName ?: "App DWG"
+        val name = (state as? ProjectState.Loaded)?.fileName ?: "Gromatic"
         // Axes, drawing lines and the file's own points go too, not only the _POINTS layer.
         val lines = extra + p.alignments.map { a -> ExportLine(a.name, a.vertices, false, 1) } +
             p.polylines.map { l -> ExportLine(l.layer, List(l.xs.size) { Point2(l.xs[it], l.ys[it]) }, l.closed, 7) }
@@ -1264,7 +1264,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- Project file (.appdwg) ----
+    // ---- Project file (.gromatic) ----
 
     /** User settings of the open drawing. */
     var view by mutableStateOf<ViewState?>(null)
@@ -1286,6 +1286,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val generated = addedFiles.any { it.uri == null && it.label == "$POINTS_LAYER superfície" }
         return ProjectDoc(
             main = main.toString(),
+            mainName = displayName(main),
             files = addedFiles.mapNotNull { f -> f.uri?.let { f.label to it.toString() } },
             pointsSurface = generated,
             drape = drapeUris.map { it.toString() },
@@ -1395,9 +1396,35 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             state = ProjectState.Failed(name, "Não foi possível ler o projeto: ${e.message ?: e.javaClass.simpleName}")
             return
         }
-        if (!openNow(Uri.parse(doc.main))) {
+        openProjectDoc(uri, doc, doc.main)
+    }
+
+    /** Project whose drawing could not be opened, waiting for the user to point to it ([relocate]). */
+    var relocating by mutableStateOf<Pair<Uri, ProjectDoc>?>(null)
+        private set
+
+    /** Opens the project waiting in [relocating] with [drawing] in place of the drawing it saved. */
+    fun relocate(drawing: Uri) {
+        val (projectFile, doc) = relocating ?: return
+        relocating = null
+        runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(drawing, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        viewModelScope.launch {
+            openProjectDoc(projectFile, doc, drawing.toString())
+            if (state is ProjectState.Loaded) { remember(projectFile); savedJson = null }
+        }
+    }
+
+    private suspend fun openProjectDoc(uri: Uri, doc: ProjectDoc, main: String) {
+        val name = displayName(uri)
+        relocating = null
+        if (!openNow(Uri.parse(main))) {
             val s = state
-            if (s is ProjectState.Failed) state = s.copy(message = s.message + "\n\nO projeto $name guarda o desenho em ${doc.main}; se o arquivo mudou de lugar, abra-o de novo e salve o projeto.")
+            if (s is ProjectState.Failed) {
+                relocating = uri to doc
+                val drawing = doc.mainName?.let { "o desenho \"$it\"" } ?: "um desenho"
+                state = s.copy(message = "O projeto $name usa $drawing, mas o app não consegue abri-lo " +
+                    "(o arquivo mudou de lugar ou o app foi reinstalado).\n\nToque em \"Localizar desenho\" e escolha o arquivo; depois salve o projeto.")
+            }
             return
         }
         val problems = ArrayList<String>()
@@ -1469,7 +1496,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     val t2 = System.nanoTime()
                     if (p.surfaces.isNotEmpty()) task.step("Gerando imagem do terreno")
                     val images = p.surfaces.mapNotNull { TerrainImage.of(it) }
-                    android.util.Log.i("AppDWG", "abrir $name: leitura ${(t1 - t0) / 1_000_000} ms, índice ${(t2 - t1) / 1_000_000} ms, " +
+                    android.util.Log.i("Gromatic", "abrir $name: leitura ${(t1 - t0) / 1_000_000} ms, índice ${(t2 - t1) / 1_000_000} ms, " +
                         "imagem ${(System.nanoTime() - t2) / 1_000_000} ms")
                     p to images
                 }

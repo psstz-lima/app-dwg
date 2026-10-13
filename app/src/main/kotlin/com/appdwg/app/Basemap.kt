@@ -109,7 +109,7 @@ class BasemapStore(context: Context) {
     private fun download(s: BasemapSource, t: TileId): File? = runCatching {
         val c = URL(WebTiles.url(s.url, t)).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000; c.readTimeout = 15_000
-        c.setRequestProperty("User-Agent", "AppDWG/1.0 (Android; levantamento de campo)")
+        c.setRequestProperty("User-Agent", "Gromatic/1.0 (Android; survey and earthworks)")
         try {
             if (c.responseCode != 200) return null
             val f = file(s, t)

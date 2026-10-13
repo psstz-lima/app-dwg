@@ -159,7 +159,7 @@ class NtripClient(
         val inp: InputStream = s.getInputStream()
         val auth = Base64.getEncoder().encodeToString("${settings.user}:${settings.password}".toByteArray())
         val req = "GET /${settings.mountpoint} HTTP/1.1\r\nHost: ${settings.host}\r\nNtrip-Version: Ntrip/2.0\r\n" +
-            "User-Agent: NTRIP AppDWG/1.0\r\nAuthorization: Basic $auth\r\nConnection: close\r\n\r\n"
+            "User-Agent: NTRIP Gromatic/1.0\r\nAuthorization: Basic $auth\r\nConnection: close\r\n\r\n"
         out.write(req.toByteArray(Charsets.ISO_8859_1)); out.flush()
         // Response header: "ICY 200 OK" (v1) or "HTTP/1.1 200 OK" (v2).
         val head = StringBuilder()

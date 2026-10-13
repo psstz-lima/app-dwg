@@ -47,7 +47,7 @@ class ViewState(project: LandXmlProject) {
     var exaggeration by mutableStateOf(1)
 }
 
-/** Everything a saved project (.appdwg) holds; files are kept as content URIs, not copied. */
+/** Everything a saved project (.gromatic, antes .appdwg) holds; files are kept as content URIs, not copied. */
 class ProjectDoc(
     val main: String,
     val files: List<Pair<String, String>>,
@@ -67,11 +67,14 @@ class ProjectDoc(
     val models: List<Pair<List<String>, com.appdwg.core.ModelPlacement>> = emptyList(),
     /** Field notes; their photos stay in the app's storage, named here. */
     val notes: List<com.appdwg.core.FieldNote> = emptyList(),
+    /** File name of [main], to name it when it cannot be opened. */
+    val mainName: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
         put("version", 1)
         put("main", main)
+        mainName?.let { put("mainName", it) }
         put("files", JSONArray(files.map { (label, uri) -> JSONObject().put("label", label).put("uri", uri) }))
         put("pointsSurface", pointsSurface)
         put("drape", JSONArray(drape))
@@ -104,12 +107,14 @@ class ProjectDoc(
     }
 
     companion object {
-        const val APP_TAG = "App DWG"
+        const val APP_TAG = "Gromatic"
+        /** Tag of projects saved before the app was renamed; still opened. */
+        private const val OLD_APP_TAG = "App DWG"
 
         fun looksLikeProject(head: String) = head.trimStart().startsWith("{") && head.contains("\"app\"")
 
         fun fromJson(o: JSONObject): ProjectDoc {
-            require(o.optString("app") == APP_TAG) { "não é um projeto do App DWG" }
+            require(o.optString("app") in setOf(APP_TAG, OLD_APP_TAG)) { "não é um projeto do Gromatic" }
             fun strings(name: String) = o.optJSONArray(name)?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty()
             val files = o.optJSONArray("files")?.let { a ->
                 List(a.length()) { a.getJSONObject(it).let { f -> f.getString("label") to f.getString("uri") } }
@@ -151,6 +156,7 @@ class ProjectDoc(
                             n.optString("text"), n.optString("photo").ifEmpty { null }, n.optString("time"))
                     }
                 }.orEmpty(),
+                o.optString("mainName").ifEmpty { null },
             )
         }
 

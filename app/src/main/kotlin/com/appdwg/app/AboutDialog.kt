@@ -20,11 +20,11 @@ fun AboutDialog(onDismiss: () -> Unit) {
     val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Sobre o App DWG") },
+        title = { Text("Sobre o Gromatic") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Versão $version")
-                Text("Visualização e ferramentas de campo para dados do Civil 3D (LandXML, DXF, pontos COGO), sem precisar de CAD.")
+                Text("Gromatic: Survey & Earthworks. Visualização e ferramentas de campo para dados do Civil 3D (LandXML, DXF, pontos COGO), sem precisar de CAD.")
 
                 Text("Privacidade", style = MaterialTheme.typography.titleSmall)
                 Text(
