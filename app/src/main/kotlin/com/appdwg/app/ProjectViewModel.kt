@@ -40,6 +40,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
+import org.json.JSONObject
 
 sealed interface ProjectState {
     data object Empty : ProjectState
@@ -99,7 +100,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     var drapeMessage by mutableStateOf<String?>(null)
         private set
 
+    /** Files of the picture over the surfaces, for saving the project. */
+    var drapeUris: List<Uri> = emptyList()
+        private set
+
     fun removeDrape() {
+        drapeUris = emptyList()
         drape = null
         drapeMessage = null
     }
@@ -120,7 +126,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val (uri, name) = picture
-        viewModelScope.launch {
+        uris.forEach { u ->
+            runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        }
+        viewModelScope.launch { drapeNow(project, uri, name, world, uris) }
+    }
+
+    private suspend fun drapeNow(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>) {
+        run {
             try {
                 val pic = tracked("Imagem $name") { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
                     ?: error("formato de imagem não reconhecido")
@@ -137,6 +150,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     else -> area to "esticada sobre a superfície (a imagem não tem georreferência)"
                 }
                 drape = Drape(name, bounds, pic.image, placement)
+                drapeUris = uris
                 drapeVisible = true
                 drapeMessage = if (!overlaps(bounds, area)) {
                     "A imagem foi $placement, mas não cai sobre a superfície. Confira se as duas estão no mesmo sistema de coordenadas."
@@ -175,20 +189,25 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         compareMessage = null
+        viewModelScope.launch { addFileNow(uri) }
+    }
+
+    private suspend fun addFileNow(uri: Uri, wantedLabel: String? = null) {
         val name = displayName(uri)
-        viewModelScope.launch {
+        run {
             try {
                 val drawing = tracked("Adicionando $name") { t -> withContext(Dispatchers.IO) { read(uri, t) } }
                 if (drawing.surfaces.isEmpty() && drawing.alignments.isEmpty() && drawing.cgPoints.isEmpty() && drawing.polylines.isEmpty()) {
                     compareMessage = "$name não tem superfície, alinhamento, ponto nem linha."
-                    return@launch
+                    return
                 }
                 // Unique label, so the same file name added twice still reads apart.
-                var label = name.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
+                var label = wantedLabel ?: name.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
                 var k = 2
                 while (addedFiles.any { it.label == label }) label = name.substringBeforeLast('.') + " ($k)".also { k++ }
                 addedFiles = addedFiles + AddedFile(label, drawing, uri)
-                refreshProject()
+                refreshJob?.cancel()
+                refreshNow()
                 compareMessage = "$name adicionado: " + listOfNotNull(
                     drawing.surfaces.size.takeIf { it > 0 }?.let { "$it superfície(s)" },
                     drawing.alignments.size.takeIf { it > 0 }?.let { "$it alinhamento(s)" },
@@ -307,7 +326,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val a = project.surfaces.firstOrNull { it.name == base } ?: return
         val b = project.surfaces.firstOrNull { it.name == other } ?: return
         compareMessage = null
-        viewModelScope.launch {
+        viewModelScope.launch { compareNow(a, b) }
+    }
+
+    private suspend fun compareNow(a: Surface, b: Surface) {
+        run {
             try {
                 val result = tracked("Comparando superfícies") { t ->
                     withContext(Dispatchers.Default) {
@@ -401,7 +424,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             pointsMessage = "São precisos 3 pontos com cota para gerar uma superfície."
             return
         }
-        viewModelScope.launch {
+        viewModelScope.launch { surfaceFromPointsNow() }
+    }
+
+    private suspend fun surfaceFromPointsNow() {
+        val pts = userPoints.filter { !it.z.isNaN() }
+        if (pts.size < 3) return
+        run {
             try {
                 val label = "$POINTS_LAYER superfície"
                 val surface = withContext(Dispatchers.Default) {
@@ -413,7 +442,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 addedFiles = addedFiles.filter { it.label != label } +
                     AddedFile(label, LandXmlProject(null, null, listOf(surface), emptyList(), emptyList(), emptyList()), null)
-                refreshProject()
+                refreshJob?.cancel()
+                refreshNow()
                 pointsMessage = "Superfície \"$label\" gerada com ${pts.size} pontos (${surface.triangleCount} triângulos)."
             } catch (e: Exception) {
                 pointsMessage = "Não foi possível gerar a superfície: ${e.message ?: e.javaClass.simpleName}"
@@ -513,10 +543,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Rebuilds the shown project from the base drawing and the loaded, attached xrefs. */
+    private var refreshJob: kotlinx.coroutines.Job? = null
+
+    /** Rebuilds the project in the background; a newer rebuild replaces one still running. */
     private fun refreshProject() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch { refreshNow() }
+    }
+
+    private suspend fun refreshNow() {
         val b = base ?: return
         val current = state as? ProjectState.Loaded ?: return
-        viewModelScope.launch {
+        run {
             val (project, terrain) = tracked("Atualizando referências") { withContext(Dispatchers.Default) {
                 var p = b.copy(
                     images = b.images.filter { it.file !in detached },
@@ -543,7 +581,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 p to baseTerrain + extra.mapNotNull { TerrainImage.of(it) }
             } }
             loadedXrefs = xrefDrawings.keys
-            state = current.copy(project = project, terrain = terrain)
+            state = (state as? ProjectState.Loaded ?: current).copy(project = project, terrain = terrain)
         }
     }
 
@@ -621,11 +659,154 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
 
+    // ---- Project file (.appdwg) ----
+
+    /** User settings of the open drawing. */
+    var view by mutableStateOf<ViewState?>(null)
+        private set
+    /** Where the project was last saved or opened from, and its content then (for "unsaved changes"). */
+    var projectUri by mutableStateOf<Uri?>(null)
+        private set
+    private var savedJson: String? = null
+    var projectMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun dismissProjectMessage() {
+        projectMessage = null
+    }
+
+    private fun currentDoc(): ProjectDoc? {
+        val main = sourceUri ?: return null
+        val v = view ?: return null
+        val generated = addedFiles.any { it.uri == null }
+        return ProjectDoc(
+            main = main.toString(),
+            files = addedFiles.mapNotNull { f -> f.uri?.let { f.label to it.toString() } },
+            pointsSurface = generated,
+            drape = drapeUris.map { it.toString() },
+            drapeVisible = drapeVisible,
+            points = userPoints,
+            view = ProjectDoc.viewToJson(v),
+            compareShown = difference != null,
+            cross = crossSelected,
+            unloaded = unloaded.toList(),
+            detached = detached.toList(),
+            pathEdits = pathEdits,
+        )
+    }
+
+    /** True when something changed since the drawing was opened or the project saved. */
+    fun isDirty(): Boolean {
+        val doc = currentDoc() ?: return false
+        return doc.toJson().toString() != savedJson
+    }
+
+    /** Writes the project file to [target]. */
+    fun saveProject(target: Uri, then: () -> Unit = {}) {
+        val doc = currentDoc() ?: return
+        viewModelScope.launch {
+            projectMessage = try {
+                val json = doc.toJson()
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(target, "wt")?.use {
+                        it.write(json.toString(2).toByteArray(Charsets.UTF_8))
+                    } ?: error("destino indisponível")
+                }
+                runCatching {
+                    getApplication<Application>().contentResolver.takePersistableUriPermission(
+                        target, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+                savedJson = json.toString()
+                projectUri = target
+                then()
+                "Projeto salvo em ${displayName(target)}."
+            } catch (e: Exception) {
+                "Não foi possível salvar o projeto: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /** Opens a drawing or, when [uri] is a project file, the drawing and everything saved with it. */
     fun open(uri: Uri) {
+        runCatching {
+            getApplication<Application>().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        projectMessage = null
+        viewModelScope.launch {
+            val head = withContext(Dispatchers.IO) {
+                runCatching {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { s ->
+                        val b = ByteArray(256); val n = s.read(b); if (n > 0) String(b, 0, n, Charsets.UTF_8) else ""
+                    }
+                }.getOrNull().orEmpty()
+            }
+            if (ProjectDoc.looksLikeProject(head)) openProject(uri) else if (openNow(uri)) {
+                projectUri = null
+                savedJson = currentDoc()?.toJson()?.toString()
+            }
+        }
+    }
+
+    private suspend fun openProject(uri: Uri) {
+        val name = displayName(uri)
+        val doc = try {
+            withContext(Dispatchers.IO) {
+                val text = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                    ?: error("arquivo indisponível")
+                ProjectDoc.fromJson(JSONObject(text))
+            }
+        } catch (e: Exception) {
+            state = ProjectState.Failed(name, "Não foi possível ler o projeto: ${e.message ?: e.javaClass.simpleName}")
+            return
+        }
+        if (!openNow(Uri.parse(doc.main))) {
+            val s = state
+            if (s is ProjectState.Failed) state = s.copy(message = s.message + "\n\nO projeto $name guarda o desenho em ${doc.main}; se o arquivo mudou de lugar, abra-o de novo e salve o projeto.")
+            return
+        }
+        val problems = ArrayList<String>()
+        unloaded = doc.unloaded.toSet()
+        detached = doc.detached.toSet()
+        pathEdits = doc.pathEdits
+        for ((label, u) in doc.files) {
+            val before = addedFiles.size
+            addFileNow(Uri.parse(u), label)
+            if (addedFiles.size == before) problems += label
+        }
+        userPoints = doc.points
+        if (doc.pointsSurface) surfaceFromPointsNow()
+        refreshJob?.cancel()
+        refreshNow()
+        view?.let { ProjectDoc.applyView(doc.view, it) }
+        crossSelected = doc.cross
+        if (doc.drape.isNotEmpty()) {
+            val project = (state as? ProjectState.Loaded)?.project
+            val uris = doc.drape.map(Uri::parse)
+            val named = uris.map { it to displayName(it) }
+            val world = named.firstOrNull { it.second.substringAfterLast('.', "").lowercase() in WORLD_FILE_EXTENSIONS }
+            val picture = named.firstOrNull { it !== world }
+            if (project != null && picture != null) drapeNow(project, picture.first, picture.second, world, uris)
+            drapeVisible = doc.drapeVisible
+        }
+        val v = view
+        if (doc.compareShown && v != null) {
+            val project = (state as? ProjectState.Loaded)?.project
+            val a = project?.surfaces?.firstOrNull { it.name == v.compareBase }
+            val b = project?.surfaces?.firstOrNull { it.name == v.compareOther }
+            if (a != null && b != null) compareNow(a, b)
+        }
+        projectUri = uri
+        savedJson = currentDoc()?.toJson()?.toString()
+        projectMessage = if (problems.isEmpty()) "Projeto $name aberto." else
+            "Projeto $name aberto, mas não foi possível abrir: ${problems.joinToString(", ")}."
+    }
+
+    private suspend fun openNow(uri: Uri): Boolean {
         val name = displayName(uri)
         val task = LoadTask("Abrindo $name")
         state = ProjectState.Loading(name, task)
-        viewModelScope.launch {
+        run {
             state = try {
                 val (project, terrain) = withContext(Dispatchers.IO) {
                     val p = read(uri, task)
@@ -660,6 +841,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     crossSelected = emptyList()
                     matrix = emptyMap()
                     stageProgress = null
+                    drapeUris = emptyList()
+                    view = ViewState(project)
                     restoreRasters(project)
                     restoreXrefs(project)
                     ProjectState.Loaded(name, project, terrain)
@@ -670,6 +853,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 ProjectState.Failed(name, "Não foi possível ler o arquivo: ${e.message ?: e.javaClass.simpleName}")
             }
         }
+        return state is ProjectState.Loaded
     }
 
     private fun read(uri: Uri, task: LoadTask? = null): LandXmlProject {

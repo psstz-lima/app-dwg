@@ -55,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
@@ -104,8 +105,24 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.open(uri)
     }
-    val openFile = { picker.launch(arrayOf("*/*")) }
     val state = viewModel.state
+    // "Open" and back ask first when the project has unsaved changes.
+    var confirm by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
+    }
+    fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".appdwg"
+    fun save(then: () -> Unit = {}) {
+        val target = viewModel.projectUri
+        if (target != null) viewModel.saveProject(target, then) else { afterSave = then; saver.launch(projectName()) }
+    }
+    fun guarded(action: () -> Unit) {
+        if (state is ProjectState.Loaded && viewModel.isDirty()) confirm = action else action()
+    }
+    val openFile = { guarded { picker.launch(arrayOf("*/*")) } }
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) { guarded { activity?.finish() } }
 
     Scaffold(
         topBar = {
@@ -120,11 +137,37 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         maxLines = 1,
                     )
                 },
-                actions = { TextButton(onClick = openFile) { Text("Abrir") } },
+                actions = {
+                    if (state is ProjectState.Loaded) {
+                        TextButton(onClick = { save() }) { Text("Salvar") }
+                        TextButton(onClick = { afterSave = null; saver.launch(projectName()) }) { Text("Salvar como") }
+                    }
+                    TextButton(onClick = openFile) { Text("Abrir") }
+                },
             )
         },
     ) { padding ->
+        confirm?.let { action ->
+            AlertDialog(
+                onDismissRequest = { confirm = null },
+                title = { Text("Salvar alterações?") },
+                text = { Text("O projeto tem alterações que ainda não foram salvas (camadas, pontos, medições, arquivos adicionados…).") },
+                confirmButton = { TextButton(onClick = { confirm = null; save(action) }) { Text("Salvar") } },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { confirm = null; action() }) { Text("Descartar") }
+                        TextButton(onClick = { confirm = null }) { Text("Cancelar") }
+                    }
+                },
+            )
+        }
+        viewModel.projectMessage?.let { msg ->
+            LaunchedEffect(msg) { kotlinx.coroutines.delay(5000); viewModel.dismissProjectMessage() }
+        }
         Box(Modifier.padding(padding).fillMaxSize()) {
+            viewModel.projectMessage?.let { msg ->
+                Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).zIndex(1f)) { Text(msg, Modifier.padding(12.dp)) }
+            }
             when (state) {
                 ProjectState.Empty -> EmptyState(openFile)
                 is ProjectState.Loading -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -175,6 +218,8 @@ private fun ProjectScreen(
     terrain: List<TerrainImage>,
     vm: ProjectViewModel,
 ) {
+    // Settings of this drawing live in the view model, so they go into the saved project.
+    val v = vm.view ?: return
     var showReferences by remember(fileName) { mutableStateOf(false) }
     var showDrape by remember(fileName) { mutableStateOf(false) }
     // Picture and, optionally, its world file, chosen together.
@@ -188,8 +233,8 @@ private fun ProjectScreen(
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
     var showCross by remember(fileName) { mutableStateOf(false) }
-    var compareBase by rememberSaveable(fileName) { mutableStateOf<String?>(null) }
-    var compareOther by rememberSaveable(fileName) { mutableStateOf<String?>(null) }
+    var compareBase by v::compareBase
+    var compareOther by v::compareOther
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) vm.addFile(uri)
     }
@@ -210,20 +255,20 @@ private fun ProjectScreen(
     // The tapped position survives rotation; the info shown is recomputed from it.
     var tapped by rememberSaveable(fileName, stateSaver = Point2Saver) { mutableStateOf<Point2?>(null) }
     // Measuring: taps add points instead of showing the info card; points survive rotation.
-    var measuring by rememberSaveable(fileName) { mutableStateOf(false) }
-    var measurePoints by rememberSaveable(fileName, stateSaver = PointListSaver) { mutableStateOf(emptyList<Point2>()) }
+    var measuring by v::measuring
+    var measurePoints by v::measurePoints
     // Cross section: alignment, station and half width survive rotation.
-    var showSection by rememberSaveable(fileName) { mutableStateOf(false) }
-    var sectionAlignment by rememberSaveable(fileName) { mutableStateOf(0) }
-    var sectionStation by rememberSaveable(fileName) { mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0) }
-    var sectionHalfWidth by rememberSaveable(fileName) { mutableStateOf(30.0) }
+    var showSection by v::showSection
+    var sectionAlignment by v::sectionAlignment
+    var sectionStation by v::sectionStation
+    var sectionHalfWidth by v::sectionHalfWidth
     var showWarnings by remember(fileName) { mutableStateOf(false) }
     var showLayers by remember(fileName) { mutableStateOf(false) }
     // Layer settings start from the drawing and survive rotation.
-    var offLayers by rememberSaveable(fileName) { mutableStateOf(ArrayList(project.layersOff)) }
-    var frozenLayers by rememberSaveable(fileName) { mutableStateOf(ArrayList(project.layersFrozen)) }
+    var offLayers by v::offLayers
+    var frozenLayers by v::frozenLayers
     // Layers that appear later (an xref loaded) start as their drawing saved them.
-    var knownLayers by rememberSaveable(fileName) { mutableStateOf(ArrayList(project.layers)) }
+    var knownLayers by v::knownLayers
     LaunchedEffect(project) {
         val new = project.layers.filter { it !in knownLayers }
         if (new.isNotEmpty()) {
@@ -232,7 +277,7 @@ private fun ProjectScreen(
             knownLayers = ArrayList(knownLayers + new)
         }
     }
-    var colorOverrides by rememberSaveable(fileName) { mutableStateOf(HashMap<String, Int>()) }
+    var colorOverrides by v::colorOverrides
     val hidden = remember(offLayers, frozenLayers) { offLayers.toSet() + frozenLayers }
     val layerColor: (String) -> Int? = { layer ->
         colorOverrides[layer]?.let { if (it == FOREGROUND) null else it } ?: project.layerColors[layer]
@@ -261,8 +306,8 @@ private fun ProjectScreen(
         marker = Color(0xFFFF9800),
     )
 
-    var show3d by rememberSaveable(fileName) { mutableStateOf(false) }
-    var exaggeration by rememberSaveable(fileName) { mutableStateOf(1) }
+    var show3d by v::show3d
+    var exaggeration by v::exaggeration
     val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } }
 
     Box(Modifier.fillMaxSize()) {

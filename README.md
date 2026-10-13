@@ -44,6 +44,11 @@ exporta com os dados reais de projeto.
   saldo de cada par (linha − coluna) e um toque na célula leva o mapa para a planta; as etapas
   mostram o volume de cada período, o executado, o que falta até o projeto e o % concluído. O cartão
   do ponto lista a cota de cada superfície marcada.
+- Salvar projeto ("Salvar" / "Salvar como"): grava um arquivo `.appdwg` com o desenho aberto, os
+  arquivos adicionados, a imagem sobre a superfície, os pontos `_POINTS`, camadas e cores, medição,
+  seção, comparação e referências. "Abrir" num `.appdwg` restaura tudo. Os arquivos não são
+  copiados: o projeto guarda onde estão. Ao abrir outro arquivo ou sair com alterações não salvas,
+  o app pergunta se quer salvar.
 - Funciona offline.
 
 ## Como exportar do Civil 3D
