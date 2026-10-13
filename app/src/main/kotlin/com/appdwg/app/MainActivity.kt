@@ -259,6 +259,8 @@ private fun ProjectScreen(
     // Generate points: settings, dialog, what is being picked on the plan and the visible area.
     val gen = remember(fileName) { GenState() }
     var showGen by remember(fileName) { mutableStateOf(false) }
+    // The preview is drawn on the plan, so the dialog steps aside while it is checked.
+    var genReview by remember(fileName) { mutableStateOf(false) }
     var genPick by remember(fileName) { mutableStateOf<GenPick?>(null) }
     var viewport by remember(fileName) { mutableStateOf<com.appdwg.core.Bounds?>(null) }
     var drawingPlatform by v::drawingPlatform
@@ -429,7 +431,7 @@ private fun ProjectScreen(
                 genPick = null
                 showGen = true
             },
-            selectedLine = if (genPick == null && !showGen) null else if (gen.grid) gen.areaLine?.takeIf { gen.area == GridArea.LINE } else gen.line,
+            selectedLine = if (genPick == null && !showGen && !genReview) null else if (gen.grid) gen.areaLine?.takeIf { gen.area == GridArea.LINE } else gen.line,
             previewPoints = gen.preview.map { Point2(it.x, it.y) },
             onViewport = { viewport = it },
             designLines = vm.platform?.let { r -> listOf(r.edge, r.daylight) + r.benches }?.map { l -> l.map { Point2(it.x, it.y) } }.orEmpty(),
@@ -522,6 +524,15 @@ private fun ProjectScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
             )
+        } else if (genReview) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${gen.preview.size} ponto(s) em ciano.", style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { genReview = false; showGen = true }) { Text("Ajustar") }
+                    TextButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text("Criar") }
+                    TextButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text("Cancelar") }
+                }
+            }
         } else if (genPick != null) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -658,6 +669,7 @@ private fun ProjectScreen(
                 if (pick == GenPick.AREA_DRAW) gen.drawnArea = emptyList()
                 genPick = pick
             },
+            onPreview = { showGen = false; measuring = false; showSection = false; showProfile = false; show3d = false; genReview = true },
             onConfirm = { pts -> vm.addGenerated(pts); showGen = false },
             onDismiss = { showGen = false },
         )

@@ -136,6 +136,7 @@ fun GeneratePointsDialog(
     existing: List<CogoPoint>,
     viewport: Bounds?,
     onPick: (GenPick) -> Unit,
+    onPreview: () -> Unit,
     onConfirm: (List<CogoPoint>) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -149,7 +150,8 @@ fun GeneratePointsDialog(
             Row {
                 TextButton(onClick = {
                     val (pts, why) = generatePoints(g, project, existing, viewport)
-                    g.preview = pts.orEmpty(); g.message = why ?: "${pts!!.size} ponto(s) na pré-visualização (em ciano na planta)."
+                    g.preview = pts.orEmpty(); g.message = why
+                    if (pts != null) onPreview()
                 }) { Text("Pré-visualizar") }
                 TextButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }) { Text("Criar ${g.preview.size} pontos") }
             }
