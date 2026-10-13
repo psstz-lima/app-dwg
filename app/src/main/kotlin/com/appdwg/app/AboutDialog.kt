@@ -31,11 +31,13 @@ fun AboutDialog(onDismiss: () -> Unit) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Versão $version")
+                Text("© 2026 Paulo Lima. Todos os direitos reservados.", style = MaterialTheme.typography.bodySmall)
                 Text("Gromatic: Survey & Earthworks. Visualização e ferramentas de campo para dados do Civil 3D (LandXML, DXF, pontos COGO), sem precisar de CAD.")
 
                 Text("Privacidade", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Os arquivos, pontos, anotações e fotos ficam só no aparelho; o app não tem conta, anúncios nem envia dados a servidores próprios. " +
+                        "A assinatura Gromatic Pro é cobrada pelo Google Play; o app não vê dados de pagamento. " +
                         "A localização é usada só enquanto o GPS está ligado, para mostrar a posição na planta. " +
                         "A internet é usada para baixar mapas de fundo e, se configurado, receber correções NTRIP do caster informado por você.",
                 )
@@ -46,16 +48,18 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 Text("OpenStreetMap: © colaboradores do OpenStreetMap, dados sob a licença ODbL (openstreetmap.org/copyright).")
                 Text("Os mapas são de terceiros e seguem os termos de uso de cada serviço.", style = MaterialTheme.typography.bodySmall)
 
-                Text("Software de código aberto", style = MaterialTheme.typography.titleSmall)
+                Text("Componentes de terceiros", style = MaterialTheme.typography.titleSmall)
                 for ((name, licence) in listOf(
                     "Kotlin e kotlinx.coroutines (JetBrains)" to "Apache 2.0",
                     "Jetpack Compose, Material 3, AndroidX Activity, Lifecycle e Core (Google)" to "Apache 2.0",
-                    "kXML2 (incluído no Android)" to "MIT",
+                    "Google Play Billing Library (Google)" to "do Android SDK e do Google Play",
+                    "Delaunator, triangulação adaptada (Vladimir Agafonkin, Mapbox)" to "ISC",
                     "Fontes Barlow, IBM Plex Sans e Plex Mono, Manrope, DM Mono, Atkinson Hyperlegible e JetBrains Mono" to "SIL Open Font License 1.1",
                 )) Text("$name — licença $licence")
-                Text("Texto da licença Apache 2.0: apache.org/licenses/LICENSE-2.0", style = MaterialTheme.typography.bodySmall)
+                Text("Textos das licenças: apache.org/licenses/LICENSE-2.0 e openfontlicense.org. Os componentes de terceiros seguem as próprias licenças; o restante do app é proprietário.",
+                    style = MaterialTheme.typography.bodySmall)
 
-                Text("Sistemas de coordenadas: SIRGAS 2000 / UTM (GRS80). Conversões pelas séries de Krüger.", style = MaterialTheme.typography.bodySmall)
+                Text("Sistemas de coordenadas: catálogo por região (UTM, LTM, RTM, Lambert e geográficas), Transversa de Mercator pelas séries de Krüger; transformações de SAD69, SAD69(96) e Córrego Alegre para SIRGAS 2000 com os parâmetros do IBGE.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },

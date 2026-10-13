@@ -148,3 +148,9 @@ que os testes passam e que o app compila.
 - `core/`: leitor de LandXML e geometria (estaca/afastamento, interpolação no TIN, greide), em Kotlin
   puro e testado na JVM. Rodar testes: `./gradlew -p core test`.
 - `app/`: app Android (Jetpack Compose). Gerar APK: `./gradlew :app:assembleDebug` (requer Android SDK).
+
+## Licença
+
+Software proprietário: © 2026 Paulo Lima. Todos os direitos reservados (ver `LICENSE`). Os
+componentes de terceiros (bibliotecas, fontes, algoritmo adaptado) seguem as próprias licenças,
+listadas em `NOTICE.md`.
