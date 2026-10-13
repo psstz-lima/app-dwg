@@ -34,6 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -361,33 +364,71 @@ private fun Modifier.drawLeftBorder(c: Color, w: Dp) = this.then(Modifier.drawBe
     drawLine(c, Offset(w.toPx() / 2, 0f), Offset(w.toPx() / 2, size.height), w.toPx())
 })
 
-/** Bottom line: coordinates of the tapped point (or GPS), station, scale and the GPS fix. */
+/** One footer item: its text and, when it has one, the quick menu it opens in place. */
+class FooterItem(val text: String, val dot: Color? = null, val menu: (@Composable ColumnScope.(close: () -> Unit) -> Unit)? = null)
+
+/**
+ * Bottom line: the tapped point (or GPS), station, scale and quick settings. Each item with a menu
+ * opens it right there, so drawing settings change without leaving the plan.
+ */
 @Composable
-fun StatusFooter(items: List<String>, gpsText: String?, gpsColor: Color) {
+fun StatusFooter(items: List<FooterItem>, right: List<FooterItem>) {
     val g = LocalG.current
     Row(
         Modifier.fillMaxWidth().height(if (g.choice == ThemeChoice.SUN) 46.dp else 42.dp).background(g.footer)
             .then(if (!g.floating && g.choice != ThemeChoice.SUN) Modifier.drawTopBorder(g.border, g.borderWidth) else Modifier)
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            for (s in items) Text(s, color = g.onFooter, fontFamily = g.mono, fontSize = if (g.choice == ThemeChoice.SUN) 14.sp else 13.sp, maxLines = 1,
-                fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Medium else FontWeight.Normal)
-        }
-        run {
-            val chip = g.choice == ThemeChoice.EARTH
-            Row(
-                Modifier.then(if (chip) Modifier.height(28.dp).clip(RoundedCornerShape(14.dp)).background(g.rail).padding(horizontal = 12.dp) else Modifier),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(if (gpsText != null) gpsColor else g.muted))
-                Text(gpsText ?: "GPS desligado", color = if (chip) g.panel else if (g.choice == ThemeChoice.SUN) Color.White else if (gpsText == null) g.muted else g.text, fontFamily = g.mono, fontSize = 13.sp,
-                    fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Normal)
-            }
+        // One scrolling line: the point first, then the quick settings; a divider between them.
+        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            for (it in items) FooterChip(it)
+            if (items.isNotEmpty() && right.isNotEmpty()) Box(Modifier.padding(horizontal = 6.dp).width(1.dp).height(22.dp).background(g.border))
+            for (it in right) FooterChip(it)
         }
     }
+}
+
+@Composable
+private fun FooterChip(item: FooterItem) {
+    val g = LocalG.current
+    var open by remember { mutableStateOf(false) }
+    val fg = if (g.choice == ThemeChoice.SUN) Color.White else g.onFooter
+    Box {
+        Row(
+            Modifier.height(32.dp).clip(RoundedCornerShape(6.dp))
+                .then(if (item.menu != null) Modifier.clickable(role = Role.Button) { open = true } else Modifier)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            item.dot?.let { Box(Modifier.size(10.dp).clip(CircleShape).background(it)) }
+            Text(item.text, color = fg, fontFamily = g.mono, fontSize = if (g.choice == ThemeChoice.SUN) 14.sp else 13.sp, maxLines = 1,
+                fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Medium else FontWeight.Normal)
+            if (item.menu != null) Text("▾", color = g.muted, fontSize = 11.sp)
+        }
+        item.menu?.let { m ->
+            androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) { m { open = false } }
+        }
+    }
+}
+
+/** A menu line; [checked] shows a mark in front (choices and toggles). */
+@Composable
+fun MenuLine(text: String, checked: Boolean? = null, enabled: Boolean = true, onClick: () -> Unit) {
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(text) },
+        leadingIcon = if (checked != null) ({ Text(if (checked) "✓" else "", fontWeight = FontWeight.Bold, modifier = Modifier.width(16.dp)) }) else null,
+        onClick = onClick, enabled = enabled,
+    )
+}
+
+/** Small title inside a footer menu. */
+@Composable
+fun MenuTitle(text: String) {
+    Text(text, style = androidx.compose.material3.MaterialTheme.typography.labelMedium, color = LocalG.current.muted,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
 }
 
 /** Settings › Appearance: the theme, with a small preview of each. */

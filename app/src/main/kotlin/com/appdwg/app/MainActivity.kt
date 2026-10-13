@@ -804,6 +804,7 @@ private fun ProjectScreen(
                     onContours = { contourDrawn = it },
                     viewKey = fileName,
                     zoom = planZoom,
+                    pointLabels = v.pointLabels,
                     marks = vm.asBuilt?.let { r -> r.rows.map { Point2(it.point.x, it.point.y) to asBuiltColor(r.status(it)) } }.orEmpty(),
                 )
 
@@ -1011,19 +1012,107 @@ private fun ProjectScreen(
     val shown = current ?: gpsInfo
     val metersPerInch = viewport?.let { vp -> if (planWidthPx > 0) vp.width / planWidthPx * xdpi else null }
     if (!vm.fullScreen && compact) ToolBar(railTools())
-    if (!vm.fullScreen) StatusFooter(
-        items = buildList {
-            shown?.let { p ->
-                add("E " + StationFormat.lengthValue(p.position.x)); add("N " + StationFormat.lengthValue(p.position.y))
-                p.terrainElevation?.let { add("Z " + StationFormat.lengthValue(it, 2)) }
-                p.alignment?.takeIf { !it.stationOffset.outside }?.let { a -> add(StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset)) }
-            }
-            metersPerInch?.let { add("1:" + niceScale(it / 0.0254)) }
-        },
-        gpsText = gnssFix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") },
-        gpsColor = if (gnssFix?.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(gnssFix?.quality),
-    )
-    }
+    if (!vm.fullScreen) {
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        val digits = v.coordDigits
+        val zoneNumber = gpsZoneNumber
+        StatusFooter(
+            items = buildList {
+                shown?.let { p ->
+                    val e = StationFormat.lengthValue(p.position.x, digits); val n = StationFormat.lengthValue(p.position.y, digits)
+                    val z = p.terrainElevation?.let { StationFormat.lengthValue(it, minOf(digits, 3)) }
+                    add(FooterItem("E $e   N $n" + (z?.let { "   Z $it" } ?: "")) { close ->
+                        MenuTitle("Coordenadas (${StationFormat.lengthUnit})")
+                        MenuLine("Copiar E N" + if (z != null) " Z" else "") {
+                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(listOfNotNull(e, n, z).joinToString(" "))); close()
+                        }
+                        MenuTitle("Casas decimais")
+                        for (d in listOf(0, 1, 2, 3, 4)) MenuLine(d.toString(), checked = d == digits) { v.coordDigits = d }
+                        MenuLine("Ir para coordenada ou estaca…") { close(); showGoTo = true }
+                    })
+                    p.alignment?.takeIf { !it.stationOffset.outside }?.let { a ->
+                        add(FooterItem(StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset)) { close ->
+                            MenuTitle(a.name)
+                            MenuLine("Ir para estaca…") { close(); showGoTo = true }
+                            MenuLine("Seção nesta estaca") {
+                                close(); sectionAlignment = project.alignments.indexOfFirst { it.name == a.name }.coerceAtLeast(0)
+                                sectionStation = a.stationOffset.station; showSection = true; showProfile = false; show3d = false
+                            }
+                            MenuLine("Perfil neste ponto") {
+                                close(); profileCursor = a.stationOffset.station; showProfile = true; showSection = false; show3d = false
+                            }
+                        })
+                    }
+                }
+                metersPerInch?.let { mpi ->
+                    add(FooterItem("1:" + niceScale(mpi / 0.0254)) { close ->
+                        MenuTitle("Escala da planta")
+                        for (nScale in listOf(100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000)) MenuLine("1:" + StationFormat.grouped(nScale.toDouble(), 0)) {
+                            close(); planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 1.0, scale = xdpi / (nScale * 0.0254))
+                        }
+                        MenuLine("Ajustar à tela") { close(); planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 0.0) }
+                    })
+                }
+            },
+            right = buildList {
+                // Drawing settings without leaving the plan.
+                val layers = project.layers + (if (vm.userPoints.isNotEmpty()) listOf(com.appdwg.core.POINTS_LAYER) else emptyList())
+                if (layers.isNotEmpty()) add(FooterItem("Camadas ${layers.count { it !in hidden }}/${layers.size}") { close ->
+                    MenuLine("Ligar todas") { offLayers = ArrayList(); frozenLayers = ArrayList() }
+                    MenuLine("Desligar todas") { offLayers = ArrayList(layers) }
+                    for (l in layers.take(60)) MenuLine(l.substringAfterLast('|'), checked = l !in hidden) {
+                        offLayers = ArrayList(offLayers.toSet().toggle(l, l !in offLayers)); if (l in frozenLayers) frozenLayers = ArrayList(frozenLayers - l)
+                    }
+                    if (layers.size > 60) MenuLine("Todas as camadas…") { close(); showLayers = true }
+                })
+                if (project.surfaces.isNotEmpty()) {
+                    val shownSurfaces = project.surfaces.map { it.name }.filter { it !in hidden }
+                    add(FooterItem(if (shownSurfaces.size == 1) shownSurfaces.single().substringAfterLast('|') else "Superfícies ${shownSurfaces.size}/${project.surfaces.size}") { close ->
+                        MenuTitle("Superfície mostrada")
+                        MenuLine("Todas", checked = shownSurfaces.size == project.surfaces.size) {
+                            offLayers = ArrayList(offLayers - project.surfaces.map { it.name }.toSet()); frozenLayers = ArrayList(frozenLayers - project.surfaces.map { it.name }.toSet())
+                        }
+                        for (sf in project.surfaces) MenuLine("Só " + sf.name.substringAfterLast('|'), checked = shownSurfaces == listOf(sf.name)) {
+                            offLayers = ArrayList((offLayers.toSet() + project.surfaces.map { it.name }) - sf.name); frozenLayers = ArrayList(frozenLayers - sf.name)
+                        }
+                    })
+                    add(FooterItem(if (showContours) "Curvas " + (contourDrawn?.let { StationFormat.length(it, if (StationFormat.toLength(it) < 0.99) 1 else 0) } ?: "") else "Curvas: não") { close ->
+                        MenuLine("Mostrar curvas de nível", checked = showContours) { showContours = !showContours }
+                        MenuTitle("Intervalo")
+                        val steps = if (com.appdwg.core.Display.imperial) listOf(0.0, 1.0, 2.0, 5.0, 10.0, 20.0).map { it * StationFormat.FOOT } else listOf(0.0, 0.5, 1.0, 2.0, 5.0, 10.0)
+                        for (iv in steps) MenuLine(if (iv == 0.0) "Automático" else StationFormat.length(iv, if (StationFormat.toLength(iv) < 0.99) 1 else 0),
+                            checked = showContours && contourInterval == iv) { contourInterval = iv; showContours = true }
+                    })
+                }
+                if (project.cgPoints.isNotEmpty() || vm.userPoints.isNotEmpty()) add(FooterItem(if (v.pointLabels) "Rótulos: sim" else "Rótulos: não") { _ ->
+                    MenuLine("Nome, descrição e cota dos pontos", checked = v.pointLabels) { v.pointLabels = !v.pointLabels }
+                })
+                add(FooterItem(StationFormat.lengthUnit) { close ->
+                    MenuTitle("Unidades")
+                    for (u in UnitChoice.entries) MenuLine(u.label, checked = vm.units.choice == u) { close(); vm.units.choose(u) }
+                })
+                add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: "Auto") { close ->
+                    MenuTitle("Idioma")
+                    for (l in LanguageChoice.entries) MenuLine(l.label, checked = vm.languages.choice == l) { close(); vm.languages.choose(l) }
+                })
+                add(FooterItem("Tema") { close ->
+                    for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }
+                })
+                add(FooterItem(project.coordinateSystem?.epsgCode?.let { "EPSG $it" } ?: ("UTM " + gpsZone)) { close ->
+                    MenuTitle("Zona UTM do GPS e do mapa")
+                    for (zn in 18..25) MenuLine("${zn}S", checked = zoneNumber == zn && !gpsZone.endsWith("N", true)) { close(); gpsZone = "${zn}S" }
+                })
+                val fix = gnssFix
+                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: "GPS desligado",
+                    dot = if (fix == null) g.muted else if (fix.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(fix.quality)) { close ->
+                    MenuLine(if (fix == null) "Conectar GPS…" else "GPS…") { close(); showGps = true }
+                    MenuLine("Calibração e geoide…") { close(); showCalibration = true }
+                    MenuLine("Seguir a posição na planta", checked = gpsFollow) { gpsFollow = !gpsFollow }
+                    if (fix != null) MenuLine("Desconectar") { close(); vm.gnss.disconnect() }
+                })
+            },
+        )
+    }    }
 
     if (showBulletin) {
         BulletinDialog(vm, onPdf = { bulletinPdf.launch("$baseName-boletim-${v.bulletinNumber}.pdf") },

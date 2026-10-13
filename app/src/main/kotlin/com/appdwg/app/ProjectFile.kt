@@ -54,6 +54,9 @@ class ViewState(project: LandXmlProject) {
     var bulletinNumber by mutableStateOf("1")
     var bulletinPeriod by mutableStateOf("")
     var sheetParams by mutableStateOf(SheetParams())
+    var pointLabels by mutableStateOf(true)
+    /** Decimal places of the coordinates in the footer. */
+    var coordDigits by mutableStateOf(3)
 }
 
 /** One line of the measurement bulletin; quantities in the item's unit, price per unit. */
@@ -233,6 +236,8 @@ class ProjectDoc(
             put("bulletinNumber", v.bulletinNumber)
             put("bulletinPeriod", v.bulletinPeriod)
             put("sheets", v.sheetParams.toJson())
+            put("pointLabels", v.pointLabels)
+            put("coordDigits", v.coordDigits)
         }
 
         fun applyView(o: JSONObject, v: ViewState) {
@@ -278,6 +283,8 @@ class ProjectDoc(
             v.bulletinNumber = o.optString("bulletinNumber", "1")
             v.bulletinPeriod = o.optString("bulletinPeriod")
             o.optJSONObject("sheets")?.let { v.sheetParams = SheetParams.fromJson(it) }
+            v.pointLabels = o.optBoolean("pointLabels", true)
+            v.coordDigits = o.optInt("coordDigits", 3).coerceIn(0, 6)
         }
     }
 }

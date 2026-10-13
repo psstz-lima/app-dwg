@@ -82,7 +82,8 @@ data class PlanColors(
 )
 
 /** Zoom asked from outside the plan (buttons): [factor] multiplies the scale, 0 fits the drawing. [id] repeats it. */
-data class ZoomRequest(val id: Int, val factor: Double)
+/** [scale], when set, is the wanted pixels per metre (a drawing scale chosen in the footer). */
+data class ZoomRequest(val id: Int, val factor: Double, val scale: Double? = null)
 
 /**
  * Pan/zoom plan view. Geometry is kept relative to [origin] so single-precision drawing stays
@@ -167,6 +168,8 @@ fun PlanView(
     marks: List<Pair<Point2, Color>> = emptyList(),
     /** Drainage lines (talvegues): segment ends and the area draining through, m². */
     channels: List<Triple<Point2, Point2, Double>> = emptyList(),
+    /** Names and descriptions next to points (off from the footer to unclutter the plan). */
+    pointLabels: Boolean = true,
     /** Downhill direction arrows: position and angle (radians, counterclockwise from east). */
     arrows: List<Pair<Point2, Double>> = emptyList(),
 ) {
@@ -245,7 +248,8 @@ fun PlanView(
     LaunchedEffect(zoom) {
         val z = zoom ?: return@LaunchedEffect
         val cam = camera ?: return@LaunchedEffect
-        if (z.factor == 0.0) {
+        if (z.scale != null) cam.scale = z.scale.coerceIn(1e-4, 1e4)
+        else if (z.factor == 0.0) {
             cam.centerX = bounds.center.x - origin.x
             cam.centerY = bounds.center.y - origin.y
             cam.scale = 0.9 * min(size.width / maxOf(bounds.width, 1.0), size.height / maxOf(bounds.height, 1.0))
@@ -384,8 +388,8 @@ fun PlanView(
 
         drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
-        drawPoints(project, cam, colors) { toScreen(it, cam) }
-        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors) { toScreen(it, cam) }
+        drawPoints(project, cam, colors, pointLabels) { toScreen(it, cam) }
+        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels) { toScreen(it, cam) }
         if (channels.isNotEmpty()) {
             val maxA = channels.maxOf { it.third }
             val minA = channels.minOf { it.third }
@@ -780,10 +784,11 @@ private fun DrawScope.drawPoints(
     project: LandXmlProject,
     cam: Camera,
     colors: PlanColors,
+    labels: Boolean,
     toScreen: (Point2) -> Offset,
 ) {
     if (project.cgPoints.isEmpty()) return
-    val showNames = project.cgPoints.size <= 2000 && cam.scale > 0.5
+    val showNames = labels && project.cgPoints.size <= 2000 && cam.scale > 0.5
     val paint = Paint().apply {
         isAntiAlias = true
         textSize = 10.sp.toPx()
@@ -874,11 +879,12 @@ private fun DrawScope.drawCogoPoints(
     layerColor: Int?,
     cam: Camera,
     colors: PlanColors,
+    withLabels: Boolean,
     toScreen: (Point2) -> Offset,
 ) {
     if (points.isEmpty()) return
     val color = layerColor?.let { Color(it) } ?: COGO_COLOR
-    val labels = points.size <= 3000 && cam.scale > 0.4
+    val labels = withLabels && points.size <= 3000 && cam.scale > 0.4
     val paint = Paint().apply {
         isAntiAlias = true
         textSize = 11.sp.toPx()
