@@ -110,23 +110,28 @@ class GnssManager(private val context: Context) {
         running = true
         connected = true
         status = "Simulando com arquivo NMEA"
+        // A previous replay may still be asleep between positions: it stops when it sees a newer one.
+        val gen = ++replayGen
+        fun current() = running && gen == replayGen
         thread(name = "gnss-replay") {
             try {
                 val lines = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.ISO_8859_1).lines() } ?: error("arquivo indisponível")
-                while (running) {
+                while (current()) {
                     for (l in lines) {
-                        if (!running) break
+                        if (!current()) break
                         onLine(l)
                         if (l.contains("GGA")) Thread.sleep(1000)
                     }
                 }
             } catch (e: Exception) {
-                main.post { status = "Falha na simulação: ${e.message ?: e.javaClass.simpleName}" }
+                if (gen == replayGen) main.post { status = "Falha na simulação: ${e.message ?: e.javaClass.simpleName}" }
             } finally {
-                main.post { connected = false }
+                if (gen == replayGen) main.post { connected = false }
             }
         }
     }
+
+    @Volatile private var replayGen = 0
 
     /** Corrections from an NTRIP caster, passed to the antenna when one is connected. */
     fun startNtrip(s: NtripSettings) {
@@ -156,6 +161,7 @@ class GnssManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun disconnect() {
         running = false
+        replayGen++
         stopNtrip()
         runCatching { btSocket?.close() }; btSocket = null
         nmeaListener?.let { l ->

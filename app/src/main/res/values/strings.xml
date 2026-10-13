@@ -4,6 +4,40 @@
 
     <string name="close">Fechar</string>
 
+    <!-- Site calibration and geoid -->
+    <string name="calib_tool">Calibrar</string>
+    <string name="calib_title">Calibração local e geoide</string>
+    <string name="calib_height">Altura do GPS</string>
+    <string name="calib_height_receiver">Do receptor (GGA)</string>
+    <string name="calib_height_grid">MAPGEO (grade)</string>
+    <string name="calib_height_fixed">N fixo</string>
+    <string name="calib_height_hint">A cota ortométrica é H = h − N: h é a altura elipsoidal do receptor e N a ondulação do geoide (MAPGEO2015 ou hgeoHNOR2020 do IBGE).</string>
+    <string name="calib_load_grid">Carregar grade (.txt / .gtx)</string>
+    <string name="calib_grid_hint">Grade em texto "latitude longitude N" (graus decimais), como a exportada pelo MAPGEO, ou arquivo GTX.</string>
+    <string name="calib_grid_loaded">%1$s: lat %2$s a %3$s, lon %4$s a %5$s</string>
+    <string name="calib_grid_error">Não foi possível ler a grade: %1$s</string>
+    <string name="calib_grid_memory">Grade grande demais para a memória deste aparelho. Recorte a região do projeto.</string>
+    <string name="calib_unavailable">arquivo indisponível</string>
+    <string name="calib_fixed_n">Ondulação N (m)</string>
+    <string name="calib_n_here">N na posição atual: %1$s m</string>
+    <string name="calib_n_outside">A posição atual está fora da grade.</string>
+    <string name="calib_no_ellipsoidal">O receptor não envia a separação do geoide (GGA), então não há altura elipsoidal.</string>
+    <string name="calib_pairs">Pontos de controle</string>
+    <string name="calib_pairs_hint">Para cada ponto de coordenadas conhecidas, escolha o ponto e meça com o GPS sobre ele. Com 1 ponto: translação; com 2 ou mais: rotação e escala (Helmert 2D); com 3 ou mais: plano inclinado na vertical.</string>
+    <string name="calib_pick_point">Ponto conhecido</string>
+    <string name="calib_measure">Medir com o GPS agora</string>
+    <string name="calib_no_fix">Sem posição do GPS. Conecte o receptor em GPS.</string>
+    <string name="calib_use_h">H</string>
+    <string name="calib_use_v">V</string>
+    <string name="calib_residual">res. E %1$s · N %2$s · Z %3$s</string>
+    <string name="calib_remove">Remover</string>
+    <string name="calib_apply">Aplicar a calibração na posição do GPS</string>
+    <string name="calib_fix_scale">Escala fixa (1,000000)</string>
+    <string name="calib_params">Escala %1$s (%2$s ppm) · rotação %3$s° · translação E %4$s m, N %5$s m</string>
+    <string name="calib_params_v">Vertical: deslocamento %1$s m · inclinação E %2$s m/km, N %3$s m/km</string>
+    <string name="calib_rms">RMS horizontal %1$s m · vertical %2$s m</string>
+    <string name="calib_none">Sem pontos de controle: a posição do GPS fica em UTM, sem calibração.</string>
+
     <!-- As-built check -->
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>

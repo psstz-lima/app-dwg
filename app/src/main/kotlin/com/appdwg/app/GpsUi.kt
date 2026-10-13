@@ -132,7 +132,7 @@ fun GpsDialog(
 
 /** Live receiver status: fix, satellites, precision, coordinates and station/offset on the nearest alignment. */
 @Composable
-fun GpsCard(gnss: GnssManager, east: Double, north: Double, info: PointInfo?, modifier: Modifier) {
+fun GpsCard(gnss: GnssManager, east: Double, north: Double, height: Double?, calibrated: Boolean, info: PointInfo?, modifier: Modifier) {
     val f = gnss.fix ?: return
     Card(modifier) {
         Column(Modifier.padding(10.dp)) {
@@ -144,13 +144,14 @@ fun GpsCard(gnss: GnssManager, east: Double, north: Double, info: PointInfo?, mo
             val prec = listOfNotNull(f.sigmaH?.let { "H ${StationFormat.decimal(it, 3)}" }, f.sigmaV?.let { "V ${StationFormat.decimal(it, 3)}" })
             Text(if (prec.isNotEmpty()) "Precisão " + prec.joinToString(" · ") + " m" else f.hdop?.let { "HDOP ${StationFormat.decimal(it, 1)}" } ?: "",
                 style = MaterialTheme.typography.bodySmall)
-            Text("E ${StationFormat.decimal(east, 3)} · N ${StationFormat.decimal(north, 3)}" + (f.altitude?.let { " · cota ${StationFormat.decimal(it, 3)}" } ?: ""),
+            Text("E ${StationFormat.decimal(east, 3)} · N ${StationFormat.decimal(north, 3)}" + (height?.let { " · cota ${StationFormat.decimal(it, 3)}" } ?: "") +
+                if (calibrated) " · calibrado" else "",
                 style = MaterialTheme.typography.bodySmall)
             info?.alignment?.takeIf { !it.stationOffset.outside }?.let { a ->
                 Text("${a.name}: ${StationFormat.estaca(a.stationOffset.station)} · ${StationFormat.offset(a.stationOffset.offset)}", style = MaterialTheme.typography.bodySmall)
             }
             info?.terrainElevation?.let { t ->
-                Text("Terreno ${StationFormat.decimal(t, 3)}" + (f.altitude?.let { z -> val d = z - t; " · antena ${if (d >= 0) "+" else "−"}${StationFormat.decimal(abs(d), 3)}" } ?: ""),
+                Text("Terreno ${StationFormat.decimal(t, 3)}" + (height?.let { z -> val d = z - t; " · antena ${if (d >= 0) "+" else "−"}${StationFormat.decimal(abs(d), 3)}" } ?: ""),
                     style = MaterialTheme.typography.bodySmall)
             }
         }

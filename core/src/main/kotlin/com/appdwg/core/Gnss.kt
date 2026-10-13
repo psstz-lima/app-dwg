@@ -36,7 +36,12 @@ data class GnssFix(
     /** Seconds since the last differential correction, from GGA. */
     val correctionAge: Double? = null,
     val time: String? = null,
-)
+    /** Geoid separation the receiver used (GGA field 11): ellipsoidal height = altitude + this. */
+    val geoidSeparation: Double? = null,
+) {
+    /** Height above the ellipsoid, when the receiver sends both parts. */
+    val ellipsoidalHeight: Double? get() = altitude?.let { a -> geoidSeparation?.let { a + it } }
+}
 
 /**
  * NMEA 0183 reader: GGA gives the position and fix, GST the precision. Sentences with a bad
@@ -66,7 +71,7 @@ class NmeaParser {
                 val q = FixQuality.of(f.getOrNull(6)?.toIntOrNull() ?: 0)
                 if (q == FixQuality.NONE) return null
                 GnssFix(lat, lon, f.getOrNull(9)?.toDoubleOrNull(), q, f.getOrNull(7)?.toIntOrNull(), f.getOrNull(8)?.toDoubleOrNull(),
-                    sigmaH, sigmaV, f.getOrNull(13)?.toDoubleOrNull(), f.getOrNull(1))
+                    sigmaH, sigmaV, f.getOrNull(13)?.toDoubleOrNull(), f.getOrNull(1), f.getOrNull(11)?.toDoubleOrNull())
             }
             else -> null
         }

@@ -337,7 +337,16 @@ private fun ProjectScreen(
     var gpsFollow by remember(fileName) { mutableStateOf(true) }
     var gpsZone by remember(fileName) { mutableStateOf((com.appdwg.core.Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
     val gnssFix = vm.gnss.fix
-    val gpsPoint = gnssFix?.let { f -> gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull()?.let { z -> com.appdwg.core.UtmForward.fromGeographic(f.latitude, f.longitude, z) } }
+    // GNSS position in the local grid: UTM, the chosen geoid height and the site calibration when on.
+    val calibration = remember(v.calibrationPairs, v.calibrationFixScale, v.calibrationOn) {
+        if (v.calibrationOn) com.appdwg.core.Calibration.fit(v.calibrationPairs, v.calibrationFixScale) else null
+    }
+    val gpsZoneNumber = gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull()
+    val gpsLocal = gnssFix?.let { f -> gpsZoneNumber?.let { z -> vm.geo.local(f, z, calibration) } }
+    val gpsPoint = gpsLocal?.let { Point2(it.x, it.y) }
+    val gpsHeight = gpsLocal?.z?.takeIf { !it.isNaN() }
+    var showCalibration by remember(fileName) { mutableStateOf(false) }
+    val geoidPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.loadGeoidGrid(uri) }
     val context = androidx.compose.ui.platform.LocalContext.current
     var pendingPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
     val permissionAsker = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
@@ -539,6 +548,7 @@ private fun ProjectScreen(
     val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 900
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val asBuiltLabel = androidx.compose.ui.res.stringResource(R.string.asbuilt_tool)
+    val calibLabel = androidx.compose.ui.res.stringResource(R.string.calib_tool)
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
@@ -560,6 +570,7 @@ private fun ProjectScreen(
         add(RailTool(GIcon.MODELS, "Modelos") { showModels = true })
         add(RailTool(GIcon.NOTE, "Anotar", addingNote) { addingNote = true; measuring = false; show3d = false })
         add(RailTool(GIcon.GPS, "GPS", vm.gnss.connected) { showGps = true })
+        add(RailTool(GIcon.CALIBRATE, calibLabel, v.calibrationOn) { showCalibration = true })
         add(RailTool(GIcon.CALC, "Cálculos") { showCalc = true })
         add(RailTool(GIcon.MAP, "Mapa", vm.basemap.enabled) { showBasemap = true })
         add(RailTool(GIcon.GOTO, "Ir para") { showGoTo = true })
@@ -608,7 +619,7 @@ private fun ProjectScreen(
             InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
         }
         if (gpsPoint != null && !show3d) {
-            GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsInfo, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp).widthIn(max = 420.dp))
+            GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp).widthIn(max = 420.dp))
         }
     }
 
@@ -816,7 +827,7 @@ private fun ProjectScreen(
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("Toque na planta onde fica a anotação.", style = MaterialTheme.typography.bodyMedium)
-                            if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gnssFix?.altitude) to true }) { Text("Na posição do GPS") }
+                            if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text("Na posição do GPS") }
                             TextButton(onClick = { addingNote = false }) { Text("Cancelar") }
                         }
                     }
@@ -924,7 +935,7 @@ private fun ProjectScreen(
         if (wide && !full) SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
             if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + " da leitura") }
-            if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsInfo, Modifier.fillMaxWidth())
+            if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.fillMaxWidth())
             if (measuring) MeasureCard(measurement, onUndo = { measurePoints = measurePoints.dropLast(1) }, onClear = { measurePoints = emptyList() },
                 onDone = { measuring = false }, modifier = Modifier.fillMaxWidth())
             selectedPoint?.let { pt ->
@@ -969,6 +980,10 @@ private fun ProjectScreen(
         gpsText = gnssFix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.decimal(it, 3) + " m" } ?: "") },
         gpsColor = if (gnssFix?.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(gnssFix?.quality),
     )
+    }
+
+    if (showCalibration) {
+        CalibrationDialog(vm, v, project, gpsZoneNumber, onLoadGrid = { geoidPicker.launch(arrayOf("*/*")) }, onDismiss = { showCalibration = false })
     }
 
     if (showAsBuilt) {

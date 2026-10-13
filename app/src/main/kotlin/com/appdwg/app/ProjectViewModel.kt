@@ -835,6 +835,34 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Receiver connection; lives with the view model so rotating the screen keeps it. */
     val gnss = GnssManager(app)
+    val geo = Geodesy(app).also { g -> g.gridUri?.let { u -> viewModelScope.launch { readGeoidGrid(Uri.parse(u), quiet = true) } } }
+
+    /** Loads a geoid grid (MAPGEO/hgeoHNOR as text "lat lon N", or GTX) and keeps it for the next sessions. */
+    fun loadGeoidGrid(uri: Uri) {
+        runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        viewModelScope.launch { if (readGeoidGrid(uri, quiet = false)) geo.rememberGrid(uri.toString()) }
+    }
+
+    private suspend fun readGeoidGrid(uri: Uri, quiet: Boolean): Boolean {
+        val app = getApplication<Application>()
+        val name = displayName(uri)
+        return try {
+            val g = withContext(Dispatchers.IO) {
+                app.contentResolver.openInputStream(uri)?.use { s ->
+                    if (name.endsWith(".gtx", true)) com.appdwg.core.GeoidGrid.readGtx(name, s)
+                    else com.appdwg.core.GeoidGrid.readText(name, s.readBytes().toString(Charsets.ISO_8859_1))
+                } ?: error(app.getString(R.string.calib_unavailable))
+            }
+            geo.grid = g
+            geo.gridMessage = app.getString(R.string.calib_grid_loaded, name,
+                StationFormat.decimal(g.south, 2), StationFormat.decimal(g.north, 2), StationFormat.decimal(g.west, 2), StationFormat.decimal(g.east, 2))
+            true
+        } catch (e: OutOfMemoryError) {
+            if (!quiet) geo.gridMessage = app.getString(R.string.calib_grid_memory); false
+        } catch (e: Exception) {
+            if (!quiet) geo.gridMessage = app.getString(R.string.calib_grid_error, e.message ?: e.javaClass.simpleName); false
+        }
+    }
     val basemap = BasemapStore(app)
     val themes = ThemeStore(app)
 

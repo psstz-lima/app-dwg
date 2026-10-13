@@ -45,6 +45,10 @@ class ViewState(project: LandXmlProject) {
     var drawingRoad by mutableStateOf(false)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
+    // Site calibration of the GNSS position to the local grid.
+    var calibrationPairs by mutableStateOf<List<com.appdwg.core.CalibrationPair>>(emptyList())
+    var calibrationOn by mutableStateOf(false)
+    var calibrationFixScale by mutableStateOf(false)
 }
 
 /** Everything a saved project (.gromatic, antes .appdwg) holds; files are kept as content URIs, not copied. */
@@ -186,6 +190,13 @@ class ProjectDoc(
             put("roadBuilt", v.roadBuilt)
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
+            put("calibration", JSONArray(v.calibrationPairs.map { c ->
+                JSONObject().put("name", c.name).put("h", c.useHorizontal).put("v", c.useVertical)
+                    .put("m", JSONArray().put(c.measured.x).put(c.measured.y).put(if (c.measured.z.isNaN()) JSONObject.NULL else c.measured.z))
+                    .put("l", JSONArray().put(c.local.x).put(c.local.y).put(if (c.local.z.isNaN()) JSONObject.NULL else c.local.z))
+            }))
+            put("calibrationOn", v.calibrationOn)
+            put("calibrationFixScale", v.calibrationFixScale)
         }
 
         fun applyView(o: JSONObject, v: ViewState) {
@@ -219,6 +230,14 @@ class ProjectDoc(
             v.roadBuilt = o.optBoolean("roadBuilt")
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
+            o.optJSONArray("calibration")?.let { a ->
+                fun p3(j: JSONArray) = com.appdwg.core.Point3(j.getDouble(0), j.getDouble(1), j.optDouble(2))
+                v.calibrationPairs = List(a.length()) { a.getJSONObject(it) }.map { c ->
+                    com.appdwg.core.CalibrationPair(c.optString("name"), p3(c.getJSONArray("m")), p3(c.getJSONArray("l")), c.optBoolean("h", true), c.optBoolean("v", true))
+                }
+            }
+            v.calibrationOn = o.optBoolean("calibrationOn")
+            v.calibrationFixScale = o.optBoolean("calibrationFixScale")
         }
     }
 }
