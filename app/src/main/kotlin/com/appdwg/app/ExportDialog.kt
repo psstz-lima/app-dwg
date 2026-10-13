@@ -28,6 +28,8 @@ enum class ExportKind(val label: String, val suffix: String) {
     LANDXML("Superfícies e pontos LandXML", "-landxml.xml"),
     POINTS("Pontos PDENZ (TXT)", "-pontos.txt"),
     KML("Pontos e linhas KML (Google Earth)", ".kml"),
+    GEOJSON("Pontos e linhas GeoJSON", ".geojson"),
+    SHAPEFILE("Pontos e linhas Shapefile (ZIP)", "-shapefile.zip"),
     VOLUMES("Volumes CSV", "-volumes.csv"),
     NOTES_KMZ("Anotações com fotos KMZ (Google Earth)", "-anotacoes.kmz"),
     NOTES_CSV("Anotações CSV", "-anotacoes.csv"),
@@ -82,6 +84,14 @@ fun ExportDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                     )
                 }
+                Row {
+                    val zoneOk = zone.trimEnd('S', 's', 'N', 'n').toIntOrNull() in 1..60
+                    OutlinedButton(onClick = { onExport(ExportKind.GEOJSON) }, enabled = zoneOk) { Text(ExportKind.GEOJSON.label) }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { onExport(ExportKind.SHAPEFILE) }, enabled = zoneOk) { Text(ExportKind.SHAPEFILE.label) }
+                }
+                Text("GeoJSON em longitude/latitude (WGS84 ≈ SIRGAS 2000); Shapefile nas coordenadas do projeto, com .prj SIRGAS 2000 / UTM da zona acima. " +
+                    "Para importar, abra ou adicione (Comparar) um .geojson, .json, .shp ou um .zip com o shapefile.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { onExport(ExportKind.VOLUMES) }, enabled = vm.hasVolumes) { Text(ExportKind.VOLUMES.label) }
                 Row {
                     OutlinedButton(onClick = { onExport(ExportKind.NOTES_KMZ) }, enabled = vm.notes.isNotEmpty()) { Text(ExportKind.NOTES_KMZ.label) }

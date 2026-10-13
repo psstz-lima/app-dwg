@@ -55,6 +55,8 @@ import com.appdwg.core.ExportLine
 import com.appdwg.core.KmlWriter
 import com.appdwg.core.LandXmlWriter
 import com.appdwg.core.Point2
+import com.appdwg.core.Utm
+import com.appdwg.core.UtmForward
 import com.appdwg.core.StationFormat
 import com.appdwg.core.SurfaceCompare
 import com.appdwg.core.SurfaceDifference
@@ -1543,6 +1545,34 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Points and lines for GIS files: the drawing's, the axes and [extra] (measurement, section…). */
+    private fun gisContent(extra: List<ExportLine>): Pair<List<CogoPoint>, List<com.appdwg.core.Polyline>>? {
+        val p = exportProject() ?: return null
+        val hidden = hiddenLayers()
+        val lines = extra.map { l -> com.appdwg.core.Polyline(l.layer, DoubleArray(l.points.size) { l.points[it].x }, DoubleArray(l.points.size) { l.points[it].y }, l.closed) } +
+            p.alignments.map { a -> com.appdwg.core.Polyline(a.name, DoubleArray(a.vertices.size) { a.vertices[it].x }, DoubleArray(a.vertices.size) { a.vertices[it].y }, false) } +
+            p.polylines.filter { it.layer !in hidden }
+        val points = (if (POINTS_LAYER in hidden) emptyList() else p.points) +
+            p.cgPoints.map { c -> CogoPoint(c.name, c.code ?: "", c.position.x, c.position.y, c.position.z) }
+        return points to lines
+    }
+
+    /** GeoJSON in longitude/latitude (RFC 7946), from the project's UTM [zone]. */
+    fun exportGeoJson(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
+        val (points, lines) = gisContent(extra) ?: return
+        writeTo(target, "GeoJSON") { out ->
+            out.writer(Charsets.UTF_8).let { w ->
+                com.appdwg.core.Gis.writeGeoJson(points, lines, { x, y -> Utm.toGeographic(x, y, zone, south).let { (lat, lon) -> lon to lat } }, w); w.flush()
+            }
+        }
+    }
+
+    /** Shapefiles in a ZIP, in the project's coordinates (SIRGAS 2000 / UTM .prj when the zone is known). */
+    fun exportShapefile(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
+        val (points, lines) = gisContent(extra) ?: return
+        writeTo(target, "Shapefile") { out -> com.appdwg.core.Gis.writeShapefileZip(points, lines, com.appdwg.core.Gis.sirgasUtmPrj(zone, south), out) }
+    }
+
     fun exportKml(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
         val p = exportProject() ?: return
         val name = (state as? ProjectState.Loaded)?.fileName ?: "Gromatic"
@@ -1898,6 +1928,22 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return state is ProjectState.Loaded
     }
 
+    /**
+     * Drawing from GIS features. Longitude/latitude (by the .prj, or by the range of the values) go
+     * to UTM: the open project's zone, else the zone of the data. Projected values are kept.
+     */
+    private fun gisProject(layer: String, epsg: String?, geographic: Boolean?, read: (com.appdwg.core.GeoToPlan) -> List<com.appdwg.core.GisFeature>): LandXmlProject {
+        val xs = ArrayList<Double>(); val ys = ArrayList<Double>()
+        val raw = read { x, y -> xs += x; ys += y; Point2(x, y) }
+        val geo = geographic ?: com.appdwg.core.Gis.looksGeographic(xs, ys)
+        if (!geo) return com.appdwg.core.Gis.toProject(raw, layer, epsg)
+        val open = (state as? ProjectState.Loaded)?.project?.coordinateSystem?.epsgCode
+        val zone = Utm.zoneOfEpsg(open) ?: com.appdwg.core.Gis.utmZoneOf(xs.average())
+        val south = Utm.zoneOfEpsg(open) != null || ys.average() < 0
+        val features = read { lon, lat -> UtmForward.fromGeographic(lat, lon, zone).let { if (south) it else Point2(it.x, it.y - 10_000_000) } }
+        return com.appdwg.core.Gis.toProject(features, layer, if (south && zone in 18..25) (31960 + zone).toString() else null)
+    }
+
     private fun read(uri: Uri, task: LoadTask? = null): LandXmlProject {
         val resolver = getApplication<Application>().contentResolver
         val size = fileSize(uri)
@@ -1910,7 +1956,29 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val n = stream.readNBytesCompat(head)
             stream.reset()
             val text = String(head, 0, n, Charsets.ISO_8859_1)
+            val fileName = displayName(uri)
+            val layer = fileName.substringBeforeLast('.')
             when {
+                // Shapefile: a ZIP holding .shp (+ .dbf, .prj), or a bare .shp (geometry only).
+                text.startsWith("PK\u0003\u0004") && fileName.endsWith(".zip", true) -> {
+                    val parts = com.appdwg.core.Gis.unzipShapefiles(stream.readBytes()).ifEmpty { error("o ZIP não tem arquivo .shp") }
+                    // Each shapefile on its own layer (its name), all in one drawing.
+                    val drawings = parts.map { sp ->
+                        gisProject(sp.name, com.appdwg.core.Gis.prjEpsg(sp.prj), if (sp.prj == null) null else com.appdwg.core.Gis.prjIsGeographic(sp.prj)) { toPlan ->
+                            com.appdwg.core.Gis.readShapefile(sp.shp, sp.dbf, toPlan)
+                        }
+                    }
+                    return@use drawings.first().copy(cgPoints = drawings.flatMap { it.cgPoints }, polylines = drawings.flatMap { it.polylines },
+                        coordinateSystem = drawings.firstNotNullOfOrNull { it.coordinateSystem })
+                }
+                n >= 4 && head[0] == 0.toByte() && head[1] == 0.toByte() && head[2] == 0x27.toByte() && head[3] == 0x0A.toByte() -> {
+                    val shp = stream.readBytes()
+                    return@use gisProject(layer, null, null) { toPlan -> com.appdwg.core.Gis.readShapefile(shp, null, toPlan) }
+                }
+                text.trimStart().startsWith("{") && (fileName.endsWith("json", true) || "\"type\"" in text) -> {
+                    val json = stream.readBytes().toString(Charsets.UTF_8)
+                    return@use gisProject(layer, null, null) { toPlan -> com.appdwg.core.Gis.readGeoJson(json, toPlan) }
+                }
                 text.startsWith("AC10") -> error("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML")
                 text.startsWith("AutoCAD Binary DXF") -> error("DXF binário. Salve o DXF no formato ASCII")
                 DxfReader.looksLikeDxf(text) ->

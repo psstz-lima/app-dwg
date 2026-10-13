@@ -438,6 +438,8 @@ private fun ProjectScreen(
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
                 ExportKind.POINTS -> vm.exportPoints(uri)
                 ExportKind.KML -> vm.exportKml(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
+                ExportKind.GEOJSON -> vm.exportGeoJson(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
+                ExportKind.SHAPEFILE -> vm.exportShapefile(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
                 ExportKind.VOLUMES -> vm.exportVolumes(uri)
                 ExportKind.NOTES_KMZ -> vm.exportNotesKmz(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true))
                 ExportKind.NOTES_CSV -> vm.exportNotesCsv(uri)
