@@ -54,6 +54,9 @@ exporta com os dados reais de projeto.
   do `.aecc.pnt` ou dos pontos) e pontos, pontos em PDENZ, KML para o Google Earth (UTM SIRGAS 2000
   convertido para latitude/longitude), CSV dos volumes (comparação, matriz e etapas) e a tela em
   PNG ou PDF.
+- Perfil longitudinal (botão "Perfil"): terreno de cada superfície e greide ao longo do eixo, PVIs
+  com curvas verticais e rampas em %, janela inteira ou ±500/±200/±50 m. Arraste no gráfico ou toque
+  na planta para ler estaca, cotas e corte/aterro; a posição aparece na planta.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

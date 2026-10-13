@@ -28,6 +28,9 @@ class ViewState(project: LandXmlProject) {
     var sectionHalfWidth by mutableStateOf(30.0)
     var compareBase by mutableStateOf<String?>(null)
     var compareOther by mutableStateOf<String?>(null)
+    var showProfile by mutableStateOf(false)
+    var profileCursor by mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0)
+    var profileRange by mutableStateOf(0.0)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
 }
@@ -104,6 +107,9 @@ class ProjectDoc(
             put("sectionHalfWidth", v.sectionHalfWidth)
             v.compareBase?.let { put("compareBase", it) }
             v.compareOther?.let { put("compareOther", it) }
+            put("showProfile", v.showProfile)
+            put("profileCursor", v.profileCursor)
+            put("profileRange", v.profileRange)
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
         }
@@ -124,6 +130,9 @@ class ProjectDoc(
             v.sectionHalfWidth = o.optDouble("sectionHalfWidth", v.sectionHalfWidth)
             v.compareBase = o.optString("compareBase").ifEmpty { null }
             v.compareOther = o.optString("compareOther").ifEmpty { null }
+            v.showProfile = o.optBoolean("showProfile")
+            v.profileCursor = o.optDouble("profileCursor", v.profileCursor)
+            v.profileRange = o.optDouble("profileRange", 0.0)
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
         }

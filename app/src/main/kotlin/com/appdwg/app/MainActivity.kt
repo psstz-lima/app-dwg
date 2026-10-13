@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.CrossSection
+import com.appdwg.core.LongProfile
 import com.appdwg.core.Utm
 import com.appdwg.core.CogoPoint
 import com.appdwg.core.PointFile
@@ -297,6 +298,10 @@ private fun ProjectScreen(
     var sectionAlignment by v::sectionAlignment
     var sectionStation by v::sectionStation
     var sectionHalfWidth by v::sectionHalfWidth
+    // Longitudinal profile of the same alignment as the section.
+    var showProfile by v::showProfile
+    var profileCursor by v::profileCursor
+    var profileRange by v::profileRange
     var showWarnings by remember(fileName) { mutableStateOf(false) }
     var showLayers by remember(fileName) { mutableStateOf(false) }
     // Layer settings start from the drawing and survive rotation.
@@ -325,6 +330,14 @@ private fun ProjectScreen(
     val section = remember(project, sectionAxis, sectionStation, sectionHalfWidth, frozenLayers, showSection) {
         if (!showSection || sectionAxis == null) null
         else CrossSection.at(sectionAxis, sectionStation, project.surfaces.filter { it.name !in frozenLayers }, sectionHalfWidth)
+    }
+    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile) {
+        if (!showProfile || sectionAxis == null) null
+        else LongProfile.of(sectionAxis, project.surfaces.filter { it.name !in frozenLayers })
+    }
+    val profileMark = remember(sectionAxis, profileCursor, showProfile) {
+        if (!showProfile || sectionAxis == null) null
+        else CrossSection.at(sectionAxis, profileCursor, emptyList(), 8.0)?.let { it.pointAt(-8.0) to it.pointAt(8.0) }
     }
     val measurement = remember(project, measurePoints, frozenLayers) {
         if (measurePoints.isEmpty()) null
@@ -377,13 +390,14 @@ private fun ProjectScreen(
                     measuring -> if (it != measurePoints.lastOrNull()) measurePoints = measurePoints + it
                     // With the section open, a tap picks the station on the chosen alignment.
                     showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
+                    showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
                     else -> { tapped = it; selectedPoint = null }
                 }
             },
             modifier = Modifier.fillMaxSize(),
             measure = if (measuring) measurePoints else emptyList(),
             snap = measuring,
-            sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) },
+            sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) } ?: profileMark,
             overlay = differenceOverlay,
             points = vm.userPoints,
             onPointTap = if (measuring || addingPoints) null else { pt -> selectedPoint = pt; tapped = null },
@@ -407,10 +421,18 @@ private fun ProjectScreen(
                             showSection = !showSection
                             measuring = false
                             tapped = null
+                            showProfile = false
                         }) { Text(if (showSection) "Fechar seção" else "Seção") }
+                        TextButton(onClick = {
+                            if (!showProfile) tapped?.let { t -> sectionAxis?.stationOffset(t)?.let { profileCursor = it.station } }
+                            showProfile = !showProfile
+                            showSection = false
+                            measuring = false
+                            tapped = null
+                        }) { Text(if (showProfile) "Fechar perfil" else "Perfil") }
                     }
                     if (!show3d) {
-                        TextButton(onClick = { measuring = !measuring; showSection = false; tapped = null }) {
+                        TextButton(onClick = { measuring = !measuring; showSection = false; showProfile = false; tapped = null }) {
                             Text(if (measuring) "Sair da medição" else "Medir")
                         }
                     }
@@ -460,6 +482,16 @@ private fun ProjectScreen(
                 onEdit = { editingPoint = pt to pt },
                 onClose = { selectedPoint = null },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth(),
+            )
+        } else if (showProfile && longProfile != null) {
+            ProfilePanel(
+                profile = longProfile,
+                cursor = profileCursor,
+                onCursor = { profileCursor = it },
+                range = profileRange,
+                onRange = { profileRange = it },
+                onClose = { showProfile = false },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(0.45f),
             )
         } else if (showSection && sectionAxis != null) {
             SectionPanel(
