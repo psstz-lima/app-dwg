@@ -1107,6 +1107,34 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         flowChannels = flowGrid?.channels(a).orEmpty()
     }
 
+    // ---- Cross-section sheets ----
+
+    /** Title block fields kept on the device, so a new project starts with them. */
+    fun sheetDefaults(p: SheetParams): SheetParams {
+        val prefs = getApplication<Application>().getSharedPreferences("sheets", android.content.Context.MODE_PRIVATE)
+        return p.copy(company = p.company.ifBlank { prefs.getString("company", "") ?: "" },
+            responsible = p.responsible.ifBlank { prefs.getString("responsible", "") ?: "" },
+            registration = p.registration.ifBlank { prefs.getString("registration", "") ?: "" })
+    }
+
+    fun exportSectionSheets(target: Uri, p: SheetParams, title: String) {
+        val app = getApplication<Application>()
+        app.getSharedPreferences("sheets", android.content.Context.MODE_PRIVATE).edit()
+            .putString("company", p.company).putString("responsible", p.responsible).putString("registration", p.registration).apply()
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val axis = project.alignments.firstOrNull { it.name == p.alignment } ?: project.alignments.firstOrNull() ?: return
+        val hidden = hiddenLayers()
+        val surfaces = project.surfaces.filter { it.name !in hidden }
+        val roadSections = road?.takeIf { it.alignment.name == axis.name }?.sections
+        val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date())
+        writeTo(target, app.getString(R.string.sh_export)) { out ->
+            val doc = android.graphics.pdf.PdfDocument()
+            val built = SectionSheets.render(doc, p, axis, surfaces, roadSections, title, date)
+            doc.writeTo(out); doc.close()
+            if (built.sections == 0) error(app.getString(R.string.sh_none))
+        }
+    }
+
     // ---- Measurement bulletin ----
 
     private fun bulletinRows(): Pair<List<String>, List<List<String>>> {

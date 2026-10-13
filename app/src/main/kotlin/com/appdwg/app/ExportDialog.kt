@@ -49,6 +49,7 @@ fun ExportDialog(
     zone: String,
     onZone: (String) -> Unit,
     onExport: (ExportKind) -> Unit,
+    onSheets: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -73,6 +74,7 @@ fun ExportDialog(
                 Text("O DXF leva linhas, textos, eixos, pontos _POINTS, a medição (_MEDICAO) e a linha da seção (_SECAO), sem as camadas desligadas.",
                     style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { onExport(ExportKind.LANDXML) }) { Text(ExportKind.LANDXML.label) }
+                onSheets?.let { OutlinedButton(onClick = it) { Text(androidx.compose.ui.res.stringResource(R.string.sh_open)) } }
                 OutlinedButton(onClick = { onExport(ExportKind.POINTS) }, enabled = vm.userPoints.isNotEmpty()) { Text(ExportKind.POINTS.label) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = { onExport(ExportKind.KML) }, enabled = zone.trimEnd('S', 's', 'N', 'n').toIntOrNull() in 1..60) {

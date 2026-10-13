@@ -363,6 +363,12 @@ private fun ProjectScreen(
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
     var showSurfaceEdit by remember(fileName) { mutableStateOf(false) }
+    var showSheets by remember(fileName) { mutableStateOf(false) }
+    var sheetParams by remember { mutableStateOf<SheetParams?>(null) }
+    val sheetsSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        val p = sheetParams
+        if (uri != null && p != null) vm.exportSectionSheets(uri, p, fileName)
+    }
     val surfaceEditState = remember(fileName) { SurfaceEditState() }
     var showBulletin by remember(fileName) { mutableStateOf(false) }
     val bulletinPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
@@ -1013,6 +1019,13 @@ private fun ProjectScreen(
             onCsv = { bulletinCsv.launch("$baseName-boletim-${v.bulletinNumber}.csv") }, onDismiss = { showBulletin = false })
     }
 
+    if (showSheets) {
+        SheetsDialog(vm, project, fileName, onMake = { p ->
+            sheetParams = p
+            sheetsSaver.launch("$baseName-secoes-${(p.alignment ?: "eixo").replace(Regex("[^A-Za-z0-9_-]+"), "_")}.pdf")
+        }, onDismiss = { showSheets = false })
+    }
+
     if (showSurfaceEdit) {
         SurfaceEditDialog(vm, project, surfaceEditState, measurePoints, tapped, onDraw = {
             showSurfaceEdit = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
@@ -1200,6 +1213,7 @@ private fun ProjectScreen(
                 if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind
                 else { pendingExport = kind; exportSaver.launch(baseName + kind.suffix) }
             },
+            onSheets = if (project.alignments.isNotEmpty()) ({ showExport = false; showSheets = true }) else null,
             onDismiss = { showExport = false },
         )
     }

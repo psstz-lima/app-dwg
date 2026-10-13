@@ -152,6 +152,28 @@
     <string name="se_done">%1$s: %2$d pontos, %3$d triângulos.</string>
     <string name="se_failed">Nada mudou: o local está fora da superfície ou a aresta não pode ser trocada.</string>
 
+    <!-- Cross-section sheets -->
+    <string name="sh_open">Folhas de seções transversais (PDF)…</string>
+    <string name="sh_title">Folhas de seções transversais</string>
+    <string name="sh_alignment">Eixo</string>
+    <string name="sh_from">Estaca inicial</string>
+    <string name="sh_to">Estaca final</string>
+    <string name="sh_interval">Intervalo (m)</string>
+    <string name="sh_half">Meia largura (m)</string>
+    <string name="sh_paper">Folha</string>
+    <string name="sh_scale">Escala horizontal</string>
+    <string name="sh_exag">Exagero vertical</string>
+    <string name="sh_block">Carimbo</string>
+    <string name="sh_company">Empresa</string>
+    <string name="sh_work">Obra</string>
+    <string name="sh_resp">Responsável técnico</string>
+    <string name="sh_crea">CREA</string>
+    <string name="sh_number">Nº do desenho</string>
+    <string name="sh_hint">As seções saem em escala real, empilhadas em colunas, com terreno, superfícies de projeto, cotas no eixo e, com a estrada calculada, áreas de corte e aterro. Camadas congeladas ficam de fora.</string>
+    <string name="sh_make">Gerar PDF</string>
+    <string name="sh_export">folhas de seções (PDF)</string>
+    <string name="sh_none">nenhuma seção cruza as superfícies nesse trecho</string>
+
     <!-- As-built check -->
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>

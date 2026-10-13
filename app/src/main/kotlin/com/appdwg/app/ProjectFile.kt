@@ -53,6 +53,7 @@ class ViewState(project: LandXmlProject) {
     var bulletinItems by mutableStateOf<List<BulletinItem>>(emptyList())
     var bulletinNumber by mutableStateOf("1")
     var bulletinPeriod by mutableStateOf("")
+    var sheetParams by mutableStateOf(SheetParams())
 }
 
 /** One line of the measurement bulletin; quantities in the item's unit, price per unit. */
@@ -227,6 +228,7 @@ class ProjectDoc(
             put("bulletin", JSONArray(v.bulletinItems.map { it.toJson() }))
             put("bulletinNumber", v.bulletinNumber)
             put("bulletinPeriod", v.bulletinPeriod)
+            put("sheets", v.sheetParams.toJson())
         }
 
         fun applyView(o: JSONObject, v: ViewState) {
@@ -271,6 +273,7 @@ class ProjectDoc(
             o.optJSONArray("bulletin")?.let { a -> v.bulletinItems = List(a.length()) { BulletinItem.fromJson(a.getJSONObject(it)) } }
             v.bulletinNumber = o.optString("bulletinNumber", "1")
             v.bulletinPeriod = o.optString("bulletinPeriod")
+            o.optJSONObject("sheets")?.let { v.sheetParams = SheetParams.fromJson(it) }
         }
     }
 }
