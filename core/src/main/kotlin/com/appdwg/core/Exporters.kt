@@ -11,7 +11,15 @@ import kotlin.math.sqrt
 import kotlin.math.tan
 
 /** Extra lines to write with a drawing, such as the measurement or the cross section line. */
-class ExportLine(val layer: String, val points: List<Point2>, val closed: Boolean, val aci: Int, val elevation: Double? = null)
+class ExportLine(
+    val layer: String,
+    val points: List<Point2>,
+    val closed: Boolean,
+    val aci: Int,
+    val elevation: Double? = null,
+    /** Elevation of each point, for 3D lines; takes precedence over [elevation]. */
+    val zs: List<Double>? = null,
+)
 
 /**
  * ASCII DXF in the R12 subset (POLYLINE, TEXT, POINT, 3DFACE), which every CAD program reads.
@@ -96,7 +104,7 @@ object DxfWriter {
             text(POINTS_LAYER, p.x + 0.5, p.y + 0.5, 0.5, label)
         }
         for (e in extra) polyline(e.layer, DoubleArray(e.points.size) { e.points[it].x }, DoubleArray(e.points.size) { e.points[it].y },
-            e.elevation?.let { z -> DoubleArray(e.points.size) { z } }, e.closed)
+            e.zs?.toDoubleArray() ?: e.elevation?.let { z -> DoubleArray(e.points.size) { z } }, e.closed)
         if (includeSurfaces) for (s in project.surfaces) {
             if (s.name in hiddenLayers) continue
             val t = s.triangles
@@ -132,9 +140,19 @@ object DxfWriter {
     const val CG_LAYER = "_COGO"
 }
 
+/** Breaklines and outer boundary written with a surface (designed surfaces have them). */
+class SurfaceSource(val breaklines: List<List<Point3>>, val boundary: List<Point2>?)
+
 /** LandXML 1.2 with surfaces (points and faces) and points. */
 object LandXmlWriter {
-    fun write(surfaces: List<Surface>, points: List<CogoPoint>, cgPoints: List<CgPoint>, out: Writer, epsg: String? = null) {
+    fun write(
+        surfaces: List<Surface>,
+        points: List<CogoPoint>,
+        cgPoints: List<CgPoint>,
+        out: Writer,
+        epsg: String? = null,
+        sources: Map<String, SurfaceSource> = emptyMap(),
+    ) {
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         out.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
         out.write("<LandXML xmlns=\"http://www.landxml.org/schema/LandXML-1.2\" version=\"1.2\">\n")
@@ -157,7 +175,26 @@ object LandXmlWriter {
         if (surfaces.isNotEmpty()) {
             out.write("  <Surfaces>\n")
             for (s in surfaces) {
-                out.write("    <Surface name=\"${esc(s.name)}\">\n      <Definition surfType=\"TIN\">\n        <Pnts>\n")
+                out.write("    <Surface name=\"${esc(s.name)}\">\n")
+                sources[s.name]?.let { src ->
+                    out.write("      <SourceData>\n")
+                    src.boundary?.let { b ->
+                        out.write("        <Boundaries><Boundary name=\"Limite\" bndType=\"outer\"><PntList2D>")
+                        out.write(b.joinToString(" ") { "${f3(it.y)} ${f3(it.x)}" })
+                        out.write("</PntList2D></Boundary></Boundaries>\n")
+                    }
+                    if (src.breaklines.isNotEmpty()) {
+                        out.write("        <Breaklines>\n")
+                        for (l in src.breaklines) {
+                            out.write("          <Breakline brkType=\"standard\"><PntList3D>")
+                            out.write(l.joinToString(" ") { "${f3(it.y)} ${f3(it.x)} ${f3(it.z)}" })
+                            out.write("</PntList3D></Breakline>\n")
+                        }
+                        out.write("        </Breaklines>\n")
+                    }
+                    out.write("      </SourceData>\n")
+                }
+                out.write("      <Definition surfType=\"TIN\">\n        <Pnts>\n")
                 for (i in 0 until s.vertexCount) out.write("          <P id=\"${i + 1}\">${f3(s.ys[i])} ${f3(s.xs[i])} ${f3(s.zs[i])}</P>\n")
                 out.write("        </Pnts>\n        <Faces>\n")
                 val t = s.triangles

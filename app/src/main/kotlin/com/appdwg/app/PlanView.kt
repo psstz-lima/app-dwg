@@ -123,13 +123,19 @@ fun PlanView(
     contourInterval: Double? = null,
     /** Told the interval actually drawn, or null when contours are too dense to draw. */
     onContours: (Double?) -> Unit = {},
+    /** Lines of a design (platform edge, daylight, benches). */
+    designLines: List<List<Point2>> = emptyList(),
+    /** Identity of the opened drawing; the view resets only when it changes. */
+    viewKey: Any = project,
 ) {
     val bounds = project.bounds ?: return
-    val origin = bounds.center
+    // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
+    // so the view stays where it was.
+    val origin = remember(viewKey) { bounds.center }
     val scene = remember(project) { Scene.build(project, origin) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     // Saved so rotating the device keeps the current zoom and position.
-    var camera by rememberSaveable(project, saver = CameraSaver) { mutableStateOf<Camera?>(null) }
+    var camera by rememberSaveable(viewKey, saver = CameraSaver) { mutableStateOf<Camera?>(null) }
     // Bumped on every gesture so the Canvas redraws; the camera itself is mutated in place.
     var frame by remember { mutableStateOf(0) }
 
@@ -295,6 +301,14 @@ fun PlanView(
         drawPoints(project, cam, colors) { toScreen(it, cam) }
         if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors) { toScreen(it, cam) }
 
+        for ((k, l) in designLines.withIndex()) {
+            if (l.size < 2) continue
+            val path = Path()
+            l.forEachIndexed { i, p -> val sp = toScreen(p, cam); if (i == 0) path.moveTo(sp.x, sp.y) else path.lineTo(sp.x, sp.y) }
+            // Edge red, daylight green, benches blue.
+            val c = when (k) { 0 -> Color(0xFFD32F2F); 1 -> Color(0xFF2E7D32); else -> Color(0xFF1565C0) }
+            drawPath(path, c, style = Stroke(width = if (k < 2) 3f else 2f))
+        }
         if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
         if (sectionLine != null) {
             val a = toScreen(sectionLine.first, cam)

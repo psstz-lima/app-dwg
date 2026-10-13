@@ -63,6 +63,13 @@ exporta com os dados reais de projeto.
 - Curvas de nível (botão "Curvas"): intervalo automático pelo zoom ou fixo (0,5 a 10 m), mestras a
   cada 5 com cota, calculadas para a área visível. O DXF exportado pode levá-las (camada `_CURVAS`,
   com cota).
+- Projeto de plataforma (botão "Projeto"): desenhe o contorno na planta ou use os pontos `_POINTS`;
+  cota única com inclinação e direção, ou a cota de cada ponto; taludes de corte e de aterro
+  separados (H:V, altura entre bermas, largura e caimento da berma para o pé do talude de cima),
+  projetados até encontrar o terreno (offset/daylight). Gera a superfície "Plataforma" (TIN com
+  borda, bermas e offset), o mapa de corte/aterro e os volumes contra o terreno; entra na seção, no
+  perfil e no comparativo, é salva no projeto e exportada em LandXML (com breaklines e limite) e DXF
+  (`_PLAT_BORDA`, `_PLAT_OFFSET`, `_PLAT_BERMA`, em 3D).
 - Funciona offline.
 
 ## Como exportar do Civil 3D

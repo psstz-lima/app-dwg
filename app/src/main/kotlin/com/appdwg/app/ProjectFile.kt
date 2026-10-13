@@ -34,6 +34,12 @@ class ViewState(project: LandXmlProject) {
     var showContours by mutableStateOf(false)
     /** Contour interval in metres; 0 picks one from the zoom. */
     var contourInterval by mutableStateOf(0.0)
+    // Platform design: outline, parameters, the surface it is designed on and the drawing mode.
+    var drawingPlatform by mutableStateOf(false)
+    var platformOutline by mutableStateOf<List<Point2>>(emptyList())
+    var platformParams by mutableStateOf(PlatformParams())
+    var platformTerrain by mutableStateOf<String?>(null)
+    var platformBuilt by mutableStateOf(false)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
 }
@@ -115,6 +121,10 @@ class ProjectDoc(
             put("profileRange", v.profileRange)
             put("showContours", v.showContours)
             put("contourInterval", v.contourInterval)
+            put("platformOutline", JSONArray(v.platformOutline.map { JSONArray().put(it.x).put(it.y) }))
+            put("platformParams", v.platformParams.toJson())
+            v.platformTerrain?.let { put("platformTerrain", it) }
+            put("platformBuilt", v.platformBuilt)
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
         }
@@ -140,8 +150,46 @@ class ProjectDoc(
             v.profileRange = o.optDouble("profileRange", 0.0)
             v.showContours = o.optBoolean("showContours")
             v.contourInterval = o.optDouble("contourInterval", 0.0)
+            o.optJSONArray("platformOutline")?.let { a ->
+                v.platformOutline = List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } }
+            }
+            o.optJSONObject("platformParams")?.let { v.platformParams = PlatformParams.fromJson(it) }
+            v.platformTerrain = o.optString("platformTerrain").ifEmpty { null }
+            v.platformBuilt = o.optBoolean("platformBuilt")
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
         }
+    }
+}
+
+/** Platform parameters as typed in the design dialog. */
+data class PlatformParams(
+    val elevation: Double? = null,
+    val gradePercent: Double = 0.0,
+    val gradeAzimuth: Double = 0.0,
+    val useVertexElevations: Boolean = false,
+    val cutRatio: Double = 1.0,
+    val cutBenchHeight: Double = 8.0,
+    val cutBenchWidth: Double = 3.0,
+    val cutBenchFall: Double = 5.0,
+    val fillRatio: Double = 1.5,
+    val fillBenchHeight: Double = 8.0,
+    val fillBenchWidth: Double = 3.0,
+    val fillBenchFall: Double = 5.0,
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        elevation?.let { put("elevation", it) }
+        put("gradePercent", gradePercent); put("gradeAzimuth", gradeAzimuth); put("useVertexElevations", useVertexElevations)
+        put("cutRatio", cutRatio); put("cutBenchHeight", cutBenchHeight); put("cutBenchWidth", cutBenchWidth); put("cutBenchFall", cutBenchFall)
+        put("fillRatio", fillRatio); put("fillBenchHeight", fillBenchHeight); put("fillBenchWidth", fillBenchWidth); put("fillBenchFall", fillBenchFall)
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject) = PlatformParams(
+            o.optDouble("elevation").takeIf { !it.isNaN() }, o.optDouble("gradePercent", 0.0), o.optDouble("gradeAzimuth", 0.0),
+            o.optBoolean("useVertexElevations"),
+            o.optDouble("cutRatio", 1.0), o.optDouble("cutBenchHeight", 8.0), o.optDouble("cutBenchWidth", 3.0), o.optDouble("cutBenchFall", 5.0),
+            o.optDouble("fillRatio", 1.5), o.optDouble("fillBenchHeight", 8.0), o.optDouble("fillBenchWidth", 3.0), o.optDouble("fillBenchFall", 5.0),
+        )
     }
 }

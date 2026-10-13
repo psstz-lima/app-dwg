@@ -39,7 +39,9 @@ class ExportersTest {
     @Test
     fun landXmlReadsBack() {
         val out = StringWriter()
-        LandXmlWriter.write(listOf(surface), project.points, emptyList(), out, epsg = "31983")
+        LandXmlWriter.write(listOf(surface), project.points, emptyList(), out, epsg = "31983",
+            sources = mapOf("TERRENO" to SurfaceSource(listOf(listOf(Point3(0.0, 0.0, 1.0), Point3(10.0, 10.0, 3.0))), listOf(Point2(0.0, 0.0), Point2(10.0, 0.0), Point2(10.0, 10.0)))))
+        assertTrue("<Breakline brkType=\"standard\"><PntList3D>0.000 0.000 1.000 10.000 10.000 3.000</PntList3D>" in out.toString())
         val parser = KXmlParser()
         parser.setInput(StringReader(out.toString()))
         val back = LandXmlReader(parser).read()

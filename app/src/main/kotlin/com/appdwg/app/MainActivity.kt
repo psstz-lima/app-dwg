@@ -255,6 +255,9 @@ private fun ProjectScreen(
     var showExport by remember(fileName) { mutableStateOf(false) }
     var showGoTo by remember(fileName) { mutableStateOf(false) }
     var showContourDialog by remember(fileName) { mutableStateOf(false) }
+    var showPlatform by remember(fileName) { mutableStateOf(false) }
+    var drawingPlatform by v::drawingPlatform
+    var platformOutline by v::platformOutline
     var showContours by v::showContours
     var contourInterval by v::contourInterval
     // Interval the plan drew (null: too dense at this zoom), for the status line.
@@ -272,7 +275,7 @@ private fun ProjectScreen(
         val kind = pendingExport
         pendingExport = null
         if (uri != null && kind != null) {
-            val line = vm.extraLines(sectionLineFor(vm, project))
+            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines()
             when (kind) {
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
@@ -393,6 +396,7 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    drawingPlatform -> if (it != platformOutline.lastOrNull()) platformOutline = platformOutline + it
                     addingPoints -> {
                         val z = PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation ?: Double.NaN
                         editingPoint = null to CogoPoint(PointFile.nextNumber(vm.userPoints), "", it.x, it.y, z)
@@ -405,8 +409,9 @@ private fun ProjectScreen(
                 }
             },
             modifier = Modifier.fillMaxSize(),
-            measure = if (measuring) measurePoints else emptyList(),
-            snap = measuring,
+            measure = if (measuring) measurePoints else if (drawingPlatform) platformOutline else emptyList(),
+            snap = measuring || drawingPlatform,
+            designLines = vm.platform?.let { r -> listOf(r.edge, r.daylight) + r.benches }?.map { l -> l.map { Point2(it.x, it.y) } }.orEmpty(),
             sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) } ?: profileMark,
             overlay = differenceOverlay,
             points = vm.userPoints,
@@ -416,6 +421,7 @@ private fun ProjectScreen(
             focusKey = focusKey,
             contourInterval = if (showContours) contourInterval else null,
             onContours = { contourDrawn = it },
+            viewKey = fileName,
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
@@ -462,6 +468,7 @@ private fun ProjectScreen(
                     TextButton(onClick = { showPoints = true }) { Text("Pontos") }
                     if (project.surfaces.isNotEmpty()) {
                         TextButton(onClick = { showContourDialog = true }) { Text("Curvas") }
+                        TextButton(onClick = { showPlatform = true }) { Text("Projeto") }
                     }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
@@ -494,6 +501,16 @@ private fun ProjectScreen(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
             )
+        } else if (drawingPlatform) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toque os vértices da plataforma (${platformOutline.size}). O toque encaixa em pontos e vértices.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text("Desfazer") }
+                    TextButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text("Limpar") }
+                    TextButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text("Concluir") }
+                }
+            }
         } else if (addingPoints) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -593,6 +610,13 @@ private fun ProjectScreen(
             onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
         )
+    }
+
+    if (showPlatform) {
+        PlatformDialog(vm, project, onDraw = {
+            showPlatform = false; measuring = false; showSection = false; showProfile = false; show3d = false
+            drawingPlatform = true
+        }, onDismiss = { showPlatform = false })
     }
 
     if (showContourDialog) {

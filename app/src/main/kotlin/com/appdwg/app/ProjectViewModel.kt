@@ -30,6 +30,12 @@ import com.appdwg.core.CogoPoint
 import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.PointFile
 import com.appdwg.core.DxfWriter
+import com.appdwg.core.Platform
+import com.appdwg.core.PlatformDesign
+import com.appdwg.core.PlatformResult
+import com.appdwg.core.Point3
+import com.appdwg.core.SlopeRule
+import com.appdwg.core.SurfaceSource
 import com.appdwg.core.Contours
 import com.appdwg.core.ExportLine
 import com.appdwg.core.KmlWriter
@@ -57,6 +63,9 @@ sealed interface ProjectState {
 }
 
 private const val HEAD_SIZE = 64
+
+/** Name of the designed platform surface. */
+const val PLATFORM_LABEL = "Plataforma"
 
 /** File laid over the open project; [uri] is null for a surface the app generated. */
 data class AddedFile(val label: String, val project: LandXmlProject, val uri: Uri?)
@@ -666,6 +675,87 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
 
+    // ---- Platform design ----
+
+    var platform by mutableStateOf<PlatformResult?>(null)
+        private set
+    var platformVolumes by mutableStateOf<SurfaceDifference?>(null)
+        private set
+    var platformMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** Designs the platform of the view settings against their terrain and lays it over the project. */
+    fun designPlatform() {
+        viewModelScope.launch { designPlatformNow() }
+    }
+
+    private suspend fun designPlatformNow() {
+        val v = view ?: return
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val terrain = project.surfaces.firstOrNull { it.name == v.platformTerrain }
+            ?: project.surfaces.firstOrNull { !it.name.startsWith(PLATFORM_LABEL) }
+        if (terrain == null) { platformMessage = "Abra ou adicione uma superfície de terreno."; return }
+        if (v.platformOutline.size < 3) { platformMessage = "Desenhe a plataforma com 3 vértices ou mais."; return }
+        val pp = v.platformParams
+        val outline = v.platformOutline
+        val vertexZ = if (pp.useVertexElevations) outline.map { p -> userPoints.firstOrNull { it.x == p.x && it.y == p.y }?.z ?: Double.NaN } else null
+        if (vertexZ != null && vertexZ.any { it.isNaN() }) { platformMessage = "Há vértices sem cota de ponto; desmarque \"usar a cota de cada ponto\"."; return }
+        val base = pp.elevation ?: outline.mapNotNull { terrain.elevationAt(it) }.average().takeIf { !it.isNaN() }
+            ?: run { platformMessage = "A plataforma está fora do terreno."; return }
+        platformMessage = null
+        try {
+            val result = tracked("Projetando plataforma") { t ->
+                withContext(Dispatchers.Default) {
+                    t.step("Taludes e bermas")
+                    val d = PlatformDesign(
+                        outline, base, pp.gradePercent, pp.gradeAzimuth, vertexZ,
+                        cut = SlopeRule(pp.cutRatio, pp.cutBenchHeight, pp.cutBenchWidth, pp.cutBenchFall),
+                        fill = SlopeRule(pp.fillRatio, pp.fillBenchHeight, pp.fillBenchWidth, pp.fillBenchFall),
+                    )
+                    val r = Platform.design(d, terrain, PLATFORM_LABEL)
+                    t.step("Volumes")
+                    r to SurfaceCompare.difference(terrain, r.surface)
+                }
+            }
+            platform = result.first
+            platformVolumes = result.second
+            v.platformTerrain = terrain.name
+            v.platformBuilt = true
+            addedFiles = addedFiles.filter { it.label != PLATFORM_LABEL } +
+                AddedFile(PLATFORM_LABEL, LandXmlProject(null, null, listOf(result.first.surface), emptyList(), emptyList(), emptyList()), null)
+            refreshJob?.cancel()
+            refreshNow()
+            result.second?.let { d ->
+                difference = d
+                differenceImage = withContext(Dispatchers.Default) { DifferenceImage.of(d) }
+                differenceVisible = true
+                v.compareBase = terrain.name; v.compareOther = PLATFORM_LABEL
+            }
+            platformMessage = if (result.first.unresolved > 0)
+                "${result.first.unresolved} perfil(is) de talude não encontraram o terreno (saem da superfície ou passam de 300 m)." else null
+        } catch (e: OutOfMemoryError) {
+            platformMessage = "Memória insuficiente para projetar."
+        } catch (e: Exception) {
+            platformMessage = "Não foi possível projetar: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    fun removePlatform() {
+        platform = null
+        platformVolumes = null
+        view?.platformBuilt = false
+        if (difference?.otherName == PLATFORM_LABEL) clearDifference()
+        addedFiles = addedFiles.filter { it.label != PLATFORM_LABEL }
+        refreshProject()
+    }
+
+    /** Edge, daylight and bench lines of the platform for DXF, in 3D. */
+    fun platformLines(): List<ExportLine> {
+        val r = platform ?: return emptyList()
+        fun line(layer: String, pts: List<Point3>, aci: Int) = ExportLine(layer, pts.map { Point2(it.x, it.y) }, false, aci, zs = pts.map { it.z })
+        return listOf(line("_PLAT_BORDA", r.edge, 1), line("_PLAT_OFFSET", r.daylight, 3)) + r.benches.map { line("_PLAT_BERMA", it, 4) }
+    }
+
     // ---- Export ----
 
     var exportMessage by mutableStateOf<String?>(null)
@@ -721,7 +811,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val hidden = hiddenLayers()
         writeTo(target, "LandXML") { out ->
             out.writer(Charsets.UTF_8).let { w ->
-                LandXmlWriter.write(p.surfaces.filter { it.name !in hidden }, p.points, p.cgPoints, w, p.coordinateSystem?.epsgCode)
+                val sources = platform?.let { r ->
+                    mapOf(PLATFORM_LABEL to SurfaceSource(listOf(r.edge, r.daylight) + r.benches, r.daylight.map { Point2(it.x, it.y) }))
+                }.orEmpty()
+                LandXmlWriter.write(p.surfaces.filter { it.name !in hidden }, p.points, p.cgPoints, w, p.coordinateSystem?.epsgCode, sources)
                 w.flush()
             }
         }
@@ -806,7 +899,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun currentDoc(): ProjectDoc? {
         val main = sourceUri ?: return null
         val v = view ?: return null
-        val generated = addedFiles.any { it.uri == null }
+        val generated = addedFiles.any { it.uri == null && it.label == "$POINTS_LAYER superfície" }
         return ProjectDoc(
             main = main.toString(),
             files = addedFiles.mapNotNull { f -> f.uri?.let { f.label to it.toString() } },
@@ -917,8 +1010,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             if (project != null && picture != null) drapeNow(project, picture.first, picture.second, world, uris)
             drapeVisible = doc.drapeVisible
         }
+        if (view?.platformBuilt == true) designPlatformNow()
         val v = view
-        if (doc.compareShown && v != null) {
+        if (doc.compareShown && v != null && v.compareOther != PLATFORM_LABEL) {
             val project = (state as? ProjectState.Loaded)?.project
             val a = project?.surfaces?.firstOrNull { it.name == v.compareBase }
             val b = project?.surfaces?.firstOrNull { it.name == v.compareOther }
@@ -970,6 +1064,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     matrix = emptyMap()
                     stageProgress = null
                     drapeUris = emptyList()
+                    platform = null
+                    platformVolumes = null
+                    platformMessage = null
                     view = ViewState(project)
                     restoreRasters(project)
                     restoreXrefs(project)
