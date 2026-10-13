@@ -154,6 +154,8 @@ class Alignment(
     }
 
     companion object {
+        private const val MAX_ARC_SAMPLES = 20_000
+
         fun sample(e: AlignmentElement, step: Double): List<Point2> = when (e) {
             is AlignmentElement.Line -> listOf(e.start, e.end)
             is AlignmentElement.Arc -> sampleArc(e, step)
@@ -163,7 +165,8 @@ class Alignment(
         private fun sampleArc(e: AlignmentElement.Arc, step: Double): List<Point2> {
             val r = e.radius
             val sweep = e.sweep
-            val n = max(1, ceil(abs(sweep) * r / step).toInt())
+            // Capped so a broken curve (centre far from its ends) cannot exhaust memory.
+            val n = ceil(abs(sweep) * r / step).coerceIn(1.0, MAX_ARC_SAMPLES.toDouble()).toInt()
             val a0 = atan2(e.start.y - e.center.y, e.start.x - e.center.x)
             val pts = ArrayList<Point2>(n + 1)
             pts.add(e.start)

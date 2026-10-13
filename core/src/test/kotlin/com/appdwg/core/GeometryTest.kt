@@ -45,4 +45,12 @@ class GeometryTest {
         assertEquals("3,25 m E", StationFormat.offset(-3.25))
         assertEquals("3,25 m D", StationFormat.offset(3.25))
     }
+
+    @Test
+    fun brokenArcWithFarCentreStaysSmall() {
+        // Start and end written E N instead of N E: the centre ends up thousands of kilometres away.
+        val arc = AlignmentElement.Arc(Point2(7796087.4, 612845.0), Point2(7796119.3, 613005.6), Point2(612973.3, 7795861.3), clockwise = true)
+        val points = Alignment.sample(arc, 1.0)
+        assertEquals(true, points.size <= 20_001)
+    }
 }

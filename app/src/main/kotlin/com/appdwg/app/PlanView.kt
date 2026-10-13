@@ -649,7 +649,7 @@ private fun DrawScope.drawStations(
                 if (len > 0f) {
                     val n = Offset(-dir.y / len, dir.x / len) * tick
                     drawLine(colors.stations, sp - n, sp + n, strokeWidth = 2f)
-                    drawContext.canvas.nativeCanvas.drawText(
+                    drawContext.canvas.nativeCanvas.drawHaloText(
                         StationFormat.estaca(sta), sp.x + n.x * 1.4f + 4f, sp.y + n.y * 1.4f, paint,
                     )
                 }
@@ -657,6 +657,23 @@ private fun DrawScope.drawStations(
             sta += step
         }
     }
+}
+
+/** Text with a thin outline in the opposite tone, so labels stay readable over light and dark terrain alike. */
+private fun android.graphics.Canvas.drawHaloText(text: String, x: Float, y: Float, paint: Paint) {
+    val fill = paint.color
+    val light = android.graphics.Color.luminance(fill) > 0.5f
+    val style = paint.style
+    val width = paint.strokeWidth
+    paint.style = Paint.Style.STROKE
+    paint.strokeWidth = paint.textSize / 4f
+    paint.strokeJoin = Paint.Join.ROUND
+    paint.color = if (light) 0xB0000000.toInt() else 0xC0FFFFFF.toInt()
+    drawText(text, x, y, paint)
+    paint.style = style
+    paint.strokeWidth = width
+    paint.color = fill
+    drawText(text, x, y, paint)
 }
 
 /** Texts smaller than this on screen are skipped; they would be unreadable and slow down panning. */
@@ -723,7 +740,7 @@ private fun DrawScope.drawPoints(
         val sp = toScreen(Point2(pt.position.x, pt.position.y))
         if (sp.x < -20f || sp.y < -20f || sp.x > size.width + 20f || sp.y > size.height + 20f) continue
         drawCircle(colors.points, radius = r, center = sp)
-        if (showNames) drawContext.canvas.nativeCanvas.drawText(pt.name, sp.x + r * 1.5f, sp.y - r * 1.5f, paint)
+        if (showNames) drawContext.canvas.nativeCanvas.drawHaloText(pt.name, sp.x + r * 1.5f, sp.y - r * 1.5f, paint)
     }
 }
 
