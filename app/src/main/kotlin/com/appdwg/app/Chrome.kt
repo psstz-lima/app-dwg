@@ -87,7 +87,7 @@ fun AppMark(modifier: Modifier = Modifier.size(34.dp)) {
 /** Button in the theme's style: filled with the accent, or outlined/tonal. */
 /** [outlined] keeps a border in every theme (Terra draws its buttons without one otherwise). */
 @Composable
-fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifier: Modifier = Modifier, enabled: Boolean = true, outlined: Boolean = false) {
+fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifier: Modifier = Modifier, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val bg = when {
@@ -112,8 +112,14 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 15.sp, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (icon != null) {
+                val v = remember(icon, g.iconStroke) { icon.vector(g.iconStroke) }
+                Icon(v, contentDescription = null, tint = fg.copy(alpha = if (enabled) 1f else 0.4f), modifier = Modifier.size(20.dp))
+            }
+            Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 15.sp, maxLines = 1)
+        }
     }
 }
 
@@ -392,23 +398,9 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                      language: LanguageChoice = LanguageChoice.AUTO, onLanguage: (LanguageChoice) -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Configurações › Aparência") },
+        title = { Text("Configurações") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (c in ThemeChoice.entries) {
-                    Row(
-                        Modifier.fillMaxWidth().selectable(c == current, role = Role.RadioButton) { onPick(c) }.padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RadioButton(c == current, onClick = null)
-                        ThemePreview(c)
-                        Column(Modifier.weight(1f)) {
-                            Text(c.label, fontWeight = FontWeight.Bold)
-                            Text(c.hint, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                androidx.compose.material3.HorizontalDivider()
                 Text("Idioma", fontWeight = FontWeight.Bold)
                 for (l in LanguageChoice.entries) {
                     Row(
@@ -437,6 +429,21 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                 }
                 Text("Só a exibição muda: os arquivos exportados continuam em metros, com ponto decimal. " +
                     "Vírgula ou ponto nos números seguem o idioma acima.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.HorizontalDivider()
+                Text("Tema", fontWeight = FontWeight.Bold)
+                for (c in ThemeChoice.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().selectable(c == current, role = Role.RadioButton) { onPick(c) }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(c == current, onClick = null)
+                        ThemePreview(c)
+                        Column(Modifier.weight(1f)) {
+                            Text(c.label, fontWeight = FontWeight.Bold)
+                            Text(c.hint, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
                 TextButton(onClick = onAbout) { Text("Sobre o Gromatic") }
             }
         },

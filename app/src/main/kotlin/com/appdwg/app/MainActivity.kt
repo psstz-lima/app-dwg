@@ -172,6 +172,10 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     if (compact) {
                         // Phones: the main action plus a menu with the rest.
                         if (state is ProjectState.Loaded) GButton("Salvar", { save() }, primary = true) else GButton("Abrir", openFile)
+                        val gear = remember(g.iconStroke) { GIcon.SETTINGS.vector(g.iconStroke) }
+                        androidx.compose.material3.IconButton(onClick = { showAppearance = true }) {
+                            androidx.compose.material3.Icon(gear, "Configurações", tint = onBar)
+                        }
                         var menu by remember { mutableStateOf(false) }
                         Box {
                             androidx.compose.material3.IconButton(onClick = { menu = true }) {
@@ -183,7 +187,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                                 if (state is ProjectState.Loaded) item("Abrir", openFile)
                                 if (viewModel.recent.isNotEmpty()) item("Recentes") { showRecent = true }
                                 if (state is ProjectState.Loaded) item("Salvar como") { afterSave = null; saver.launch(projectName()) }
-                                item("Aparência") { showAppearance = true }
+                                item("Configurações") { showAppearance = true }
                             }
                         }
                     } else {
@@ -193,10 +197,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                             GButton("Salvar como", { afterSave = null; saver.launch(projectName()) })
                             GButton("Salvar", { save() }, primary = true)
                         }
-                        val gear = remember(g.iconStroke) { GIcon.SETTINGS.vector(g.iconStroke) }
-                        androidx.compose.material3.IconButton(onClick = { showAppearance = true }) {
-                            androidx.compose.material3.Icon(gear, "Configurações", tint = onBar)
-                        }
+                        GButton("Configurações", { showAppearance = true }, icon = GIcon.SETTINGS, outlined = true)
                     }
                 }
             }
