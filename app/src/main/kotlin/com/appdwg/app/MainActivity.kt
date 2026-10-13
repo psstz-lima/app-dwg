@@ -112,6 +112,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     // "Open" and back ask first when the project has unsaved changes.
     var confirm by remember { mutableStateOf<(() -> Unit)?>(null) }
     var showRecent by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
@@ -148,10 +149,12 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     }
                     if (viewModel.recent.isNotEmpty()) TextButton(onClick = { showRecent = true }) { Text("Recentes") }
                     TextButton(onClick = openFile) { Text("Abrir") }
+                    TextButton(onClick = { showAbout = true }) { Text("Sobre") }
                 },
             )
         },
     ) { padding ->
+        if (showAbout) AboutDialog(onDismiss = { showAbout = false })
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
@@ -290,9 +293,11 @@ private fun ProjectScreen(
     var gpsZone by remember(fileName) { mutableStateOf((com.appdwg.core.Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
     val gnssFix = vm.gnss.fix
     val gpsPoint = gnssFix?.let { f -> gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull()?.let { z -> com.appdwg.core.UtmForward.fromGeographic(f.latitude, f.longitude, z) } }
+    val context = androidx.compose.ui.platform.LocalContext.current
     var pendingPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
     val permissionAsker = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted.values.all { it }) pendingPermission?.invoke() else vm.gnss.let { }
+        if (granted.values.all { it }) pendingPermission?.invoke()
+        else vm.gnss.permissionDenied()
         pendingPermission = null
     }
     val replayPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.gnss.replay(uri) }
@@ -460,6 +465,18 @@ private fun ProjectScreen(
     var show3d by v::show3d
     var exaggeration by v::exaggeration
     val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } || project.models.isNotEmpty() }
+    // Back leaves the tool in use (one at a time) before it leaves the project.
+    androidx.activity.compose.BackHandler(enabled = addingNote || addingPoints || measuring || editing || show3d || showSection || showProfile) {
+        when {
+            addingNote -> addingNote = false
+            addingPoints -> addingPoints = false
+            measuring -> measuring = false
+            editing -> editing = false
+            show3d -> show3d = false
+            showSection -> showSection = false
+            else -> showProfile = false
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         if (show3d) key(project) {
@@ -947,11 +964,14 @@ private fun ProjectScreen(
     if (showGps) {
         GpsDialog(vm.gnss, gpsZone, { gpsZone = it.trim().uppercase() }, gpsFollow, { gpsFollow = it },
             onNeedPermissions = { src, then ->
-                val perms = if (src == GnssSource.BLUETOOTH && android.os.Build.VERSION.SDK_INT >= 31)
-                    arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.ACCESS_FINE_LOCATION)
-                else arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
-                pendingPermission = then
-                permissionAsker.launch(perms)
+                // Only what the chosen source needs: the antenna sends its own position over Bluetooth.
+                val perms = when {
+                    src == GnssSource.BLUETOOTH && android.os.Build.VERSION.SDK_INT >= 31 -> arrayOf(android.Manifest.permission.BLUETOOTH_CONNECT)
+                    src == GnssSource.BLUETOOTH -> emptyArray()
+                    else -> arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                }
+                val missing = perms.filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+                if (missing.isEmpty()) then() else { pendingPermission = then; permissionAsker.launch(missing.toTypedArray()) }
             },
             onPickReplay = { replayPicker.launch(arrayOf("*/*")) },
             onDismiss = { showGps = false })

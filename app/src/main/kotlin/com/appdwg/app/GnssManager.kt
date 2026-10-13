@@ -34,6 +34,8 @@ class GnssManager(private val context: Context) {
         private set
     var connected by mutableStateOf(false)
         private set
+
+    fun permissionDenied() { status = "Permissão negada: libere em Configurações > Apps > App DWG > Permissões" }
     var ntripStatus by mutableStateOf<String?>(null)
         private set
     var rtcmBytes by mutableStateOf(0L)

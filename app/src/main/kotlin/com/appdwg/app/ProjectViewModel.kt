@@ -1203,7 +1203,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun exportKml(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
         val p = exportProject() ?: return
         val name = (state as? ProjectState.Loaded)?.fileName ?: "App DWG"
-        writeTo(target, "KML") { out -> out.writer(Charsets.UTF_8).let { w -> KmlWriter.write(p.points, extra, zone, south, name, w); w.flush() } }
+        // Axes, drawing lines and the file's own points go too, not only the _POINTS layer.
+        val lines = extra + p.alignments.map { a -> ExportLine(a.name, a.vertices, false, 1) } +
+            p.polylines.map { l -> ExportLine(l.layer, List(l.xs.size) { Point2(l.xs[it], l.ys[it]) }, l.closed, 7) }
+        val points = p.points + p.cgPoints.map { c -> CogoPoint(c.name, c.code ?: "", c.position.x, c.position.y, c.position.z) }
+        writeTo(target, "KML") { out -> out.writer(Charsets.UTF_8).let { w -> KmlWriter.write(points, lines, zone, south, name, w); w.flush() } }
     }
 
     /** Volumes of the comparison, the matrix and the stages, as CSV (semicolon, decimal comma). */
@@ -1324,6 +1328,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 savedJson = json.toString()
                 projectUri = target
+                remember(target)
                 then()
                 "Projeto salvo em ${displayName(target)}."
             } catch (e: Exception) {
