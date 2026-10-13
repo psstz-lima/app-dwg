@@ -99,6 +99,9 @@ const val ROAD_SUFFIX = " (projeto)"
 /** File laid over the open project; [uri] is null for a surface the app generated. */
 data class AddedFile(val label: String, val project: LandXmlProject, val uri: Uri?)
 
+/** Suffix of a surface made by editing another. */
+const val EDITED_SUFFIX = " (editada)"
+
 /** Placement that leaves a drawing where it is. */
 private val IDENTITY = Placement(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, "0")
 
@@ -1009,6 +1012,42 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             doc.writeTo(out)
             doc.close()
         }
+    }
+
+    // ---- Surface editing ----
+
+    var surfaceEditMessage by mutableStateOf<String?>(null)
+        private set
+    private val surfaceUndo = ArrayDeque<Pair<String, AddedFile?>>()
+    var canUndoSurface by mutableStateOf(false)
+        private set
+
+    /** Name of the surface an edit of [name] produces: the same when it is already an edited one. */
+    fun editedName(name: String) = if (name.endsWith(EDITED_SUFFIX)) name else name + EDITED_SUFFIX
+
+    /** Applies [op] to [source]; the result becomes (or replaces) the edited surface, kept as an added file. */
+    fun editSurface(source: Surface, op: (Surface, String) -> Surface?) {
+        val app = getApplication<Application>()
+        val name = editedName(source.name)
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.Default) { runCatching { op(source, name) }.getOrNull() }
+            if (r == null || r.triangleCount == 0) { surfaceEditMessage = app.getString(R.string.se_failed); return@launch }
+            surfaceUndo.addLast(name to addedFiles.firstOrNull { it.label == name })
+            if (surfaceUndo.size > 30) surfaceUndo.removeFirst()
+            canUndoSurface = true
+            addedFiles = addedFiles.filter { it.label != name } +
+                AddedFile(name, LandXmlProject(null, null, listOf(r), emptyList(), emptyList(), emptyList()), null)
+            surfaceEditMessage = app.getString(R.string.se_done, name, r.vertexCount, r.triangleCount)
+            refreshJob?.cancel(); refreshNow()
+        }
+    }
+
+    fun undoSurfaceEdit() {
+        val (name, prev) = surfaceUndo.removeLastOrNull() ?: return
+        addedFiles = addedFiles.filter { it.label != name } + listOfNotNull(prev)
+        canUndoSurface = surfaceUndo.isNotEmpty()
+        surfaceEditMessage = null
+        refreshProject()
     }
 
     // ---- Slope and flow maps ----

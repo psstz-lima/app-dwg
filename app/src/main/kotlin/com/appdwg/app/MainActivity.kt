@@ -362,6 +362,8 @@ private fun ProjectScreen(
     var showAsBuilt by remember(fileName) { mutableStateOf(false) }
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
+    var showSurfaceEdit by remember(fileName) { mutableStateOf(false) }
+    val surfaceEditState = remember(fileName) { SurfaceEditState() }
     var showBulletin by remember(fileName) { mutableStateOf(false) }
     val bulletinPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri != null) vm.exportBulletinPdf(uri, fileName)
@@ -561,6 +563,7 @@ private fun ProjectScreen(
     val calibLabel = androidx.compose.ui.res.stringResource(R.string.calib_tool)
     val volumeLabel = androidx.compose.ui.res.stringResource(R.string.vol_tool)
     val analysisLabel = androidx.compose.ui.res.stringResource(R.string.ta_tool)
+    val surfaceEditLabel = androidx.compose.ui.res.stringResource(R.string.se_tool)
     val bulletinLabel = androidx.compose.ui.res.stringResource(R.string.bm_tool)
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
@@ -580,6 +583,7 @@ private fun ProjectScreen(
             add(RailTool(GIcon.ROAD, "Estrada", drawingRoad || v.roadBuilt) { showRoad = true })
         }
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel) { showSurfaceEdit = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
@@ -662,7 +666,8 @@ private fun ProjectScreen(
                     )
                 } else PlanView(
                     project = project,
-                    terrain = terrain,
+                    // An edited surface stands in for its original on the plan, so its holes and changes show.
+                    terrain = terrain.filter { t -> project.surfaces.none { it.name == t.name + EDITED_SUFFIX } },
                     colors = colors,
                     marker = info?.position,
                     markerOnAxis = info?.alignment?.stationOffset?.pointOnAlignment,
@@ -1004,6 +1009,12 @@ private fun ProjectScreen(
     if (showBulletin) {
         BulletinDialog(vm, onPdf = { bulletinPdf.launch("$baseName-boletim-${v.bulletinNumber}.pdf") },
             onCsv = { bulletinCsv.launch("$baseName-boletim-${v.bulletinNumber}.csv") }, onDismiss = { showBulletin = false })
+    }
+
+    if (showSurfaceEdit) {
+        SurfaceEditDialog(vm, project, surfaceEditState, measurePoints, tapped, onDraw = {
+            showSurfaceEdit = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
+        }, onDismiss = { showSurfaceEdit = false })
     }
 
     if (showAnalysis) AnalysisDialog(vm, project, onDismiss = { showAnalysis = false })

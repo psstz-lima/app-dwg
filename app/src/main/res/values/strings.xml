@@ -127,7 +127,32 @@
     <string name="ta_running">Analisando o terreno</string>
     <string name="ta_cell">Malha de %1$s m</string>
 
+    <!-- Surface editing -->
+    <string name="se_tool">Editar sup.</string>
+    <string name="se_title">Edição de superfície</string>
+    <string name="se_surface">Superfície</string>
+    <string name="se_result">O resultado vira a superfície "%1$s"; a original fica como está.</string>
+    <string name="se_polygon">Polígono da medição: %1$d vértices</string>
+    <string name="se_no_polygon">Sem polígono: use Medir para marcar a área (3 vértices ou mais).</string>
+    <string name="se_draw">Desenhar polígono</string>
+    <string name="se_area_ops">Na área do polígono</string>
+    <string name="se_keep_inside">Manter só dentro (limite externo)</string>
+    <string name="se_remove_inside">Remover dentro (furo)</string>
+    <string name="se_delete_points">Excluir pontos dentro</string>
+    <string name="se_raise">Elevar/baixar</string>
+    <string name="se_dz">Δ cota (m)</string>
+    <string name="se_flatten">Nivelar na cota</string>
+    <string name="se_z">Cota (m)</string>
+    <string name="se_point_ops">No ponto tocado na planta</string>
+    <string name="se_tapped">Ponto tocado: E %1$s · N %2$s</string>
+    <string name="se_no_tap">Toque na planta para escolher o local (feche esta janela, toque e volte).</string>
+    <string name="se_add_point">Adicionar ponto</string>
+    <string name="se_flip">Trocar aresta mais próxima</string>
+    <string name="se_undo">Desfazer</string>
+    <string name="se_done">%1$s: %2$d pontos, %3$d triângulos.</string>
+    <string name="se_failed">Nada mudou: o local está fora da superfície ou a aresta não pode ser trocada.</string>
 
+    <!-- As-built check -->
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>
     <string name="asbuilt_intro">Compara os pontos levantados com a superfície de projeto: diferença de cota em cada ponto, dentro ou fora da tolerância.</string>
