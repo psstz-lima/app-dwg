@@ -49,6 +49,11 @@ exporta com os dados reais de projeto.
   seção, comparação e referências. "Abrir" num `.appdwg` restaura tudo. Os arquivos não são
   copiados: o projeto guarda onde estão. Ao abrir outro arquivo ou sair com alterações não salvas,
   o app pergunta se quer salvar.
+- Exportar (botão "Exportar"): DXF do desenho (linhas, textos, eixos, pontos `_POINTS`, medição e
+  linha da seção; superfícies como 3DFACE se marcado), LandXML das superfícies (inclusive as geradas
+  do `.aecc.pnt` ou dos pontos) e pontos, pontos em PDENZ, KML para o Google Earth (UTM SIRGAS 2000
+  convertido para latitude/longitude), CSV dos volumes (comparação, matriz e etapas) e a tela em
+  PNG ou PDF.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

@@ -29,6 +29,12 @@ import com.appdwg.core.Surface
 import com.appdwg.core.CogoPoint
 import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.PointFile
+import com.appdwg.core.DxfWriter
+import com.appdwg.core.ExportLine
+import com.appdwg.core.KmlWriter
+import com.appdwg.core.LandXmlWriter
+import com.appdwg.core.Point2
+import com.appdwg.core.StationFormat
 import com.appdwg.core.SurfaceCompare
 import com.appdwg.core.SurfaceDifference
 import com.appdwg.core.StageProgress
@@ -657,6 +663,119 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
+    }
+
+    // ---- Export ----
+
+    var exportMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** The shown project with the COGO points, as exports see it. */
+    private fun exportProject(): LandXmlProject? =
+        (state as? ProjectState.Loaded)?.project?.copy(points = userPoints)
+
+    private fun hiddenLayers(): Set<String> = view?.let { it.offLayers.toSet() + it.frozenLayers } ?: emptySet()
+
+    /** Measurement and cross section lines, for DXF and KML. */
+    fun extraLines(sectionLine: Pair<Point2, Point2>?): List<ExportLine> = buildList {
+        val m = view?.measurePoints.orEmpty()
+        if (m.size >= 2) add(ExportLine("_MEDICAO", m, m.size >= 3, 4))
+        sectionLine?.let { add(ExportLine("_SECAO", listOf(it.first, it.second), false, 2)) }
+    }
+
+    private fun writeTo(target: Uri, what: String, block: (java.io.OutputStream) -> Unit) {
+        viewModelScope.launch {
+            exportMessage = try {
+                tracked("Exportando $what") {
+                    withContext(Dispatchers.IO) {
+                        getApplication<Application>().contentResolver.openOutputStream(target, "wt")?.buffered(1 shl 16)?.use { block(it) }
+                            ?: error("destino indisponível")
+                    }
+                }
+                "$what exportado para ${displayName(target)}."
+            } catch (e: OutOfMemoryError) {
+                "Memória insuficiente para exportar $what."
+            } catch (e: Exception) {
+                "Não foi possível exportar $what: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    fun exportDxf(target: Uri, includeSurfaces: Boolean, extra: List<ExportLine>) {
+        val p = exportProject() ?: return
+        val hidden = hiddenLayers()
+        writeTo(target, "DXF") { out -> out.writer(Charsets.UTF_8).let { w -> DxfWriter.write(p, w, hidden, extra, includeSurfaces); w.flush() } }
+    }
+
+    fun exportLandXml(target: Uri) {
+        val p = exportProject() ?: return
+        val hidden = hiddenLayers()
+        writeTo(target, "LandXML") { out ->
+            out.writer(Charsets.UTF_8).let { w ->
+                LandXmlWriter.write(p.surfaces.filter { it.name !in hidden }, p.points, p.cgPoints, w, p.coordinateSystem?.epsgCode)
+                w.flush()
+            }
+        }
+    }
+
+    fun exportKml(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
+        val p = exportProject() ?: return
+        val name = (state as? ProjectState.Loaded)?.fileName ?: "App DWG"
+        writeTo(target, "KML") { out -> out.writer(Charsets.UTF_8).let { w -> KmlWriter.write(p.points, extra, zone, south, name, w); w.flush() } }
+    }
+
+    /** Volumes of the comparison, the matrix and the stages, as CSV (semicolon, decimal comma). */
+    fun exportVolumes(target: Uri) {
+        val d = difference
+        val m = matrix
+        val st = stageProgress
+        val names = crossSelected
+        fun n(v: Double) = StationFormat.decimal(v, 3)
+        val text = buildString {
+            if (d != null) {
+                append("Comparação;A;B;Corte (m3);Aterro (m3);Saldo (m3);Área corte (m2);Área aterro (m2);Malha (m)\r\n")
+                append("B - A;${d.baseName};${d.otherName};${n(d.cutVolume)};${n(d.fillVolume)};${n(d.netVolume)};${n(d.cutArea)};${n(d.fillArea)};${n(d.cellSize)}\r\n\r\n")
+            }
+            if (m.isNotEmpty()) {
+                append("Matriz (linha - coluna);Linha;Coluna;Corte (m3);Aterro (m3);Saldo (m3)\r\n")
+                for (r in names) for (c in names) if (r != c) matrixCell(r, c)?.let { x ->
+                    append(";$r;$c;${n(x.cutVolume)};${n(x.fillVolume)};${n(x.netVolume)}\r\n")
+                }
+                append("\r\n")
+            }
+            if (st != null) {
+                append("Etapas;De;Para;Corte (m3);Aterro (m3);Movimentado (m3)\r\n")
+                st.periods.forEachIndexed { k, p -> append("Período ${k + 1};${p.from};${p.to};${n(p.cut)};${n(p.fill)};${n(p.cut + p.fill)}\r\n") }
+                append("Falta até o projeto;;;${n(st.remainingCut)};${n(st.remainingFill)};${n(st.remainingCut + st.remainingFill)}\r\n")
+                append("Total terreno → projeto;;;${n(st.totalCut)};${n(st.totalFill)};${n(st.totalCut + st.totalFill)}\r\n")
+                append("Concluído (%);;;;;${StationFormat.decimal(st.done * 100, 1)}\r\n")
+            }
+        }
+        // BOM so Excel reads the accents.
+        writeTo(target, "CSV de volumes") { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
+    }
+
+    val hasVolumes get() = difference != null || matrix.isNotEmpty() || stageProgress != null
+
+    /** Saves a picture of the screen as PNG or as a one-page PDF. */
+    fun exportImage(target: Uri, bitmap: Bitmap, pdf: Boolean) {
+        writeTo(target, if (pdf) "PDF" else "PNG") { out ->
+            if (!pdf) {
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            } else {
+                // A4 landscape at 72 dpi, the picture scaled to fit.
+                val doc = android.graphics.pdf.PdfDocument()
+                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(842, 595, 1).create())
+                val scale = minOf(842f / bitmap.width, 595f / bitmap.height)
+                page.canvas.translate((842 - bitmap.width * scale) / 2, (595 - bitmap.height * scale) / 2)
+                page.canvas.scale(scale, scale)
+                page.canvas.drawBitmap(bitmap, 0f, 0f, android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                doc.finishPage(page)
+                doc.writeTo(out)
+                doc.close()
+            }
+            out.flush()
+        }
     }
 
     // ---- Project file (.appdwg) ----

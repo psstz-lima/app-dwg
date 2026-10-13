@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.CrossSection
+import com.appdwg.core.Utm
 import com.appdwg.core.CogoPoint
 import com.appdwg.core.PointFile
 import com.appdwg.core.LandXmlProject
@@ -249,6 +250,40 @@ private fun ProjectScreen(
     val pointExporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) vm.exportPoints(uri)
     }
+    // Export: dialog, chosen kind waiting for the save picker, and the screen picture for PNG/PDF.
+    var showExport by remember(fileName) { mutableStateOf(false) }
+    var includeSurfaces by remember(fileName) { mutableStateOf(false) }
+    var utmZone by remember(fileName) { mutableStateOf((Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
+    var pendingExport by remember { mutableStateOf<ExportKind?>(null) }
+    var screenShot by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var captureFor by remember { mutableStateOf<ExportKind?>(null) }
+    val exportSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val kind = pendingExport
+        pendingExport = null
+        if (uri != null && kind != null) {
+            val line = vm.extraLines(sectionLineFor(vm, project))
+            when (kind) {
+                ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line)
+                ExportKind.LANDXML -> vm.exportLandXml(uri)
+                ExportKind.POINTS -> vm.exportPoints(uri)
+                ExportKind.KML -> vm.exportKml(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
+                ExportKind.VOLUMES -> vm.exportVolumes(uri)
+                ExportKind.PNG, ExportKind.PDF -> screenShot?.let { vm.exportImage(uri, it, kind == ExportKind.PDF) }
+            }
+            showExport = true
+        }
+    }
+    val window = (androidx.compose.ui.platform.LocalContext.current as? android.app.Activity)?.window
+    val baseName = fileName.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
+    LaunchedEffect(captureFor) {
+        val kind = captureFor ?: return@LaunchedEffect
+        // Waits for the dialog to leave the screen, then copies the window (3D included).
+        kotlinx.coroutines.delay(400)
+        screenShot = window?.let { captureWindow(it) }
+        captureFor = null
+        pendingExport = kind
+        exportSaver.launch(baseName + kind.suffix)
+    }
     val difference = vm.difference
     val differenceOverlay = vm.differenceImage?.takeIf { vm.differenceVisible }
     val rasters = vm.rasters.filterKeys { it !in vm.unloaded }
@@ -389,6 +424,7 @@ private fun ProjectScreen(
                     }
                     TextButton(onClick = { showCompare = true }) { Text("Comparar") }
                     TextButton(onClick = { showPoints = true }) { Text("Pontos") }
+                    TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
                         TextButton(onClick = { showReferences = true }) { Text("Referências") }
                     }
@@ -500,6 +536,22 @@ private fun ProjectScreen(
         )
     }
 
+    if (showExport) {
+        ExportDialog(
+            vm,
+            includeSurfaces = includeSurfaces,
+            onIncludeSurfaces = { includeSurfaces = it },
+            zone = utmZone,
+            onZone = { utmZone = it.trim().uppercase() },
+            onExport = { kind ->
+                showExport = false
+                if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind
+                else { pendingExport = kind; exportSaver.launch(baseName + kind.suffix) }
+            },
+            onDismiss = { showExport = false },
+        )
+    }
+
     if (showCross) {
         CrossCompareDialog(vm, project, onShown = { showCross = false }, onDismiss = { showCross = false })
     }
@@ -598,6 +650,27 @@ private fun InfoCard(info: PointInfo, difference: String?, marked: List<Pair<Str
             Line("Terreno no ponto", info.terrainElevation?.let { StationFormat.decimal(it, 3) + " m" } ?: "fora da superfície")
             Line("E / N", StationFormat.decimal(info.position.x, 3) + " / " + StationFormat.decimal(info.position.y, 3))
         }
+    }
+}
+
+/** Ends of the cross section open on the plan, or null. */
+private fun sectionLineFor(vm: ProjectViewModel, project: LandXmlProject): Pair<Point2, Point2>? {
+    val v = vm.view ?: return null
+    if (!v.showSection) return null
+    val axis = project.alignments.getOrNull(v.sectionAlignment) ?: return null
+    val s = CrossSection.at(axis, v.sectionStation, emptyList(), v.sectionHalfWidth) ?: return null
+    return s.pointAt(-s.offsets.last()) to s.pointAt(s.offsets.last())
+}
+
+/** Copy of what the window shows, including the 3D view's GL surface. */
+private suspend fun captureWindow(window: android.view.Window): android.graphics.Bitmap? {
+    val view = window.decorView
+    if (view.width <= 0 || view.height <= 0) return null
+    val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+    return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        android.view.PixelCopy.request(window, bitmap, { result ->
+            cont.resume(if (result == android.view.PixelCopy.SUCCESS) bitmap else null) {}
+        }, android.os.Handler(android.os.Looper.getMainLooper()))
     }
 }
 
