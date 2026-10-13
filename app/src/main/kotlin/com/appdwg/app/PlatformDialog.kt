@@ -49,27 +49,28 @@ fun PlatformDialog(
     val v = vm.view ?: return
     val p0 = v.platformParams
     // Fields as typed; parsed when calculating.
-    var elevation by remember { mutableStateOf(p0.elevation?.let { StationFormat.decimal(it, 3) } ?: "") }
+    var elevation by remember { mutableStateOf(p0.elevation?.let { StationFormat.lengthValue(it) } ?: "") }
     var grade by remember { mutableStateOf(StationFormat.decimal(p0.gradePercent, 2)) }
     var azimuth by remember { mutableStateOf(StationFormat.decimal(p0.gradeAzimuth, 1)) }
     var useVertex by remember { mutableStateOf(p0.useVertexElevations) }
     val f = remember {
         mutableMapOf(
             "cr" to StationFormat.decimal(p0.cutRatio, 2), "ch" to heightsText(p0.cutHeights, p0.cutBenchHeight),
-            "cw" to StationFormat.decimal(p0.cutBenchWidth, 2), "cf" to StationFormat.decimal(p0.cutBenchFall, 1),
+            "cw" to StationFormat.lengthValue(p0.cutBenchWidth, 2), "cf" to StationFormat.decimal(p0.cutBenchFall, 1),
             "fr" to StationFormat.decimal(p0.fillRatio, 2), "fh" to heightsText(p0.fillHeights, p0.fillBenchHeight),
-            "fw" to StationFormat.decimal(p0.fillBenchWidth, 2), "ff" to StationFormat.decimal(p0.fillBenchFall, 1),
+            "fw" to StationFormat.lengthValue(p0.fillBenchWidth, 2), "ff" to StationFormat.decimal(p0.fillBenchFall, 1),
         )
     }
     var fields by remember { mutableStateOf(f.toMap()) }
-    fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+    fun num(s: String) = StationFormat.number(s)
+    fun len(s: String) = StationFormat.parseLength(s)
     val ratiosOk = (num(fields["cr"]!!) ?: 0.0) > 0 && (num(fields["fr"]!!) ?: 0.0) > 0 &&
         listOf("cw", "cf", "fw", "ff").all { num(fields[it]!!) != null } && listOf("ch", "fh").all { heights(fields[it]!!) != null }
-    val valid = ratiosOk && (elevation.isBlank() || num(elevation) != null) && num(grade) != null && num(azimuth) != null
+    val valid = ratiosOk && (elevation.isBlank() || len(elevation) != null) && num(grade) != null && num(azimuth) != null
     fun params() = PlatformParams(
-        num(elevation), num(grade)!!, num(azimuth)!!, useVertex,
-        num(fields["cr"]!!)!!, heights(fields["ch"]!!)!!.first(), num(fields["cw"]!!)!!, num(fields["cf"]!!)!!,
-        num(fields["fr"]!!)!!, heights(fields["fh"]!!)!!.first(), num(fields["fw"]!!)!!, num(fields["ff"]!!)!!,
+        len(elevation), num(grade)!!, num(azimuth)!!, useVertex,
+        num(fields["cr"]!!)!!, heights(fields["ch"]!!)!!.first(), len(fields["cw"]!!)!!, num(fields["cf"]!!)!!,
+        num(fields["fr"]!!)!!, heights(fields["fh"]!!)!!.first(), len(fields["fw"]!!)!!, num(fields["ff"]!!)!!,
         heights(fields["ch"]!!)!!.takeIf { it.size > 1 }.orEmpty(), heights(fields["fh"]!!)!!.takeIf { it.size > 1 }.orEmpty(),
     )
     val decimal = KeyboardOptions(keyboardType = KeyboardType.Text)
@@ -114,7 +115,7 @@ fun PlatformDialog(
                 HorizontalDivider()
                 Text("Cota da plataforma", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(elevation, { elevation = it }, label = { Text("Cota no 1º vértice (vazio = média do terreno)") },
+                    OutlinedTextField(elevation, { elevation = it }, label = { Text("Cota no 1º vértice (${StationFormat.lengthUnit}; vazio = média do terreno)") },
                         singleLine = true, modifier = Modifier.width(320.dp), keyboardOptions = decimal, enabled = !useVertex)
                     OutlinedTextField(grade, { grade = it }, label = { Text("Inclinação %") }, singleLine = true, modifier = Modifier.width(140.dp),
                         keyboardOptions = decimal, enabled = !useVertex)
@@ -136,9 +137,9 @@ fun PlatformDialog(
                 vm.platformVolumes?.let { d ->
                     HorizontalDivider()
                     Text("Resultado contra ${d.baseName}", style = MaterialTheme.typography.labelLarge)
-                    Text("Corte ${StationFormat.decimal(d.cutVolume, 1)} m³ · Aterro ${StationFormat.decimal(d.fillVolume, 1)} m³ · " +
-                        "Saldo ${(if (d.netVolume >= 0) "+" else "−") + StationFormat.decimal(kotlin.math.abs(d.netVolume), 1)} m³")
-                    Text("Área do projeto (até o offset): ${StationFormat.decimal(d.cutArea + d.fillArea, 0)} m² · malha ${StationFormat.decimal(d.cellSize, 2)} m",
+                    Text("Corte ${StationFormat.volume(d.cutVolume)} · Aterro ${StationFormat.volume(d.fillVolume)} · " +
+                        "Saldo ${(if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(kotlin.math.abs(d.netVolume))}")
+                    Text("Área do projeto (até o offset): ${StationFormat.area(d.cutArea + d.fillArea, 0)} · malha ${StationFormat.length(d.cellSize, 2)}",
                         style = MaterialTheme.typography.bodySmall)
                     Text("A superfície \"$PLATFORM_LABEL\" já entra na seção, no perfil, no comparativo e na exportação (LandXML com breaklines e limite; DXF com borda, offset e bermas).",
                         style = MaterialTheme.typography.bodySmall)
@@ -153,10 +154,10 @@ private fun SlopeRow(title: String, prefix: String, fields: Map<String, String>,
     val decimal = KeyboardOptions(keyboardType = KeyboardType.Text)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, Modifier.width(70.dp), style = MaterialTheme.typography.labelLarge)
-        listOf("r" to "Talude H:V", "h" to "Alturas das bermas (m)", "w" to "Largura berma (m)", "f" to "Inclinação interna %").forEach { (k, label) ->
+        listOf("r" to "Talude H:V", "h" to "Alturas das bermas (${StationFormat.lengthUnit})", "w" to "Largura berma (${StationFormat.lengthUnit})", "f" to "Inclinação interna %").forEach { (k, label) ->
             OutlinedTextField(fields[prefix + k]!!, { onChange(prefix + k, it) }, label = { Text(label) }, singleLine = true,
                 modifier = Modifier.width(if (k == "h") 230.dp else 170.dp), keyboardOptions = decimal,
-                isError = if (k == "h") heights(fields[prefix + k]!!) == null else fields[prefix + k]!!.trim().replace(',', '.').toDoubleOrNull() == null)
+                isError = if (k == "h") heights(fields[prefix + k]!!) == null else StationFormat.number(fields[prefix + k]!!) == null)
         }
     }
     Spacer(Modifier.height(2.dp))
@@ -166,8 +167,8 @@ private fun SlopeRow(title: String, prefix: String, fields: Map<String, String>,
 private fun heights(s: String): List<Double>? {
     val parts = s.split(';').map { it.trim() }.filter { it.isNotEmpty() }
     if (parts.isEmpty()) return null
-    return parts.map { it.replace(',', '.').toDoubleOrNull()?.takeIf { v -> v >= 0 && v.isFinite() } ?: return null }
+    return parts.map { StationFormat.parseLength(it)?.takeIf { v -> v >= 0 } ?: return null }
 }
 
 private fun heightsText(list: List<Double>, single: Double) =
-    (list.ifEmpty { listOf(single) }).joinToString("; ") { StationFormat.decimal(it, 2) }
+    (list.ifEmpty { listOf(single) }).joinToString("; ") { StationFormat.lengthValue(it, 2) }

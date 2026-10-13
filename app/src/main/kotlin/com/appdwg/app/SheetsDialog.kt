@@ -39,7 +39,7 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
     val axis = project.alignments.firstOrNull { it.name == axisName }
     var fromText by remember(axisName) { mutableStateOf(StationFormat.estaca(p.from ?: axis?.startStation ?: 0.0)) }
     var toText by remember(axisName) { mutableStateOf(StationFormat.estaca(p.to ?: axis?.endStation ?: 0.0)) }
-    fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }
+    fun num(s: String) = StationFormat.number(s)?.takeIf { it > 0 }
     @Composable
     fun field(value: String, label: Int, w: Int = 170, onValue: (String) -> Unit) =
         OutlinedTextField(value, onValue, label = { Text(stringResource(label)) }, singleLine = true, modifier = Modifier.width(w.dp),

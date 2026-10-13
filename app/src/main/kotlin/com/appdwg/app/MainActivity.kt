@@ -90,7 +90,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) openFromIntent(intent)
         setContent {
-            GromaticTheme(viewModel.themes.choice) {
+            // Number format from the device's language, units from Aparência; the screens are rebuilt when either changes.
+            val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+            val system = remember(locale, viewModel.units.choice) { viewModel.units.apply(locale) }
+            GromaticTheme(viewModel.themes.choice) { androidx.compose.runtime.key(locale, system) {
                 val full = viewModel.fullScreen && viewModel.state is ProjectState.Loaded
                 LaunchedEffect(full) {
                     val bars = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
@@ -100,7 +103,7 @@ class MainActivity : ComponentActivity() {
                     } else bars.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
                 }
                 AppScreen(viewModel)
-            }
+            } }
         }
     }
 
@@ -195,7 +198,8 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     ) { padding ->
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
         if (showAppearance) AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
-            onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false })
+            onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false },
+            units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) })
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
@@ -823,7 +827,7 @@ private fun ProjectScreen(
                 if (showContours && !show3d) {
                     Card {
                         Text(
-                            contourDrawn?.let { "Curvas de nível a cada ${StationFormat.decimal(it, if (it < 1) 2 else 0)} m (mestras a cada 5)" }
+                            contourDrawn?.let { "Curvas de nível a cada ${StationFormat.length(it, if (it < 1) 2 else 0)} (mestras a cada 5)" }
                                 ?: "Curvas densas demais neste zoom: aproxime ou aumente o intervalo",
                             Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium,
                         )
@@ -1002,13 +1006,13 @@ private fun ProjectScreen(
     if (!vm.fullScreen) StatusFooter(
         items = buildList {
             shown?.let { p ->
-                add("E " + StationFormat.decimal(p.position.x, 3)); add("N " + StationFormat.decimal(p.position.y, 3))
-                p.terrainElevation?.let { add("Z " + StationFormat.decimal(it, 2)) }
+                add("E " + StationFormat.lengthValue(p.position.x)); add("N " + StationFormat.lengthValue(p.position.y))
+                p.terrainElevation?.let { add("Z " + StationFormat.lengthValue(it, 2)) }
                 p.alignment?.takeIf { !it.stationOffset.outside }?.let { a -> add(StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset)) }
             }
             metersPerInch?.let { add("1:" + niceScale(it / 0.0254)) }
         },
-        gpsText = gnssFix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.decimal(it, 3) + " m" } ?: "") },
+        gpsText = gnssFix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") },
         gpsColor = if (gnssFix?.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(gnssFix?.quality),
     )
     }
@@ -1147,11 +1151,13 @@ private fun ProjectScreen(
                 Column {
                     Text("Intervalo")
                     Row {
-                        listOf(0.0, 0.5, 1.0, 2.0, 5.0, 10.0).forEach { i ->
+                        // Round intervals in the shown unit (1, 2, 5… ft in imperial), kept in metres.
+                        (if (com.appdwg.core.Display.imperial) listOf(0.0, 1.0, 2.0, 5.0, 10.0, 20.0).map { it * StationFormat.FOOT }
+                        else listOf(0.0, 0.5, 1.0, 2.0, 5.0, 10.0)).forEach { i ->
                             androidx.compose.material3.FilterChip(
                                 selected = showContours && contourInterval == i,
                                 onClick = { contourInterval = i; showContours = true },
-                                label = { Text(if (i == 0.0) "Auto" else StationFormat.decimal(i, if (i < 1) 1 else 0) + " m") },
+                                label = { Text(if (i == 0.0) "Auto" else StationFormat.length(i, if (StationFormat.toLength(i) < 0.99) 1 else 0)) },
                                 modifier = Modifier.padding(end = 6.dp),
                             )
                         }
@@ -1301,19 +1307,19 @@ private fun InfoCard(info: PointInfo, difference: String?, marked: List<Pair<Str
             if (a != null) {
                 Text(a.name, style = MaterialTheme.typography.titleSmall)
                 Line("Estaca", StationFormat.estaca(a.stationOffset.station) +
-                    "  (${StationFormat.decimal(a.stationOffset.station)} m)")
+                    "  (${StationFormat.length(a.stationOffset.station)})")
                 Line("Afastamento", StationFormat.offset(a.stationOffset.offset) +
                     if (a.stationOffset.outside) "  (fora do eixo)" else "")
-                a.designElevation?.let { Line("Greide no eixo", StationFormat.decimal(it, 3) + " m") }
-                a.terrainOnAxis?.let { Line("Terreno no eixo", StationFormat.decimal(it, 3) + " m") }
+                a.designElevation?.let { Line("Greide no eixo", StationFormat.length(it, 3)) }
+                a.terrainOnAxis?.let { Line("Terreno no eixo", StationFormat.length(it, 3)) }
                 a.cutFill?.let {
-                    Line(if (it >= 0) "Aterro" else "Corte", StationFormat.decimal(abs(it), 3) + " m")
+                    Line(if (it >= 0) "Aterro" else "Corte", StationFormat.length(abs(it), 3))
                 }
             }
             difference?.let { Line("B − A no ponto", it) }
             marked.forEach { (name, z) -> Line(name.substringAfterLast('|'), z) }
-            Line("Terreno no ponto", info.terrainElevation?.let { StationFormat.decimal(it, 3) + " m" } ?: "fora da superfície")
-            Line("E / N", StationFormat.decimal(info.position.x, 3) + " / " + StationFormat.decimal(info.position.y, 3))
+            Line("Terreno no ponto", info.terrainElevation?.let { StationFormat.length(it, 3) } ?: "fora da superfície")
+            Line("E / N", StationFormat.lengthValue(info.position.x) + " / " + StationFormat.lengthValue(info.position.y))
         }
     }
 }
@@ -1342,7 +1348,7 @@ private suspend fun captureWindow(window: android.view.Window): android.graphics
 /** Elevation at [p] of each surface marked for the cross comparison. */
 private fun markedElevations(project: LandXmlProject, marked: List<String>, p: Point2): List<Pair<String, String>> =
     marked.mapNotNull { n -> project.surfaces.firstOrNull { it.name == n } }
-        .map { s -> s.name to (s.elevationAt(p)?.let { StationFormat.decimal(it, 3) + " m" } ?: "fora") }
+        .map { s -> s.name to (s.elevationAt(p)?.let { StationFormat.length(it, 3) } ?: "fora") }
 
 /** B − A at [p] with the surfaces of the last comparison, as "+0,250 m (aterro)"; null without one. */
 private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Point2): String? {
@@ -1351,7 +1357,7 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
     val zb = project.surfaces.firstOrNull { it.name == d.otherName }?.elevationAt(p)
     if (za == null || zb == null) return "fora de uma das superfícies"
     val v = zb - za
-    return signed(v, 3) + " m" + when {
+    return signedLength(v) + when {
         v > 0.0005 -> " (aterro)"
         v < -0.0005 -> " (corte)"
         else -> ""
@@ -1374,21 +1380,21 @@ private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit
                 )
             } else {
                 if (m.legs.size > 1) Text("Último trecho", style = MaterialTheme.typography.labelMedium)
-                Line("Distância", StationFormat.decimal(leg.distance, 3) + " m")
+                Line("Distância", StationFormat.length(leg.distance, 3))
                 Line("Azimute", Measure.dms(leg.azimuth))
                 leg.rise?.let { r ->
-                    Line("Desnível", signed(r, 3) + " m")
+                    Line("Desnível", signedLength(r))
                     leg.slopePercent?.let { Line("Inclinação", signed(it, 2) + " %") }
                 }
                 if (m.legs.size > 1) {
                     Spacer(Modifier.height(6.dp))
                     Text("Total (${m.legs.size + 1} pontos)", style = MaterialTheme.typography.labelMedium)
-                    Line("Comprimento", StationFormat.decimal(m.length, 3) + " m")
-                    m.rise?.let { r -> Line("Desnível 1º → último", signed(r, 3) + " m") }
+                    Line("Comprimento", StationFormat.length(m.length, 3))
+                    m.rise?.let { r -> Line("Desnível 1º → último", signedLength(r)) }
                 }
-                m.slopeLength?.let { Line("Comprimento inclinado", StationFormat.decimal(it, 3) + " m") }
+                m.slopeLength?.let { Line("Comprimento inclinado", StationFormat.length(it, 3)) }
                 m.area?.let { Line("Área", Measure.area(it)) }
-                m.perimeter?.let { Line("Perímetro", StationFormat.decimal(it, 3) + " m") }
+                m.perimeter?.let { Line("Perímetro", StationFormat.length(it, 3)) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (m != null) {
@@ -1402,6 +1408,9 @@ private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit
 }
 
 private fun signed(v: Double, digits: Int) = (if (v >= 0) "+" else "−") + StationFormat.decimal(abs(v), digits)
+
+/** Signed length in the shown unit: "+0,250 m" or "+0.820 ft". */
+private fun signedLength(v: Double, digits: Int = 3) = (if (v >= 0) "+" else "−") + StationFormat.length(abs(v), digits)
 
 @Composable
 private fun Line(label: String, value: String) {
@@ -1538,5 +1547,5 @@ private fun niceScale(ratio: Double): String {
     if (!ratio.isFinite() || ratio <= 0) return "?"
     val e = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(ratio)))
     val n = listOf(1.0, 2.0, 2.5, 5.0, 10.0).minByOrNull { kotlin.math.abs(it * e - ratio) }!! * e
-    return String.format(java.util.Locale.forLanguageTag("pt-BR"), "%,d", Math.round(n))
+    return StationFormat.grouped(Math.round(n).toDouble(), 0)
 }

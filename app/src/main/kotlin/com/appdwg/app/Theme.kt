@@ -223,3 +223,31 @@ fun GromaticTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
         CompositionLocalProvider(LocalG provides g, LocalMinimumInteractiveComponentSize provides g.target, content = content)
     }
 }
+
+/** Units the user picked in Aparência; [AUTO] is imperial only in the United States. */
+enum class UnitChoice(val label: String, val hint: String) {
+    AUTO("Automático", "Pelo idioma do aparelho: imperial só nos EUA"),
+    METRIC("Métrico", "m, m², ha, m³"),
+    IMPERIAL("Imperial", "pé internacional (ft), ft², acre, jarda cúbica (yd³)"),
+}
+
+/** Units choice kept on the device; applying it sets [com.appdwg.core.Display]. */
+class UnitStore(context: Context) {
+    private val prefs = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+    var choice by mutableStateOf(UnitChoice.entries.firstOrNull { it.name == prefs.getString("units", null) } ?: UnitChoice.AUTO)
+        private set
+
+    fun choose(c: UnitChoice) { choice = c; prefs.edit().putString("units", c.name).apply() }
+
+    /** Sets the shown units and number format for [locale]; returns the system in use. */
+    fun apply(locale: java.util.Locale): com.appdwg.core.UnitSystem {
+        com.appdwg.core.Display.locale = locale
+        val u = when (choice) {
+            UnitChoice.AUTO -> com.appdwg.core.Display.defaultUnits(locale)
+            UnitChoice.METRIC -> com.appdwg.core.UnitSystem.METRIC
+            UnitChoice.IMPERIAL -> com.appdwg.core.UnitSystem.IMPERIAL
+        }
+        com.appdwg.core.Display.units = u
+        return u
+    }
+}

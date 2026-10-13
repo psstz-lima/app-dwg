@@ -48,7 +48,12 @@ import com.appdwg.core.Superelevation
 
 private enum class RoadTab(val label: String) { AXIS("Eixo"), GRADE("Greide"), SECTION("Seção tipo"), REGIONS("Regiões"), SLOPES("Taludes"), SE("Superelevação"), RESULT("Resultado") }
 
-private fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+private fun num(s: String) = StationFormat.number(s)
+
+/** Fields whose label names the length unit hold lengths: shown in that unit, kept in metres. */
+private fun isLength(label: String) = label.contains("(" + StationFormat.lengthUnit)
+private fun shown(label: String, v: Double) = if (isLength(label)) StationFormat.toLength(v) else v
+private fun stored(label: String, v: Double) = if (isLength(label)) StationFormat.fromLength(v) else v
 private fun f(v: Double, d: Int = 2) = StationFormat.decimal(v, d)
 
 /** Road (corridor) design: axis, grade, typical section, slopes, superelevation and the results. */
@@ -71,8 +76,8 @@ fun RoadDialog(
     val text = KeyboardOptions(keyboardType = KeyboardType.Text)
     @Composable
     fun numField(value: Double, label: String, width: Int = 150, onChange: (Double) -> Unit) {
-        var t by remember(label, value) { mutableStateOf(f(value, 3).trimEnd('0').trimEnd(',')) }
-        OutlinedTextField(t, { t = it; num(it)?.let(onChange) }, label = { Text(label) }, singleLine = true,
+        var t by remember(label, value) { mutableStateOf(f(shown(label, value), 3).trimEnd('0').trimEnd(',', '.')) }
+        OutlinedTextField(t, { t = it; num(it)?.let { x -> onChange(stored(label, x)) } }, label = { Text(label) }, singleLine = true,
             modifier = Modifier.width(width.dp), keyboardOptions = text, isError = num(t) == null)
     }
     val axes = project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }
@@ -109,8 +114,8 @@ fun RoadDialog(
                                 OutlinedButton(enabled = vm.userPoints.size >= 2, onClick = {
                                     rp = rp.copy(pis = vm.userPoints.map { com.appdwg.core.Point2(it.x, it.y) })
                                 }) { Text("Usar pontos _POINTS") }
-                                numField(rp.radius, "Raio (m)") { rp = rp.copy(radius = it) }
-                                numField(rp.spiral, "Espiral Ls (m, 0 = sem)", 190) { rp = rp.copy(spiral = it) }
+                                numField(rp.radius, "Raio (${StationFormat.lengthUnit})") { rp = rp.copy(radius = it) }
+                                numField(rp.spiral, "Espiral Ls (${StationFormat.lengthUnit}, 0 = sem)", 190) { rp = rp.copy(spiral = it) }
                             }
                         } else Text("Usa o alinhamento do arquivo, com estaqueamento de 20 m.", style = MaterialTheme.typography.bodySmall)
                         val names = project.surfaces.map { it.name }.filter { !it.startsWith(ROAD_LABEL) }
@@ -146,8 +151,8 @@ fun RoadDialog(
                                 var st by remember(i, p.station) { mutableStateOf(StationFormat.estaca(p.station)) }
                                 OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(station = s) }) } },
                                     label = { Text("Estaca") }, singleLine = true, modifier = Modifier.width(150.dp))
-                                numField(p.elevation, "Cota") { z -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(elevation = z) }) }
-                                numField(p.curveLength, "Curva vertical (m)") { c -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(curveLength = c) }) }
+                                numField(p.elevation, "Cota (${StationFormat.lengthUnit})") { z -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(elevation = z) }) }
+                                numField(p.curveLength, "Curva vertical (${StationFormat.lengthUnit})") { c -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(curveLength = c) }) }
                                 if (i > 0) Text("rampa " + f((p.elevation - rp.pvis[i - 1].elevation) / (p.station - rp.pvis[i - 1].station) * 100) + " %",
                                     style = MaterialTheme.typography.bodySmall)
                                 OutlinedButton(onClick = { rp = rp.copy(pvis = rp.pvis.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
@@ -170,8 +175,8 @@ fun RoadDialog(
                         SideEditor("Lado esquerdo", rp.left) { s -> rp = if (same) rp.copy(left = s, right = s) else rp.copy(left = s) }
                         if (!same) SideEditor("Lado direito", rp.right) { s -> rp = rp.copy(right = s) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            numField(rp.pavement, "Espessura do pavimento (m)", 220) { rp = rp.copy(pavement = it) }
-                            numField(rp.step, "Seções a cada (m)") { rp = rp.copy(step = it.coerceAtLeast(1.0)) }
+                            numField(rp.pavement, "Espessura do pavimento (${StationFormat.lengthUnit})", 220) { rp = rp.copy(pavement = it) }
+                            numField(rp.step, "Seções a cada (${StationFormat.lengthUnit})") { rp = rp.copy(step = it.coerceAtLeast(1.0)) }
                         }
                         Text("Caimento negativo desce para fora. A sarjeta é um degrau no fim do acostamento; a valeta (em V) entra só em corte.",
                             style = MaterialTheme.typography.bodySmall)
@@ -218,7 +223,7 @@ fun RoadDialog(
                                 var st by remember(i, r.from) { mutableStateOf(StationFormat.estaca(r.from)) }
                                 OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(from = s) }) } },
                                     label = { Text("A partir da estaca") }, singleLine = true, modifier = Modifier.width(170.dp))
-                                numField(r.transition, "Transição (m)") { t -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(transition = t) }) }
+                                numField(r.transition, "Transição (${StationFormat.lengthUnit})") { t -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(transition = t) }) }
                                 OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, -1) }) { Text(if (r.leftTarget != null) "Alvo E ✓ (trocar)" else "Alvo bordo E") }
                                 OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, 1) }) { Text(if (r.rightTarget != null) "Alvo D ✓ (trocar)" else "Alvo bordo D") }
                                 if (r.leftTarget != null || r.rightTarget != null) TextButton(onClick = {
@@ -250,22 +255,22 @@ private fun SideEditor(title: String, s: SideTemplate, onChange: (SideTemplate) 
     val text = KeyboardOptions(keyboardType = KeyboardType.Text)
     @Composable
     fun field(value: Double, label: String, set: (Double) -> SideTemplate) {
-        var t by remember(label, value) { mutableStateOf(f(value, 3).trimEnd('0').trimEnd(',')) }
-        OutlinedTextField(t, { t = it; num(it)?.let { x -> onChange(set(x)) } }, label = { Text(label) }, singleLine = true,
+        var t by remember(label, value) { mutableStateOf(f(shown(label, value), 3).trimEnd('0').trimEnd(',', '.')) }
+        OutlinedTextField(t, { t = it; num(it)?.let { x -> onChange(set(stored(label, x))) } }, label = { Text(label) }, singleLine = true,
             modifier = Modifier.width(150.dp), keyboardOptions = text, isError = num(t) == null)
     }
     Text(title, style = MaterialTheme.typography.labelLarge)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        field(s.laneWidth, "Pista (m)") { s.copy(laneWidth = it) }
+        field(s.laneWidth, "Pista (${StationFormat.lengthUnit})") { s.copy(laneWidth = it) }
         field(s.laneSlope, "Caimento pista %") { s.copy(laneSlope = it) }
-        field(s.shoulderWidth, "Acostamento (m)") { s.copy(shoulderWidth = it) }
+        field(s.shoulderWidth, "Acostamento (${StationFormat.lengthUnit})") { s.copy(shoulderWidth = it) }
         field(s.shoulderSlope, "Caimento acost. %") { s.copy(shoulderSlope = it) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        field(s.gutterWidth, "Sarjeta (m)") { s.copy(gutterWidth = it) }
-        field(s.gutterDepth, "Degrau sarjeta (m)") { s.copy(gutterDepth = it) }
-        field(s.ditchWidth, "Valeta (m)") { s.copy(ditchWidth = it) }
-        field(s.ditchDepth, "Prof. valeta (m)") { s.copy(ditchDepth = it) }
+        field(s.gutterWidth, "Sarjeta (${StationFormat.lengthUnit})") { s.copy(gutterWidth = it) }
+        field(s.gutterDepth, "Degrau sarjeta (${StationFormat.lengthUnit})") { s.copy(gutterDepth = it) }
+        field(s.ditchWidth, "Valeta (${StationFormat.lengthUnit})") { s.copy(ditchWidth = it) }
+        field(s.ditchDepth, "Prof. valeta (${StationFormat.lengthUnit})") { s.copy(ditchDepth = it) }
     }
 }
 
@@ -274,23 +279,23 @@ private fun SlopeEditor(title: String, r: SlopeRule, onChange: (SlopeRule) -> Un
     val text = KeyboardOptions(keyboardType = KeyboardType.Text)
     @Composable
     fun field(value: Double, label: String, set: (Double) -> SlopeRule?) {
-        var t by remember(label, value) { mutableStateOf(f(value, 3).trimEnd('0').trimEnd(',')) }
-        OutlinedTextField(t, { t = it; num(it)?.let { x -> set(x)?.let(onChange) } }, label = { Text(label) }, singleLine = true,
+        var t by remember(label, value) { mutableStateOf(f(shown(label, value), 3).trimEnd('0').trimEnd(',', '.')) }
+        OutlinedTextField(t, { t = it; num(it)?.let { x -> set(stored(label, x))?.let(onChange) } }, label = { Text(label) }, singleLine = true,
             modifier = Modifier.width(190.dp), keyboardOptions = text, isError = num(t) == null)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.width(70.dp), style = MaterialTheme.typography.labelLarge)
         field(r.ratio, "Talude H:V") { if (it > 0) r.copy(ratio = it) else null }
-        field(r.benchHeight, "Altura entre bermas (m)") { r.copy(benchHeight = it) }
-        field(r.benchWidth, "Largura berma (m)") { r.copy(benchWidth = it) }
+        field(r.benchHeight, "Altura entre bermas (${StationFormat.lengthUnit})") { r.copy(benchHeight = it) }
+        field(r.benchWidth, "Largura berma (${StationFormat.lengthUnit})") { r.copy(benchWidth = it) }
         field(r.benchFall, "Caimento berma %") { r.copy(benchFall = it) }
     }
 }
 
 @Composable
 private fun RoadResult(r: CorridorResult, swell: Double, onServiceNote: () -> Unit, onServiceNotePdf: () -> Unit, onBulletin: () -> Unit) {
-    Text("Eixo ${r.alignment.name}: ${f(r.alignment.length)} m, ${r.sections.size} seções", style = MaterialTheme.typography.labelLarge)
-    Text("Corte ${f(r.totalCut, 1)} m³ · Aterro ${f(r.totalFill, 1)} m³ · Saldo final (Brückner) ${f(r.volumes.last().accumulated, 1)} m³")
+    Text("Eixo ${r.alignment.name}: ${StationFormat.length(r.alignment.length)}, ${r.sections.size} seções", style = MaterialTheme.typography.labelLarge)
+    Text("Corte ${StationFormat.volume(r.totalCut)} · Aterro ${StationFormat.volume(r.totalFill)} · Saldo final (Brückner) ${StationFormat.volume(r.volumes.last().accumulated)}")
     Text("Superfícies \"$ROAD_LABEL\" (acabada) e \"$ROAD_LABEL (terraplenagem)\" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.",
         style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -327,13 +332,13 @@ private fun HaulSummary(r: CorridorResult, swell: Double, onBulletin: () -> Unit
     val m = remember(r, swell) { com.appdwg.core.MassHaul.of(r.volumes, swell) }
     HorizontalDivider()
     Text(androidx.compose.ui.res.stringResource(R.string.haul_title), style = MaterialTheme.typography.labelLarge)
-    Text(androidx.compose.ui.res.stringResource(R.string.haul_summary, f(m.hauled, 1), f(m.moment / 1000, 1), f(m.dmt, 0)),
+    Text(androidx.compose.ui.res.stringResource(R.string.haul_summary, StationFormat.volume(m.hauled), haulMoment(m.moment), StationFormat.length(m.dmt, 0)),
         fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-    Text(androidx.compose.ui.res.stringResource(R.string.haul_local, f(m.lateral, 1), f(m.spoil, 1), f(m.borrow, 1)), style = MaterialTheme.typography.bodySmall)
+    Text(androidx.compose.ui.res.stringResource(R.string.haul_local, StationFormat.volume(m.lateral), StationFormat.volume(m.spoil), StationFormat.volume(m.borrow)), style = MaterialTheme.typography.bodySmall)
     if (m.bands.isNotEmpty()) {
         Text(androidx.compose.ui.res.stringResource(R.string.haul_bands), style = MaterialTheme.typography.labelMedium)
         m.bands.forEach { b ->
-            Text(androidx.compose.ui.res.stringResource(R.string.haul_band_row, b.label, f(b.volume, 1), f(if (b.volume > 0) b.moment / b.volume else 0.0, 0)),
+            Text(androidx.compose.ui.res.stringResource(R.string.haul_band_row, b.label, StationFormat.volume(b.volume), StationFormat.length(if (b.volume > 0) b.moment / b.volume else 0.0, 0)),
                 style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -341,9 +346,13 @@ private fun HaulSummary(r: CorridorResult, swell: Double, onBulletin: () -> Unit
         Text(androidx.compose.ui.res.stringResource(R.string.haul_waves), style = MaterialTheme.typography.labelMedium)
         val fwd = androidx.compose.ui.res.stringResource(R.string.haul_forward); val back = androidx.compose.ui.res.stringResource(R.string.haul_back)
         m.waves.take(40).forEach { w ->
-            Text(androidx.compose.ui.res.stringResource(R.string.haul_wave_row, StationFormat.estaca(w.start), StationFormat.estaca(w.end), f(w.volume, 1),
-                f(w.dmt, 0), if (w.forward) fwd else back), style = MaterialTheme.typography.bodySmall)
+            Text(androidx.compose.ui.res.stringResource(R.string.haul_wave_row, StationFormat.estaca(w.start), StationFormat.estaca(w.end), StationFormat.volume(w.volume),
+                StationFormat.length(w.dmt, 0), if (w.forward) fwd else back), style = MaterialTheme.typography.bodySmall)
         }
     }
     OutlinedButton(onClick = onBulletin) { Text(androidx.compose.ui.res.stringResource(R.string.haul_bulletin)) }
 }
+
+/** Transport moment: m³·km, or yd³·mi in imperial. */
+private fun haulMoment(m3m: Double) = if (com.appdwg.core.Display.imperial)
+    StationFormat.grouped(m3m / StationFormat.CUBIC_YARD / 1609.344, 1) + " yd³·mi" else StationFormat.grouped(m3m / 1000, 1) + " m³·km"

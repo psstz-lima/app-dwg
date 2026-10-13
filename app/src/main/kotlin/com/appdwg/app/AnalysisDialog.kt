@@ -57,7 +57,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
                     Text(stringResource(R.string.ta_min_area), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(2_000.0, 10_000.0, 50_000.0, 200_000.0).forEach { a ->
-                            FilterChip(vm.flowMinArea == a, { vm.changeFlowMinArea(a) }, { Text(StationFormat.decimal(a / 10_000, 1) + " ha") })
+                            FilterChip(vm.flowMinArea == a, { vm.changeFlowMinArea(a) }, { Text(StationFormat.landArea(a, 1)) })
                         }
                     }
                     Text(stringResource(R.string.ta_flow_hint), style = MaterialTheme.typography.bodySmall)
@@ -66,7 +66,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
                     Text(stringResource(R.string.ta_slope_hint), style = MaterialTheme.typography.bodySmall)
                     SlopeLegend(vm, Modifier)
                 }
-                if (vm.analysisCell > 0) Text(stringResource(R.string.ta_cell, StationFormat.decimal(vm.analysisCell, 2)), style = MaterialTheme.typography.bodySmall)
+                if (vm.analysisCell > 0) Text(stringResource(R.string.ta_cell, StationFormat.length(vm.analysisCell, 2)), style = MaterialTheme.typography.bodySmall)
             }
         },
     )
@@ -84,7 +84,7 @@ fun SlopeLegend(vm: ProjectViewModel, modifier: Modifier) {
                     Box(Modifier.size(14.dp).background(Color(c.color), RoundedCornerShape(3.dp)))
                     val range = if (c.to == null) "> ${c.from.toInt()}" else "${c.from.toInt()}–${c.to!!.toInt()}"
                     Text("  $range ${c.name}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                    Text(StationFormat.decimal(c.area / 10_000, 2) + " ha", style = MaterialTheme.typography.labelSmall)
+                    Text(StationFormat.landArea(c.area, 2), style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

@@ -134,4 +134,4 @@ fun BasemapDialog(
 
 private const val MAX_TILES = 20_000
 
-private fun mb(bytes: Long) = String.format(Locale.ROOT, "%.1f MB", bytes / 1_000_000.0).replace('.', ',')
+private fun mb(bytes: Long) = com.appdwg.core.StationFormat.decimal(bytes / 1_000_000.0, 1) + " MB"

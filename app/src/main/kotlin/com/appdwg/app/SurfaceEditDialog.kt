@@ -36,12 +36,13 @@ import com.appdwg.core.SurfaceEdit
 /** Settings of the surface editor, kept while the drawing is open. */
 class SurfaceEditState {
     var surface by mutableStateOf<String?>(null)
-    var dz by mutableStateOf("0,50")
+    var dz by mutableStateOf(StationFormat.decimal(0.5))
     var z by mutableStateOf("")
     var pointZ by mutableStateOf("")
 }
 
-private fun dbl(s: String) = s.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
+/** Lengths typed in the shown unit, back in metres. */
+private fun dbl(s: String) = StationFormat.parseLength(s)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -90,11 +91,11 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(st.dz, { st.dz = it }, label = { Text(stringResource(R.string.se_dz)) }, singleLine = true, modifier = Modifier.width(130.dp),
+                    OutlinedTextField(st.dz, { st.dz = it }, label = { Text(stringResource(R.string.se_dz, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(130.dp),
                         isError = dbl(st.dz) == null, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
                     OutlinedButton(enabled = poly != null && source != null && dbl(st.dz) != null,
                         onClick = { val d = dbl(st.dz)!!; edit { s, n -> SurfaceEdit.raise(s, poly!!, d, null, n) } }) { Text(stringResource(R.string.se_raise)) }
-                    OutlinedTextField(st.z, { st.z = it }, label = { Text(stringResource(R.string.se_z)) }, singleLine = true, modifier = Modifier.width(130.dp),
+                    OutlinedTextField(st.z, { st.z = it }, label = { Text(stringResource(R.string.se_z, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(130.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     OutlinedButton(enabled = poly != null && source != null && dbl(st.z) != null,
                         onClick = { val z = dbl(st.z)!!; edit { s, n -> SurfaceEdit.raise(s, poly!!, 0.0, z, n) } }) { Text(stringResource(R.string.se_flatten)) }
@@ -104,11 +105,11 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
                 Text(stringResource(R.string.se_point_ops), style = MaterialTheme.typography.labelLarge)
                 if (tapped == null) Text(stringResource(R.string.se_no_tap), style = MaterialTheme.typography.bodySmall)
                 else {
-                    Text(stringResource(R.string.se_tapped, StationFormat.decimal(tapped.x, 3), StationFormat.decimal(tapped.y, 3)), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.se_tapped, StationFormat.lengthValue(tapped.x), StationFormat.lengthValue(tapped.y)), style = MaterialTheme.typography.bodySmall)
                     val here = source?.elevationAt(tapped)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(st.pointZ, { st.pointZ = it }, label = { Text(stringResource(R.string.se_z)) }, singleLine = true,
-                            placeholder = { here?.let { Text(StationFormat.decimal(it, 3)) } }, modifier = Modifier.width(150.dp),
+                        OutlinedTextField(st.pointZ, { st.pointZ = it }, label = { Text(stringResource(R.string.se_z, StationFormat.lengthUnit)) }, singleLine = true,
+                            placeholder = { here?.let { Text(StationFormat.lengthValue(it)) } }, modifier = Modifier.width(150.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                         OutlinedButton(enabled = source != null && (dbl(st.pointZ) != null || here != null), onClick = {
                             val z = dbl(st.pointZ) ?: here ?: return@OutlinedButton

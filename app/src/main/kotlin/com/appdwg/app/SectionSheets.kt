@@ -165,7 +165,7 @@ object SectionSheets {
         }
         s.design?.let { d -> c.drawCircle(x(0.0), y(d), 1.8f, Paint().apply { color = 0xFFD32F2F.toInt(); isAntiAlias = true }) }
         // Heading: station, axis heights, areas.
-        c.drawText("Estaca " + StationFormat.estaca(s.station), left, y0 + 9f, bold)
+        c.drawText("Estaca " + StationFormat.estacaMetric(s.station), left, y0 + 9f, bold)
         val parts = buildList {
             s.terrainOnAxis?.let { add("Terreno ${StationFormat.decimal(it, 3)}") }
             (road?.grade ?: s.design)?.let { add("Greide ${StationFormat.decimal(it, 3)}") }
@@ -197,7 +197,7 @@ object SectionSheets {
         // Title on two lines so it stays inside its cell.
         c.drawText("Desenho", x0 + 4f, rows[1] + 8f, text)
         c.drawText("SEÇÕES TRANSVERSAIS", x0 + 4f, rows[1] + 16f, Paint(bold).apply { textSize = 7f })
-        c.drawText(fit("Eixo $axis · estacas ${StationFormat.estaca(s0)} a ${StationFormat.estaca(s1)}", text, w * 0.6f - 8f), x0 + 4f, rows[1] + 22.5f, text)
+        c.drawText(fit("Eixo $axis · estacas ${StationFormat.estacaMetric(s0)} a ${StationFormat.estacaMetric(s1)}", text, w * 0.6f - 8f), x0 + 4f, rows[1] + 22.5f, text)
         cell("Folha", "$page / $pages", x0 + w * 0.6f, rows[1])
         cell("Escalas", "H 1:${p.scale} · V 1:${p.scale / max(1, p.exaggeration)}", x0, rows[2])
         cell("Data", date, x0 + w * 0.6f, rows[2])

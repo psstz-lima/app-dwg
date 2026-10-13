@@ -49,7 +49,7 @@ class MeasureTest {
     fun formatsDegreesAndArea() {
         assertEquals("45°30'00\"", Measure.dms(45.5))
         assertEquals("0°00'00\"", Measure.dms(359.99999))
-        assertEquals("5000,00 m²", Measure.area(5000.0))
-        assertEquals("12500,00 m² (1,2500 ha)", Measure.area(12500.0))
+        assertEquals("5.000,00 m²", Measure.area(5000.0))
+        assertEquals("12.500,00 m² (1,2500 ha)", Measure.area(12500.0))
     }
 }

@@ -49,7 +49,7 @@ fun thumbnail(file: File, maxSide: Int = 800): ImageBitmap? {
 fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     var text by remember { mutableStateOf(initial.text) }
-    var z by remember { mutableStateOf(if (initial.z.isNaN()) "" else StationFormat.decimal(initial.z, 3)) }
+    var z by remember { mutableStateOf(if (initial.z.isNaN()) "" else StationFormat.lengthValue(initial.z)) }
     var photo by remember { mutableStateOf(initial.photo) }
     var pending by remember { mutableStateOf<File?>(null) }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -62,7 +62,7 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                vm.saveNote(initial.copy(text = text.trim(), z = z.trim().replace(',', '.').toDoubleOrNull() ?: Double.NaN, photo = photo))
+                vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
                 onDismiss()
             }) { Text("Salvar") }
         },
@@ -75,9 +75,9 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
         title = { Text(if (isNew) "Nova anotação" else "Anotação ${initial.id}") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("E ${StationFormat.decimal(initial.x, 3)} · N ${StationFormat.decimal(initial.y, 3)} · ${initial.time}", style = MaterialTheme.typography.bodySmall)
+                Text("E ${StationFormat.lengthValue(initial.x)} · N ${StationFormat.lengthValue(initial.y)} · ${initial.time}", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(text, { text = it }, label = { Text("Texto") }, minLines = 2)
-                OutlinedTextField(z, { z = it }, label = { Text("Cota (m)") }, singleLine = true, modifier = Modifier.width(180.dp))
+                OutlinedTextField(z, { z = it }, label = { Text("Cota (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(180.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
                         val f = vm.newPhotoFile()
@@ -101,7 +101,7 @@ fun NoteCard(vm: ProjectViewModel, note: FieldNote, onEdit: () -> Unit, onClose:
         Column(Modifier.padding(12.dp)) {
             Text("Anotação ${note.id} · ${note.time}", style = MaterialTheme.typography.titleSmall)
             if (note.text.isNotEmpty()) Text(note.text)
-            Text("E ${StationFormat.decimal(note.x, 3)} · N ${StationFormat.decimal(note.y, 3)}" + (if (note.z.isNaN()) "" else " · cota ${StationFormat.decimal(note.z, 3)}"),
+            Text("E ${StationFormat.lengthValue(note.x)} · N ${StationFormat.lengthValue(note.y)}" + (if (note.z.isNaN()) "" else " · cota ${StationFormat.lengthValue(note.z)}"),
                 style = MaterialTheme.typography.bodySmall)
             thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 220.dp)) }
             Row {

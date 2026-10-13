@@ -126,18 +126,18 @@ private fun SurfacePicker(label: String, names: List<String>, selected: String?,
 @Composable
 private fun DifferenceSummary(d: SurfaceDifference) {
     Column {
-        Row2("Corte (B abaixo de A)", m3(d.cutVolume) + " em " + StationFormat.decimal(d.cutArea, 0) + " m²")
-        Row2("Aterro (B acima de A)", m3(d.fillVolume) + " em " + StationFormat.decimal(d.fillArea, 0) + " m²")
+        Row2("Corte (B abaixo de A)", m3(d.cutVolume) + " em " + StationFormat.area(d.cutArea, 0))
+        Row2("Aterro (B acima de A)", m3(d.fillVolume) + " em " + StationFormat.area(d.fillArea, 0))
         Row2("Saldo (aterro − corte)", (if (d.netVolume >= 0) "+" else "−") + m3(kotlin.math.abs(d.netVolume)))
-        Row2("Maior corte / aterro", StationFormat.decimal(-d.minDifference, 3) + " / " + StationFormat.decimal(d.maxDifference, 3) + " m")
+        Row2("Maior corte / aterro", StationFormat.lengthValue(-d.minDifference) + " / " + StationFormat.length(d.maxDifference, 3))
         Text(
-            "Calculado na área comum às duas, em malha de ${StationFormat.decimal(d.cellSize, 2)} m.",
+            "Calculado na área comum às duas, em malha de ${StationFormat.length(d.cellSize, 2)}.",
             style = MaterialTheme.typography.bodySmall,
         )
     }
 }
 
-private fun m3(v: Double) = StationFormat.decimal(v, 1) + " m³"
+private fun m3(v: Double) = StationFormat.volume(v)
 
 @Composable
 private fun Row2(label: String, value: String) {
@@ -153,7 +153,7 @@ fun DifferenceLegend(d: SurfaceDifference, modifier: Modifier) {
     val s = DifferenceImage.scale(d)
     Card(modifier) {
         Column(Modifier.padding(10.dp)) {
-            Text("B − A (m)", style = MaterialTheme.typography.labelMedium)
+            Text("B − A (${StationFormat.lengthUnit})", style = MaterialTheme.typography.labelMedium)
             Text("A: ${d.baseName}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
             Text("B: ${d.otherName}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
             Spacer(Modifier.height(4.dp))
@@ -164,9 +164,9 @@ fun DifferenceLegend(d: SurfaceDifference, modifier: Modifier) {
                 ),
             )
             Row(Modifier.width(220.dp)) {
-                Text("−" + StationFormat.decimal(s), style = MaterialTheme.typography.labelSmall)
+                Text("−" + StationFormat.lengthValue(s, 2), style = MaterialTheme.typography.labelSmall)
                 Text("0", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Text("+" + StationFormat.decimal(s), style = MaterialTheme.typography.labelSmall)
+                Text("+" + StationFormat.lengthValue(s, 2), style = MaterialTheme.typography.labelSmall)
             }
             Row(Modifier.width(220.dp)) {
                 Text("corte", style = MaterialTheme.typography.labelSmall, color = Color(0xFF000000 or DifferenceImage.CUT.toLong()))

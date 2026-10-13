@@ -89,7 +89,7 @@ fun PointEditDialog(
     var e by remember { mutableStateOf(f3(initial.x)) }
     var n by remember { mutableStateOf(f3(initial.y)) }
     var z by remember { mutableStateOf(if (initial.z.isNaN()) "" else f3(initial.z)) }
-    fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+    fun num(s: String) = StationFormat.parseLength(s)
     val valid = number.isNotBlank() && num(e) != null && num(n) != null && (z.isBlank() || num(z) != null)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -111,9 +111,9 @@ fun PointEditDialog(
                 OutlinedTextField(number, { number = it }, label = { Text("Número") }, singleLine = true)
                 OutlinedTextField(description, { description = it }, label = { Text("Descrição") }, singleLine = true)
                 val decimal = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                OutlinedTextField(e, { e = it }, label = { Text("E (m)") }, singleLine = true, keyboardOptions = decimal, isError = num(e) == null)
-                OutlinedTextField(n, { n = it }, label = { Text("N (m)") }, singleLine = true, keyboardOptions = decimal, isError = num(n) == null)
-                OutlinedTextField(z, { z = it }, label = { Text("Cota (m)") }, singleLine = true, keyboardOptions = decimal,
+                OutlinedTextField(e, { e = it }, label = { Text("E (${StationFormat.lengthUnit})") }, singleLine = true, keyboardOptions = decimal, isError = num(e) == null)
+                OutlinedTextField(n, { n = it }, label = { Text("N (${StationFormat.lengthUnit})") }, singleLine = true, keyboardOptions = decimal, isError = num(n) == null)
+                OutlinedTextField(z, { z = it }, label = { Text("Cota (${StationFormat.lengthUnit})") }, singleLine = true, keyboardOptions = decimal,
                     isError = z.isNotBlank() && num(z) == null)
             }
         },
@@ -135,12 +135,12 @@ fun PointCard(
             Text("Ponto ${point.number}" + if (point.description.isNotEmpty()) " · ${point.description}" else "",
                 style = MaterialTheme.typography.titleSmall)
             PointLine("E / N", f3(point.x) + " / " + f3(point.y))
-            PointLine("Cota", if (point.z.isNaN()) "sem cota" else f3(point.z) + " m")
+            PointLine("Cota", if (point.z.isNaN()) "sem cota" else StationFormat.length(point.z, 3))
             terrain?.let { t ->
-                PointLine("Terreno no ponto", f3(t) + " m")
+                PointLine("Terreno no ponto", StationFormat.length(t, 3))
                 if (!point.z.isNaN()) {
                     val d = point.z - t
-                    PointLine("Ponto − terreno", (if (d >= 0) "+" else "−") + f3(abs(d)) + " m")
+                    PointLine("Ponto − terreno", (if (d >= 0) "+" else "−") + StationFormat.length(abs(d), 3))
                 }
             }
             alignment?.let { a ->
@@ -163,4 +163,5 @@ private fun PointLine(label: String, value: String) {
 }
 
 /** Three decimals with a decimal comma, as the rest of the app shows numbers. */
-fun f3(v: Double): String = String.format(Locale.forLanguageTag("pt-BR"), "%.3f", v)
+/** A length or coordinate in the shown unit, 3 decimals, in the device's number format. */
+fun f3(v: Double): String = StationFormat.lengthValue(v, 3)

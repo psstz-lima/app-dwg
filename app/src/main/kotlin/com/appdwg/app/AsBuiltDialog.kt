@@ -81,7 +81,8 @@ fun AsBuiltDialog(
     val surfaces = project.surfaces.map { it.name }
     // The design is usually the last surface added (a corridor or the project file), the ground the first.
     val surfaceName = st.surface?.takeIf { it in surfaces } ?: surfaces.lastOrNull()
-    val tolerance = st.toleranceCm.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.div(100)
+    // Tolerance in centimetres, or inches in imperial.
+    val tolerance = StationFormat.number(st.toleranceCm)?.takeIf { it > 0 }?.times(if (com.appdwg.core.Display.imperial) 0.0254 else 0.01)
     val report = vm.asBuilt
 
     AlertDialog(
@@ -114,7 +115,7 @@ fun AsBuiltDialog(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(st.toleranceCm, { st.toleranceCm = it }, label = { Text(stringResource(R.string.asbuilt_tolerance)) },
+                    OutlinedTextField(st.toleranceCm, { st.toleranceCm = it }, label = { Text(stringResource(R.string.asbuilt_tolerance, if (com.appdwg.core.Display.imperial) "in" else "cm")) },
                         singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(170.dp),
                         isError = tolerance == null)
                     OutlinedButton(
@@ -132,7 +133,7 @@ fun AsBuiltDialog(
                     fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: "—"
                     Text(stringResource(R.string.asbuilt_summary, report.checked, StationFormat.decimal(report.passRate * 100, 1),
                         report.above, report.below, report.outside), fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.asbuilt_stats, n(report.mean), n(report.rms), n(report.stdDev), n(report.min), n(report.max)),
+                    Text(stringResource(R.string.asbuilt_stats, len(report.mean), len(report.rms), len(report.stdDev), len(report.min), len(report.max)),
                         style = MaterialTheme.typography.bodySmall)
                     Text(stringResource(R.string.asbuilt_sign), style = MaterialTheme.typography.bodySmall)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -147,7 +148,7 @@ fun AsBuiltDialog(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(r.point.number, Modifier.width(56.dp), maxLines = 1, style = MaterialTheme.typography.bodySmall)
                             Text(r.stationOffset?.let { StationFormat.estaca(it.station) } ?: "", Modifier.width(90.dp), maxLines = 1, style = MaterialTheme.typography.bodySmall)
-                            Text(r.delta?.let { (if (it > 0) "+" else "") + StationFormat.decimal(it, 3) + " m" } ?: "—", Modifier.width(90.dp),
+                            Text(r.delta?.let { (if (it > 0) "+" else "") + StationFormat.length(it, 3) } ?: "—", Modifier.width(90.dp),
                                 style = MaterialTheme.typography.bodySmall)
                             Text(statusLabel(s), color = asBuiltColor(s), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
                         }
@@ -157,3 +158,5 @@ fun AsBuiltDialog(
         },
     )
 }
+
+private fun len(v: Double?) = v?.let { StationFormat.length(it, 3) } ?: "—"

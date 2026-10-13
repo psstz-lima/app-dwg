@@ -74,11 +74,8 @@ object Measure {
         return "%d°%02d'%02d\"".format(d, m, s)
     }
 
-    /** Area in m², with hectares once it is large: 12500 m² becomes "12500,00 m² (1,2500 ha)". */
-    fun area(m2: Double): String {
-        val base = StationFormat.decimal(m2) + " m²"
-        return if (m2 >= 10_000) base + " (" + StationFormat.decimal(m2 / 10_000, 4) + " ha)" else base
-    }
+    /** Area in the shown units, with hectares (or acres) once it is large: "12.500,00 m² (1,2500 ha)". */
+    fun area(m2: Double): String = StationFormat.area(m2)
 
     private fun shoelace(p: List<Point2>): Double {
         // Relative to the first point, so UTM-sized coordinates keep their precision.

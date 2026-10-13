@@ -872,6 +872,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
     val basemap = BasemapStore(app)
     val themes = ThemeStore(app)
+    val units = UnitStore(app)
 
     override fun onCleared() { gnss.disconnect() }
 
@@ -970,14 +971,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
                 val oe = s.top.first(); val od = s.top.last()
                 val ca = s.terrainAxis?.let { s.grade - it }
-                append(listOf(StationFormat.estaca(s.station), n(s.station), n(s.terrainAxis), n(s.grade),
+                append(listOf(StationFormat.estacaMetric(s.station), n(s.station), n(s.terrainAxis), n(s.grade),
                     ca?.let { (if (it >= 0) "A " else "C ") + StationFormat.decimal(kotlin.math.abs(it), 3) } ?: "",
                     n(be?.offset?.let { -it }), n(be?.z), n(bd?.offset), n(bd?.z),
                     oe.code, n(-oe.offset), n(oe.z), od.code, n(od.offset), n(od.z), n(s.cutArea), n(s.fillArea)).joinToString(";"))
                 append("\r\n")
             }
             append("\r\nEstaca;Corte (m3);Aterro (m3);Acumulado (Brückner, m3)\r\n")
-            for (row in r.volumes) append("${StationFormat.estaca(row.station)};${n(row.cut)};${n(row.fill)};${n(row.accumulated)}\r\n")
+            for (row in r.volumes) append("${StationFormat.estacaMetric(row.station)};${n(row.cut)};${n(row.fill)};${n(row.accumulated)}\r\n")
             append("Total;${n(r.totalCut)};${n(r.totalFill)};\r\n")
         }
         writeTo(target, "nota de serviço") { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
@@ -996,7 +997,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val rows = r.sections.map { s ->
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
                 val oe = s.top.first(); val od = s.top.last(); val ca = s.terrainAxis?.let { s.grade - it }
-                listOf(StationFormat.estaca(s.station), n(s.terrainAxis), n(s.grade), ca?.let { (if (it >= 0) "A " else "C ") + n(kotlin.math.abs(it)) } ?: "",
+                listOf(StationFormat.estacaMetric(s.station), n(s.terrainAxis), n(s.grade), ca?.let { (if (it >= 0) "A " else "C ") + n(kotlin.math.abs(it)) } ?: "",
                     "${n(be?.offset?.let { -it })} / ${n(be?.z)}", "${n(bd?.offset)} / ${n(bd?.z)}",
                     "${oe.code} ${n(-oe.offset)} / ${n(oe.z)}", "${od.code} ${n(od.offset)} / ${n(od.z)}", n(s.cutArea), n(s.fillArea))
             }
@@ -1126,7 +1127,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val hidden = hiddenLayers()
         val surfaces = project.surfaces.filter { it.name !in hidden }
         val roadSections = road?.takeIf { it.alignment.name == axis.name }?.sections
-        val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date())
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
         writeTo(target, app.getString(R.string.sh_export)) { out ->
             val doc = android.graphics.pdf.PdfDocument()
             val built = SectionSheets.render(doc, p, axis, surfaces, roadSections, title, date)
@@ -1152,9 +1153,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 1.234.567,89 */
-    private fun grouped(x: Double): String = java.text.NumberFormat.getNumberInstance(java.util.Locale("pt", "BR")).apply {
-        minimumFractionDigits = 2; maximumFractionDigits = 2
-    }.format(x)
+    private fun grouped(x: Double): String = StationFormat.grouped(x, 2)
 
     private fun bulletinTotals(): String {
         val items = view?.bulletinItems.orEmpty()
@@ -1167,7 +1166,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val v = view ?: return
         val app = getApplication<Application>()
         val (head, rows) = bulletinRows()
-        val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date())
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
         val text = buildString {
             append(app.getString(R.string.bm_title)).append("\r\n")
             append(app.getString(R.string.bm_pdf_head, title, v.bulletinNumber, v.bulletinPeriod, date)).append("\r\n\r\n")
@@ -1191,7 +1190,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val v = view ?: return
         val app = getApplication<Application>()
         val (head, rows) = bulletinRows()
-        val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date())
+        val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
         writeTo(target, app.getString(R.string.bm_export_pdf)) { out ->
             val doc = android.graphics.pdf.PdfDocument()
             val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
@@ -1272,15 +1271,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         fun n(v: Double?, d: Int = 3) = v?.let { StationFormat.decimal(it, d) } ?: ""
         val p = row.point
         return listOf(p.number, p.description, n(p.x), n(p.y), n(p.z), n(row.design), n(row.delta),
-            row.stationOffset?.let { StationFormat.estaca(it.station) } ?: "", row.stationOffset?.let { StationFormat.offset(it.offset) } ?: "",
+            row.stationOffset?.let { StationFormat.estacaMetric(it.station) } ?: "", row.stationOffset?.let { StationFormat.offset(it.offset) } ?: "",
             asBuiltStatus(r.status(row)))
     }
 
     private fun asBuiltSummary(r: com.appdwg.core.AsBuiltReport): Pair<String, String> {
         val app = getApplication<Application>()
-        fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: "—"
+        // Reports stay in metres whatever the shown units; the number format follows the language.
+        fun l(v: Double?) = v?.let { StationFormat.decimal(it, 3) + " m" } ?: "—"
         return app.getString(R.string.asbuilt_summary, r.checked, StationFormat.decimal(r.passRate * 100, 1), r.above, r.below, r.outside) to
-            app.getString(R.string.asbuilt_stats, n(r.mean), n(r.rms), n(r.stdDev), n(r.min), n(r.max))
+            app.getString(R.string.asbuilt_stats, l(r.mean), l(r.rms), l(r.stdDev), l(r.min), l(r.max))
     }
 
     fun exportAsBuiltCsv(target: Uri, title: String) {
@@ -1304,7 +1304,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val r = asBuilt ?: return
         val app = getApplication<Application>()
         val (summary, stats) = asBuiltSummary(r)
-        val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt", "BR")).format(java.util.Date())
+        val date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
         writeTo(target, app.getString(R.string.asbuilt_export_pdf)) { out ->
             val doc = android.graphics.pdf.PdfDocument()
             val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
@@ -1318,7 +1318,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, pi + 1).create())
                 val c = page.canvas
                 c.drawText(app.getString(R.string.asbuilt_report_title), 28f, 40f, android.graphics.Paint(bold).apply { textSize = 13f })
-                c.drawText(app.getString(R.string.asbuilt_report_head, title, r.surface, r.alignment ?: "—", StationFormat.decimal(r.tolerance, 3), date), 28f, 56f, paint)
+                c.drawText(app.getString(R.string.asbuilt_report_head, title, r.surface, r.alignment ?: "—", StationFormat.decimal(r.tolerance, 3) + " m", date), 28f, 56f, paint)
                 c.drawText(summary, 28f, 70f, bold)
                 c.drawText(stats, 28f, 82f, paint)
                 c.drawText(app.getString(R.string.asbuilt_sign), 28f, 94f, paint)

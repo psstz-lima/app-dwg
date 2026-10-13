@@ -672,6 +672,7 @@ private class Scene(
 
 /** Station intervals in metres; all are whole 20 m stakes so labels stay round. */
 private val STATION_STEPS = doubleArrayOf(20.0, 40.0, 100.0, 200.0, 400.0, 1000.0, 2000.0, 5000.0, 10000.0)
+private val IMPERIAL_STATION_STEPS = doubleArrayOf(100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0).map { it * StationFormat.FOOT }.toDoubleArray()
 
 private fun DrawScope.drawStations(
     alignments: List<Alignment>,
@@ -680,7 +681,9 @@ private fun DrawScope.drawStations(
     toScreen: (Point2) -> Offset,
 ) {
     val minSpacingPx = 70.sp.toPx()
-    val step = STATION_STEPS.firstOrNull { it * cam.scale >= minSpacingPx } ?: return
+    // Whole stakes in metric, whole 100 ft stations in imperial.
+    val steps = if (com.appdwg.core.Display.imperial) IMPERIAL_STATION_STEPS else STATION_STEPS
+    val step = steps.firstOrNull { it * cam.scale >= minSpacingPx } ?: return
     val tick = 8.sp.toPx()
     val paint = Paint().apply {
         isAntiAlias = true
@@ -701,7 +704,7 @@ private fun DrawScope.drawStations(
                     val n = Offset(-dir.y / len, dir.x / len) * tick
                     drawLine(colors.stations, sp - n, sp + n, strokeWidth = 2f)
                     drawContext.canvas.nativeCanvas.drawHaloText(
-                        StationFormat.estaca(sta), sp.x + n.x * 1.4f + 4f, sp.y + n.y * 1.4f, paint,
+                        StationFormat.estacaWhole(sta), sp.x + n.x * 1.4f + 4f, sp.y + n.y * 1.4f, paint,
                     )
                 }
             }
@@ -850,7 +853,7 @@ private fun DrawScope.drawMeasure(points: List<Point2>, toScreen: (Point2) -> Of
     for (i in 1 until screen.size) {
         val mid = (screen[i - 1] + screen[i]) / 2f
         val d = hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
-        drawContext.canvas.nativeCanvas.drawText(StationFormat.decimal(d) + " m", mid.x + 6f, mid.y - 6f, label)
+        drawContext.canvas.nativeCanvas.drawText(StationFormat.length(d), mid.x + 6f, mid.y - 6f, label)
     }
     for ((i, sp) in screen.withIndex()) {
         drawCircle(Color.White, radius = 6.sp.toPx(), center = sp)
@@ -894,7 +897,7 @@ private fun DrawScope.drawCogoPoints(
         if (pt == selected) drawCircle(colors.marker, radius = r * 2.2f, center = sp, style = Stroke(width = 3f))
         if (labels && taken.size < 400) {
             val x = sp.x + r * 1.8f
-            val line2 = listOfNotNull(pt.description.takeIf { it.isNotEmpty() }, pt.z.takeIf { !it.isNaN() }?.let { StationFormat.decimal(it, 3) })
+            val line2 = listOfNotNull(pt.description.takeIf { it.isNotEmpty() }, pt.z.takeIf { !it.isNaN() }?.let { StationFormat.lengthValue(it) })
                 .joinToString("  ")
             val box = android.graphics.RectF(x, sp.y - r * 0.6f - paint.textSize, x + maxOf(paint.measureText(pt.number), paint.measureText(line2)),
                 sp.y + paint.textSize * 1.3f)
@@ -923,7 +926,8 @@ class ContourPaths(val interval: Double, val minor: Path, val major: Path, val l
                     val share = kotlin.math.sqrt((region.width * region.height / (b.width * b.height)).coerceAtMost(1.0))
                     range * share
                 }
-                com.appdwg.core.Contours.autoInterval(relief)
+                // Round in the shown unit (1, 2, 5… ft in imperial), kept in metres.
+                StationFormat.fromLength(com.appdwg.core.Contours.autoInterval(StationFormat.toLength(relief)))
             }
             val minor = Path(); val major = Path()
             val labels = ArrayList<Pair<Point2, Double>>()
@@ -962,14 +966,14 @@ private fun DrawScope.drawContourLabels(c: ContourPaths, cam: Camera, colors: Pl
         color = colors.contourMajor.toArgb()
         setShadowLayer(3f, 0f, 0f, colors.background.toArgb())
     }
-    val digits = if (c.interval < 1) 2 else 0
+    val digits = if (StationFormat.toLength(c.interval) < 0.99) 2 else 0
     var lastX = Float.NaN; var lastY = Float.NaN
     for ((p, z) in c.labels) {
         val sp = toScreen(p)
         if (sp.x < 0 || sp.y < 0 || sp.x > size.width || sp.y > size.height) continue
         // Skips labels crowding the previous one.
         if (!lastX.isNaN() && kotlin.math.abs(sp.x - lastX) < 40 && kotlin.math.abs(sp.y - lastY) < 20) continue
-        drawContext.canvas.nativeCanvas.drawText(StationFormat.decimal(z, digits), sp.x, sp.y, paint)
+        drawContext.canvas.nativeCanvas.drawText(StationFormat.lengthValue(z, digits), sp.x, sp.y, paint)
         lastX = sp.x; lastY = sp.y
     }
 }

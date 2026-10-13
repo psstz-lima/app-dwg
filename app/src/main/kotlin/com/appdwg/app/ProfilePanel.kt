@@ -80,7 +80,7 @@ fun ProfilePanel(
                     Text("Perfil · ${profile.alignment}", style = MaterialTheme.typography.titleSmall, maxLines = 1)
                     Text("Janela", style = MaterialTheme.typography.labelMedium)
                     PROFILE_RANGES.forEach { r ->
-                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) "Inteiro" else "±${r.toInt()} m") })
+                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) "Inteiro" else "±" + StationFormat.length(r, 0)) })
                     }
                 }
                 TextButton(onClick = onClose) { Text("Fechar") }
@@ -98,7 +98,7 @@ fun ProfilePanel(
                         TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
                         TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
                         OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text("Remover PVI") }
-                        Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.decimal(editPvis[i].elevation, 3)}",
+                        Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
                             style = MaterialTheme.typography.labelMedium)
                     }
                 }
@@ -208,18 +208,22 @@ private fun ProfileChart(
         // As many labels as fit, so a short or narrow chart (phone) does not pile them up.
         val sCount = ((right - left) / 70.dp.toPx()).toInt().coerceIn(3, 8)
         val zCount = ((bottom - top) / 28.dp.toPx()).toInt().coerceIn(2, 5)
-        val sStep = max(20.0, niceStep((s1 - s0) / sCount))
-        var s = ceil(s0 / sStep) * sStep
+        // Whole stakes (20 m) or whole stations (100 ft); elevations on round steps of the shown unit.
+        val stake = if (com.appdwg.core.Display.imperial) 100 * StationFormat.FOOT else 20.0
+        val sStep = max(stake, ceil(niceStep((s1 - s0) / sCount) / stake) * stake)
+        var s = ceil(s0 / sStep - 1e-9) * sStep
         while (s <= s1 + 1e-9) {
             drawLine(grid, Offset(x(s), top), Offset(x(s), bottom), strokeWidth = 1f)
-            text(StationFormat.estaca(s).substringBefore(" + 0,00"), x(s) - 14f, bottom + 18.dp.toPx(), fg, small = true)
+            text(StationFormat.estacaWhole(s), x(s) - 14f, bottom + 18.dp.toPx(), fg, small = true)
             s += sStep
         }
-        val zStep = niceStep((zMax - zMin) / zCount)
-        var z = ceil(zMin / zStep) * zStep
-        while (z <= zMax) {
-            drawLine(grid, Offset(left, y(z)), Offset(right, y(z)), strokeWidth = 1f)
-            text(StationFormat.decimal(z, if (zStep < 1) 2 else 0), 4f, y(z) + 4f, fg, small = true)
+        val zMinU = StationFormat.toLength(zMin); val zMaxU = StationFormat.toLength(zMax)
+        val zStep = niceStep((zMaxU - zMinU) / zCount)
+        var z = ceil(zMinU / zStep) * zStep
+        while (z <= zMaxU) {
+            val zm = StationFormat.fromLength(z)
+            drawLine(grid, Offset(left, y(zm)), Offset(right, y(zm)), strokeWidth = 1f)
+            text(StationFormat.decimal(z, if (zStep < 1) 2 else 0), 4f, y(zm) + 4f, fg, small = true)
             z += zStep
         }
         fun drawSeries(v: DoubleArray, color: Color, width: Float) {
@@ -240,7 +244,7 @@ private fun ProfileChart(
             if (v.station in s0..s1) {
                 drawCircle(GRADE_COLOR, if (editPvis != null) 10f else 6f, Offset(x(v.station), y(v.elevation)))
                 if (k == selected) drawCircle(fg, 16f, Offset(x(v.station), y(v.elevation)), style = Stroke(width = 3f))
-                if (v.curveLength > 0) text("CV ${StationFormat.decimal(v.curveLength, 0)}", x(v.station) + 6f, y(v.elevation) - 10f, GRADE_COLOR, small = true)
+                if (v.curveLength > 0) text("CV ${StationFormat.lengthValue(v.curveLength, 0)}", x(v.station) + 6f, y(v.elevation) - 10f, GRADE_COLOR, small = true)
             }
             if (k > 0) {
                 val a = p.pvis[k - 1]
@@ -261,14 +265,14 @@ private fun ProfileChart(
             if (!e.isNaN()) {
                 if (terrain == null) terrain = e
                 drawCircle(TERRAIN_COLORS[k % TERRAIN_COLORS.size], 6f, Offset(x(c), y(e)))
-                parts += "${l.surface.substringAfterLast('|')} ${StationFormat.decimal(e, 3)}"
+                parts += "${l.surface.substringAfterLast('|')} ${StationFormat.lengthValue(e)}"
             }
         }
         val g = p.design?.let { p.interpolate(it, c) }?.takeIf { !it.isNaN() }
         g?.let {
             drawCircle(GRADE_COLOR, 6f, Offset(x(c), y(it)))
-            parts += "Greide ${StationFormat.decimal(it, 3)}"
-            terrain?.let { t -> parts += (if (it >= t) "Aterro " else "Corte ") + StationFormat.decimal(abs(it - t), 3) }
+            parts += "Greide ${StationFormat.lengthValue(it)}"
+            terrain?.let { t -> parts += (if (it >= t) "Aterro " else "Corte ") + StationFormat.length(abs(it - t), 3) }
         }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (s1 - s0))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)

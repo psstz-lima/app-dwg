@@ -79,13 +79,14 @@ private fun ModelRow(
     alignInputs: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, List<String>>,
 ) {
     val p0 = entry.placement
-    var e by remember(p0) { mutableStateOf(StationFormat.decimal(p0.east, 3)) }
-    var n by remember(p0) { mutableStateOf(StationFormat.decimal(p0.north, 3)) }
-    var z by remember(p0) { mutableStateOf(StationFormat.decimal(p0.elevation, 3)) }
+    var e by remember(p0) { mutableStateOf(StationFormat.lengthValue(p0.east)) }
+    var n by remember(p0) { mutableStateOf(StationFormat.lengthValue(p0.north)) }
+    var z by remember(p0) { mutableStateOf(StationFormat.lengthValue(p0.elevation)) }
     var rot by remember(p0) { mutableStateOf(StationFormat.decimal(p0.rotationDeg, 3)) }
     var scale by remember(p0) { mutableStateOf(StationFormat.decimal(p0.scale, 4)) }
     var unit by remember(p0) { mutableStateOf(p0.unitScale) }
-    fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+    fun num(s: String) = StationFormat.number(s)
+    fun len(s: String) = StationFormat.parseLength(s)
     val text = KeyboardOptions(keyboardType = KeyboardType.Text)
     Text("${entry.name} · ${entry.model.meshes.size} elementos · ${entry.model.triangleCount} triângulos", style = MaterialTheme.typography.labelLarge)
     if (entry.model.warnings.isNotEmpty()) Text("Avisos: " + entry.model.warnings.joinToString("; "), style = MaterialTheme.typography.bodySmall)
@@ -103,20 +104,20 @@ private fun ModelRow(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = { onPickPoint(index) }) { Text("Tocar ponto de inserção") }
         if (pickedPoint != null) TextButton(onClick = {
-            e = StationFormat.decimal(pickedPoint.x, 3); n = StationFormat.decimal(pickedPoint.y, 3)
-            vm.groundAt(pickedPoint)?.let { z = StationFormat.decimal(it, 3) }
+            e = StationFormat.lengthValue(pickedPoint.x); n = StationFormat.lengthValue(pickedPoint.y)
+            vm.groundAt(pickedPoint)?.let { z = StationFormat.lengthValue(it) }
         }) { Text("Usar ponto tocado") }
-        TextButton(onClick = { val pe = num(e); val pn = num(n); if (pe != null && pn != null) vm.groundAt(Point2(pe, pn))?.let { z = StationFormat.decimal(it, 3) } }) {
+        TextButton(onClick = { val pe = len(e); val pn = len(n); if (pe != null && pn != null) vm.groundAt(Point2(pe, pn))?.let { z = StationFormat.lengthValue(it) } }) {
             Text("Cota do terreno")
         }
         entry.model.georef?.let { g: ModelGeoref ->
             TextButton(onClick = {
-                e = StationFormat.decimal(g.east, 3); n = StationFormat.decimal(g.north, 3); z = StationFormat.decimal(g.height, 3)
+                e = StationFormat.lengthValue(g.east); n = StationFormat.lengthValue(g.north); z = StationFormat.lengthValue(g.height)
                 rot = StationFormat.decimal(g.rotationDeg, 3); scale = StationFormat.decimal(g.scale, 4); unit = entry.model.unitScale
             }) { Text("Georreferência do IFC") }
         }
         val ok = listOf(e, n, z, rot, scale).all { num(it) != null } && (num(scale) ?: 0.0) > 0
-        OutlinedButton(enabled = ok, onClick = { vm.placeModel(index, ModelPlacement(num(e)!!, num(n)!!, num(z)!!, num(rot)!!, num(scale)!!, unit)) }) { Text("Aplicar") }
+        OutlinedButton(enabled = ok, onClick = { vm.placeModel(index, ModelPlacement(len(e)!!, len(n)!!, len(z)!!, num(rot)!!, num(scale)!!, unit)) }) { Text("Aplicar") }
         OutlinedButton(onClick = { vm.removeModel(index) }) { Text("Remover") }
     }
     // Two-point alignment: two points known in the model's own coordinates and where they are on the plan.
@@ -132,10 +133,10 @@ private fun ModelRow(
         OutlinedTextField(by, { setTyped(3, it) }, label = { Text("B: Y modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
         OutlinedButton(onClick = { onPickAlign(index, 2) }) { Text(if (alignPoints.second != null) "B na planta ✓" else "Tocar B na planta") }
         val pa = alignPoints.first; val pb = alignPoints.second
-        val ma = num(ax)?.let { x -> num(ay)?.let { y -> Point2(x, y) } }
-        val mb = num(bx)?.let { x -> num(by)?.let { y -> Point2(x, y) } }
+        val ma = len(ax)?.let { x -> len(ay)?.let { y -> Point2(x, y) } }
+        val mb = len(bx)?.let { x -> len(by)?.let { y -> Point2(x, y) } }
         OutlinedButton(enabled = pa != null && pb != null && ma != null && mb != null, onClick = {
-            com.appdwg.core.ModelAlign.twoPoints(ma!!, mb!!, pa!!, pb!!, unit, num(z) ?: p0.elevation)?.let { vm.placeModel(index, it) }
+            com.appdwg.core.ModelAlign.twoPoints(ma!!, mb!!, pa!!, pb!!, unit, len(z) ?: p0.elevation)?.let { vm.placeModel(index, it) }
         }) { Text("Alinhar") }
     }
 }

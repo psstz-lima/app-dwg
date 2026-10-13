@@ -120,10 +120,10 @@ private fun Matrix(vm: ProjectViewModel, names: List<String>, onShown: () -> Uni
                             r == c -> Text("—")
                             d == null -> Text("sem área comum", style = MaterialTheme.typography.labelSmall)
                             else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text((if (d.netVolume >= 0) "+" else "−") + StationFormat.decimal(abs(d.netVolume), 0),
+                                Text((if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(abs(d.netVolume), 0),
                                     color = Color(0xFF000000 or (if (d.netVolume >= 0) DifferenceImage.FILL else DifferenceImage.CUT).toLong()),
                                     style = MaterialTheme.typography.bodyMedium)
-                                Text("C ${StationFormat.decimal(d.cutVolume, 0)} · A ${StationFormat.decimal(d.fillVolume, 0)}",
+                                Text("C ${StationFormat.volume(d.cutVolume, 0)} · A ${StationFormat.volume(d.fillVolume, 0)}",
                                     style = MaterialTheme.typography.labelSmall)
                             }
                         }
@@ -137,4 +137,4 @@ private fun Matrix(vm: ProjectViewModel, names: List<String>, onShown: () -> Uni
 /** Surface name without the file prefix of an added file, for narrow table cells. */
 private fun short(name: String) = name.substringAfterLast('|')
 
-private fun m3(v: Double) = StationFormat.decimal(v, 1) + " m³"
+private fun m3(v: Double) = StationFormat.volume(v)

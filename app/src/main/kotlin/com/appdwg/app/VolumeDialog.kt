@@ -48,7 +48,7 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
     val surfaceName = st.surface?.takeIf { it in names } ?: names.firstOrNull()
     val otherName = st.other?.takeIf { it in names && it != surfaceName } ?: names.firstOrNull { it != surfaceName }
     val hasPolygon = polygon.size >= 3
-    val elevation = st.elevation.replace(',', '.').toDoubleOrNull()
+    val elevation = StationFormat.parseLength(st.elevation)
     val r = vm.volume
     fun n(v: Double, d: Int = 1) = StationFormat.decimal(v, d)
 
@@ -78,7 +78,7 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                         }
                 }
                 when (st.base) {
-                    0 -> OutlinedTextField(st.elevation, { st.elevation = it; vm.clearVolume() }, label = { Text(stringResource(R.string.vol_elevation)) },
+                    0 -> OutlinedTextField(st.elevation, { st.elevation = it; vm.clearVolume() }, label = { Text(stringResource(R.string.vol_elevation, StationFormat.lengthUnit)) },
                         singleLine = true, modifier = Modifier.width(180.dp), isError = elevation == null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     4 -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -106,15 +106,15 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                 vm.volumeMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (r != null) {
                     HorizontalDivider()
-                    Text(stringResource(R.string.vol_above, n(r.above), n(r.aboveArea)), fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.vol_below, n(r.below), n(r.belowArea)), fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.vol_net, n(r.net), n(r.area), n(r.minSurface, 3), n(r.maxSurface, 3), n(r.cellSize, 2)),
+                    Text(stringResource(R.string.vol_above, StationFormat.volume(r.above), StationFormat.area(r.aboveArea)), fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.vol_below, StationFormat.volume(r.below), StationFormat.area(r.belowArea)), fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.vol_net, StationFormat.volume(r.net), StationFormat.area(r.area), StationFormat.lengthValue(r.minSurface), StationFormat.length(r.maxSurface, 3), StationFormat.length(r.cellSize, 2)),
                         style = MaterialTheme.typography.bodySmall)
                     val flat = r.baseZ
                     val plane = r.plane
                     Text(
                         when {
-                            flat != null -> stringResource(R.string.vol_base_flat, n(flat, 3))
+                            flat != null -> stringResource(R.string.vol_base_flat, StationFormat.length(flat, 3))
                             plane != null -> stringResource(R.string.vol_base_inclined, n(plane[1] * 100, 2), n(plane[2] * 100, 2))
                             else -> stringResource(R.string.vol_base_surface, otherName ?: "")
                         },

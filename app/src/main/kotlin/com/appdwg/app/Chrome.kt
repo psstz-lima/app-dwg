@@ -387,7 +387,8 @@ fun StatusFooter(items: List<String>, gpsText: String?, gpsColor: Color) {
 /** Settings › Appearance: the theme, with a small preview of each. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbout: () -> Unit, onDismiss: () -> Unit) {
+fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbout: () -> Unit, onDismiss: () -> Unit,
+                     units: UnitChoice = UnitChoice.AUTO, onUnits: (UnitChoice) -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Configurações › Aparência") },
@@ -406,6 +407,22 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         }
                     }
                 }
+                androidx.compose.material3.HorizontalDivider()
+                Text("Unidades", fontWeight = FontWeight.Bold)
+                for (u in UnitChoice.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().selectable(u == units, role = Role.RadioButton) { onUnits(u) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(u == units, onClick = null)
+                        Column(Modifier.weight(1f)) {
+                            Text(u.label, fontWeight = FontWeight.Bold)
+                            Text(u.hint, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                Text("Só a exibição muda: os arquivos exportados continuam em metros, com ponto decimal. " +
+                    "Vírgula ou ponto nos números seguem o idioma do aparelho.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onAbout) { Text("Sobre o Gromatic") }
             }
         },

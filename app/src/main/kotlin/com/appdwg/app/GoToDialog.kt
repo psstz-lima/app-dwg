@@ -43,7 +43,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
     var offset by remember { mutableStateOf("0") }
     var east by remember { mutableStateOf("") }
     var north by remember { mutableStateOf("") }
-    fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+    fun num(s: String) = StationFormat.parseLength(s)
     val hits = remember(project, query) { Search.find(project, query) }
     AlertDialog(
         onDismissRequest = onDismiss,

@@ -35,7 +35,9 @@ import com.appdwg.core.StationFormat
 
 private enum class CalcTab(val label: String) { INVERSE("Inverso"), RADIATE("Irradiação"), INTERSECT("Interseção"), AREA("Área/perímetro"), CONVERT("Conversões") }
 
-private fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+private fun num(s: String) = StationFormat.number(s)
+/** Distances and coordinates typed in the shown unit, in metres. */
+private fun len(s: String) = StationFormat.parseLength(s)
 
 /** A point typed as a point number/name, or as "E N" (or "E;N"); null when neither. */
 private fun resolve(text: String, project: LandXmlProject, points: List<CogoPoint>): Pair<Point2, Double?>? {
@@ -43,7 +45,7 @@ private fun resolve(text: String, project: LandXmlProject, points: List<CogoPoin
     if (t.isEmpty()) return null
     points.firstOrNull { it.number.equals(t, true) }?.let { return Point2(it.x, it.y) to it.z.takeIf { z -> !z.isNaN() } }
     project.cgPoints.firstOrNull { it.name.equals(t, true) }?.let { return Point2(it.position.x, it.position.y) to it.position.z.takeIf { z -> !z.isNaN() } }
-    val parts = t.split(Regex("[;\\s]+")).mapNotNull { num(it) }
+    val parts = t.split(Regex("[;\\s]+")).mapNotNull { len(it) }
     return if (parts.size >= 2) Point2(parts[0], parts[1]) to parts.getOrNull(2) else null
 }
 
@@ -105,16 +107,16 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                             val za = a.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(a.first) }
                             val zb = b.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(b.first) }
                             val inv = Cogo.inverse(a.first, b.first, za, zb)
-                            Text("Distância ${f3(inv.distance)} m · Azimute ${Measure.dms(inv.azimuth)} (${StationFormat.decimal(inv.azimuth, 6)}°)")
+                            Text("Distância ${f3(inv.distance)} ${StationFormat.lengthUnit} · Azimute ${Measure.dms(inv.azimuth)} (${StationFormat.decimal(inv.azimuth, 6)}°)")
                             Text("ΔE ${f3(b.first.x - a.first.x)} · ΔN ${f3(b.first.y - a.first.y)}" +
                                 (inv.rise?.let { " · Desnível ${f3(it)} · Inclinada ${f3(inv.slopeDistance!!)} · Rampa ${StationFormat.decimal(inv.gradePercent!!, 2)} %" } ?: ""))
                         }
                     }
                     CalcTab.RADIATE -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            pointField(pa, { pa = it }, "Estação"); field(az, { az = it }, "Azimute (°)"); field(dist, { dist = it }, "Distância (m)")
+                            pointField(pa, { pa = it }, "Estação"); field(az, { az = it }, "Azimute (°)"); field(dist, { dist = it }, "Distância (${StationFormat.lengthUnit})")
                         }
-                        val a = resolve(pa, project, pts); val z = num(az); val d = num(dist)
+                        val a = resolve(pa, project, pts); val z = num(az); val d = len(dist)
                         if (a != null && z != null && d != null) results(listOf(Cogo.radiate(a.first, z, d)))
                     }
                     CalcTab.INTERSECT -> {
@@ -134,8 +136,8 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                         val a = resolve(pa, project, pts)?.first; val b = resolve(pb, project, pts)?.first
                         if (a != null && b != null) when (mode) {
                             0 -> { val x = num(az); val y = num(az2); if (x != null && y != null) results(listOfNotNull(Cogo.bearingBearing(a, x, b, y))) }
-                            1 -> { val x = num(dist); val y = num(dist2); if (x != null && y != null) results(Cogo.distanceDistance(a, x, b, y)) }
-                            else -> { val x = num(az); val y = num(dist2); if (x != null && y != null) results(Cogo.bearingDistance(a, x, b, y)) }
+                            1 -> { val x = len(dist); val y = len(dist2); if (x != null && y != null) results(Cogo.distanceDistance(a, x, b, y)) }
+                            else -> { val x = num(az); val y = len(dist2); if (x != null && y != null) results(Cogo.bearingDistance(a, x, b, y)) }
                         }
                     }
                     CalcTab.AREA -> {
@@ -144,13 +146,13 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                         val list = areaPts.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { resolve(it, project, pts) }
                         if (list.size >= 2 && list.all { it != null }) {
                             val m = Measure.of(list.map { it!!.first }, list.map { it!!.second })
-                            Text("Perímetro ${m.perimeter?.let { f3(it) } ?: f3(m.length)} m" + (m.area?.let { " · Área ${Measure.area(it)}" } ?: ""))
+                            Text("Perímetro ${m.perimeter?.let { f3(it) } ?: f3(m.length)} ${StationFormat.lengthUnit}" + (m.area?.let { " · Área ${Measure.area(it)}" } ?: ""))
                         } else if (list.isNotEmpty()) Text("Algum ponto não foi encontrado.", style = MaterialTheme.typography.bodySmall)
                     }
                     CalcTab.CONVERT -> {
                         OutlinedTextField(conv, { conv = it }, label = { Text("Valor (estaca \"12+5,4\", metros, ângulo \"45 30 15\", rampa %)") }, modifier = Modifier.fillMaxWidth())
                         val parts = conv.trim().split(Regex("[\\s°'\"]+")).mapNotNull { num(it) }
-                        StationFormat.parse(conv)?.let { m -> Text("Estaca ${StationFormat.estaca(m)} = ${StationFormat.decimal(m, 3)} m") }
+                        StationFormat.parse(conv)?.let { m -> Text("Estaca ${StationFormat.estaca(m)} = ${StationFormat.length(m, 3)}") }
                         if (parts.isNotEmpty()) {
                             val deg = Cogo.fromDms(parts[0], parts.getOrElse(1) { 0.0 }, parts.getOrElse(2) { 0.0 })
                             Text("Ângulo: ${StationFormat.decimal(deg, 6)}° = ${Measure.dms(deg)} = ${StationFormat.decimal(Cogo.toGon(deg), 6)} gon")

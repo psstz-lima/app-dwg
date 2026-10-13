@@ -110,7 +110,7 @@ fun SectionPanel(
                     TextButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
                     Text("Largura", style = MaterialTheme.typography.labelMedium)
                     SECTION_WIDTHS.forEach { w ->
-                        FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±${w.toInt()}") })
+                        FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±" + StationFormat.lengthValue(w, 0)) })
                     }
                 }
                 TextButton(onClick = onClose) { Text("Fechar") }
@@ -201,19 +201,24 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
         fun y(z: Double) = (bottom - (z - zMin) / (zMax - zMin) * (bottom - top)).toFloat()
 
         // Grid with round steps and labels.
-        val oStep = niceStep(2 * halfWidth / 8)
-        var o = ceil(-halfWidth / oStep) * oStep
-        while (o <= halfWidth + 1e-9) {
-            drawLine(grid, Offset(x(o), top), Offset(x(o), bottom), strokeWidth = 1f)
-            val label = if (o == 0.0) "0" else StationFormat.decimal(abs(o), if (oStep < 1) 1 else 0) + if (o > 0) " D" else " E"
-            text(label, x(o) - 12f, bottom + 18.dp.toPx(), fg, small = true)
+        // Steps are round in the shown unit (m or ft); positions stay in metres.
+        val hwU = StationFormat.toLength(halfWidth)
+        val oStep = niceStep(2 * hwU / 8)
+        var o = ceil(-hwU / oStep) * oStep
+        while (o <= hwU + 1e-9) {
+            val om = StationFormat.fromLength(o)
+            drawLine(grid, Offset(x(om), top), Offset(x(om), bottom), strokeWidth = 1f)
+            val label = if (o == 0.0) "0" else StationFormat.decimal(abs(o), if (oStep < 1) 1 else 0) + if (o > 0) if (com.appdwg.core.Display.portuguese) " D" else " R" else if (com.appdwg.core.Display.portuguese) " E" else " L"
+            text(label, x(om) - 12f, bottom + 18.dp.toPx(), fg, small = true)
             o += oStep
         }
-        val zStep = niceStep((zMax - zMin) / 5)
-        var z = ceil(zMin / zStep) * zStep
-        while (z <= zMax) {
-            drawLine(grid, Offset(left, y(z)), Offset(right, y(z)), strokeWidth = 1f)
-            text(StationFormat.decimal(z, if (zStep < 1) 2 else 0), 4f, y(z) + 4f, fg, small = true)
+        val zMinU = StationFormat.toLength(zMin); val zMaxU = StationFormat.toLength(zMax)
+        val zStep = niceStep((zMaxU - zMinU) / 5)
+        var z = ceil(zMinU / zStep) * zStep
+        while (z <= zMaxU) {
+            val zm = StationFormat.fromLength(z)
+            drawLine(grid, Offset(left, y(zm)), Offset(right, y(zm)), strokeWidth = 1f)
+            text(StationFormat.decimal(z, if (zStep < 1) 2 else 0), 4f, y(zm) + 4f, fg, small = true)
             z += zStep
         }
         // Axis.
@@ -246,11 +251,11 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
             val e = s.interpolate(l.elevations, cursor)
             if (!e.isNaN()) {
                 drawCircle(SECTION_COLORS[k % SECTION_COLORS.size], 6f, Offset(cx, y(e)))
-                parts += "${l.surface} ${StationFormat.decimal(e, 3)}"
+                parts += "${l.surface} ${StationFormat.lengthValue(e)}"
             }
         }
-        s.design?.let { parts += "Greide no eixo ${StationFormat.decimal(it, 3)}" }
-        s.cutFill?.let { parts += (if (it >= 0) "Aterro " else "Corte ") + StationFormat.decimal(abs(it), 3) }
+        s.design?.let { parts += "Greide no eixo ${StationFormat.lengthValue(it)}" }
+        s.cutFill?.let { parts += (if (it >= 0) "Aterro " else "Corte ") + StationFormat.length(abs(it), 3) }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (2 * halfWidth))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)
         text("Estaca ${StationFormat.estaca(s.station)} · " + parts.joinToString(" · "), left, 18.dp.toPx(), fg)

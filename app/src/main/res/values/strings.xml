@@ -18,8 +18,8 @@
     <string name="calib_grid_error">Não foi possível ler a grade: %1$s</string>
     <string name="calib_grid_memory">Grade grande demais para a memória deste aparelho. Recorte a região do projeto.</string>
     <string name="calib_unavailable">arquivo indisponível</string>
-    <string name="calib_fixed_n">Ondulação N (m)</string>
-    <string name="calib_n_here">N na posição atual: %1$s m</string>
+    <string name="calib_fixed_n">Ondulação N (%1$s)</string>
+    <string name="calib_n_here">N na posição atual: %1$s</string>
     <string name="calib_n_outside">A posição atual está fora da grade.</string>
     <string name="calib_no_ellipsoidal">O receptor não envia a separação do geoide (GGA), então não há altura elipsoidal.</string>
     <string name="calib_pairs">Pontos de controle</string>
@@ -33,9 +33,9 @@
     <string name="calib_remove">Remover</string>
     <string name="calib_apply">Aplicar a calibração na posição do GPS</string>
     <string name="calib_fix_scale">Escala fixa (1,000000)</string>
-    <string name="calib_params">Escala %1$s (%2$s ppm) · rotação %3$s° · translação E %4$s m, N %5$s m</string>
-    <string name="calib_params_v">Vertical: deslocamento %1$s m · inclinação E %2$s m/km, N %3$s m/km</string>
-    <string name="calib_rms">RMS horizontal %1$s m · vertical %2$s m</string>
+    <string name="calib_params">Escala %1$s (%2$s ppm) · rotação %3$s° · translação E %4$s, N %5$s</string>
+    <string name="calib_params_v">Vertical: deslocamento %1$s · inclinação E %2$s ‰, N %3$s ‰</string>
+    <string name="calib_rms">RMS horizontal %1$s · vertical %2$s</string>
     <string name="calib_none">Sem pontos de controle: a posição do GPS fica em UTM, sem calibração.</string>
 
     <!-- Stockpile and volume to an elevation -->
@@ -53,12 +53,12 @@
     <string name="vol_base_mean">Média da borda</string>
     <string name="vol_base_plane">Plano pela borda</string>
     <string name="vol_base_other">Outra superfície</string>
-    <string name="vol_elevation">Cota (m)</string>
+    <string name="vol_elevation">Cota (%1$s)</string>
     <string name="vol_base_hint">Pilha: plano pela borda (terreno inclinado) ou menor cota. Volume até a cota: material acima da cota (corte) e espaço abaixo dela (aterro).</string>
     <string name="vol_compute">Calcular</string>
-    <string name="vol_above">Acima da base (material / corte): %1$s m³ em %2$s m²</string>
-    <string name="vol_below">Abaixo da base (vazio / aterro): %1$s m³ em %2$s m²</string>
-    <string name="vol_net">Saldo %1$s m³ · área %2$s m² · cotas da superfície %3$s a %4$s · malha %5$s m</string>
+    <string name="vol_above">Acima da base (material / corte): %1$s em %2$s</string>
+    <string name="vol_below">Abaixo da base (vazio / aterro): %1$s em %2$s</string>
+    <string name="vol_net">Saldo %1$s · área %2$s · cotas da superfície %3$s a %4$s · malha %5$s</string>
     <string name="vol_base_flat">Base horizontal na cota %1$s</string>
     <string name="vol_base_inclined">Base inclinada: %1$s %% em E, %2$s %% em N</string>
     <string name="vol_base_surface">Base: superfície %1$s</string>
@@ -67,12 +67,12 @@
 
     <!-- Mass haul (DMT) and measurement bulletin -->
     <string name="haul_title">Distribuição de massas (DMT)</string>
-    <string name="haul_summary">Transportado ao longo do eixo %1$s m³ · momento %2$s m³·km · DMT %3$s m</string>
-    <string name="haul_local">Compensação lateral (mesma seção) %1$s m³ · bota-fora %2$s m³ · empréstimo %3$s m³</string>
+    <string name="haul_summary">Transportado ao longo do eixo %1$s · momento %2$s · DMT %3$s</string>
+    <string name="haul_local">Compensação lateral (mesma seção) %1$s · bota-fora %2$s · empréstimo %3$s</string>
     <string name="haul_bands">Volume por faixa de DMT</string>
-    <string name="haul_band_row">%1$s: %2$s m³ (DMT %3$s m)</string>
+    <string name="haul_band_row">%1$s: %2$s (DMT %3$s)</string>
     <string name="haul_waves">Ondas do Brückner (linha de equilíbrio no zero)</string>
-    <string name="haul_wave_row">%1$s a %2$s · %3$s m³ · DMT %4$s m · %5$s</string>
+    <string name="haul_wave_row">%1$s a %2$s · %3$s · DMT %4$s · %5$s</string>
     <string name="haul_forward">para frente</string>
     <string name="haul_back">para trás</string>
     <string name="haul_bulletin">Boletim de medição</string>
@@ -125,7 +125,7 @@
     <string name="ta_legend">Declividade (%)</string>
     <string name="ta_class_row">%1$s · %2$s ha</string>
     <string name="ta_running">Analisando o terreno</string>
-    <string name="ta_cell">Malha de %1$s m</string>
+    <string name="ta_cell">Malha de %1$s</string>
 
     <!-- Surface editing -->
     <string name="se_tool">Editar sup.</string>
@@ -140,9 +140,9 @@
     <string name="se_remove_inside">Remover dentro (furo)</string>
     <string name="se_delete_points">Excluir pontos dentro</string>
     <string name="se_raise">Elevar/baixar</string>
-    <string name="se_dz">Δ cota (m)</string>
+    <string name="se_dz">Δ cota (%1$s)</string>
     <string name="se_flatten">Nivelar na cota</string>
-    <string name="se_z">Cota (m)</string>
+    <string name="se_z">Cota (%1$s)</string>
     <string name="se_point_ops">No ponto tocado na planta</string>
     <string name="se_tapped">Ponto tocado: E %1$s · N %2$s</string>
     <string name="se_no_tap">Toque na planta para escolher o local (feche esta janela, toque e volte).</string>
@@ -186,18 +186,18 @@
     <string name="asbuilt_design">Superfície de projeto</string>
     <string name="asbuilt_alignment">Eixo (estaca e afastamento)</string>
     <string name="asbuilt_none">Nenhum</string>
-    <string name="asbuilt_tolerance">Tolerância (± cm)</string>
+    <string name="asbuilt_tolerance">Tolerância (± %1$s)</string>
     <string name="asbuilt_check">Conferir</string>
     <string name="asbuilt_clear">Limpar</string>
     <string name="asbuilt_no_points">Não há pontos com cota. Importe o levantamento em Pontos ou aqui.</string>
     <string name="asbuilt_no_surface">O projeto não tem superfície para comparar.</string>
     <string name="asbuilt_summary">%1$d pontos conferidos · %2$s%% dentro da tolerância · %3$d acima · %4$d abaixo · %5$d fora do projeto</string>
-    <string name="asbuilt_stats">Diferença média %1$s m · RMS %2$s m · desvio padrão %3$s m · mín. %4$s m · máx. %5$s m</string>
+    <string name="asbuilt_stats">Diferença média %1$s · RMS %2$s · desvio padrão %3$s · mín. %4$s · máx. %5$s</string>
     <string name="asbuilt_sign">Diferença = levantado − projeto (positivo: acima do projeto).</string>
     <string name="asbuilt_csv">Relatório (CSV)</string>
     <string name="asbuilt_pdf">Relatório (PDF)</string>
     <string name="asbuilt_report_title">Relatório de conferência de as-built</string>
-    <string name="asbuilt_report_head">Projeto: %1$s · Superfície: %2$s · Eixo: %3$s · Tolerância: ± %4$s m · %5$s</string>
+    <string name="asbuilt_report_head">Projeto: %1$s · Superfície: %2$s · Eixo: %3$s · Tolerância: ± %4$s · %5$s</string>
     <string name="asbuilt_col_point">Ponto</string>
     <string name="asbuilt_col_desc">Descrição</string>
     <string name="asbuilt_col_surveyed">Levantado</string>

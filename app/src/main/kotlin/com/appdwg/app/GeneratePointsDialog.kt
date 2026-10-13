@@ -73,13 +73,14 @@ class GenState {
 /** What the dialog asks the plan to let the user pick. */
 enum class GenPick { LINE, AREA_LINE, AREA_DRAW, ROTATION }
 
-private fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+private fun num(s: String) = StationFormat.number(s)
+private fun len(s: String) = StationFormat.parseLength(s)
 
 /** Builds the points the settings describe, numbered after the existing ones; null with a reason. */
 fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoint>, viewport: Bounds?): Pair<List<CogoPoint>?, String?> {
     val surface = project.surfaces.firstOrNull { it.name == g.surface } ?: project.surfaces.firstOrNull()
-    val ref = num(g.refHeight) ?: return null to "Altura referencial inválida."
-    val fixed = num(g.fixedZ)
+    val ref = len(g.refHeight) ?: return null to "Altura referencial inválida."
+    val fixed = len(g.fixedZ)
     fun z(p: Point2, lineZ: Double?): Double? = when (g.zSource) {
         ZSource.LINE -> lineZ
         ZSource.SURFACE -> surface?.elevationAt(p)
@@ -90,7 +91,7 @@ fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoin
     if (!g.grid) {
         val lineRef = g.line ?: return null to "Toque numa linha ou eixo na planta."
         val path = PointGen.path(project, lineRef) ?: return null to "Linha não encontrada."
-        val spacing = num(g.spacing)?.takeIf { it > 0 } ?: return null to "Espaçamento inválido."
+        val spacing = len(g.spacing)?.takeIf { it > 0 } ?: return null to "Espaçamento inválido."
         val offsets = PointGen.parseOffsets(g.offsets) ?: return null to "Offsets inválidos (ex.: -3,5; 0; 3,5)."
         if (g.zSource == ZSource.LINE && path.zs == null) return null to "A linha não é 3D: escolha cota da superfície ou fixa."
         val isAxis = lineRef is LineRef.Axis
@@ -99,12 +100,12 @@ fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoin
         for (lp in PointGen.alongLine(path, spacing, offsets, g.includeVertices, from, to)) {
             val zz = z(lp.position, lp.lineZ) ?: Double.NaN
             val where = if (isAxis) "E ${StationFormat.estaca(lp.distance)}" + (if (lp.offset != 0.0) " " + StationFormat.offset(lp.offset) else "")
-            else "D ${StationFormat.decimal(lp.distance)}" + (if (lp.offset != 0.0) " " + StationFormat.offset(lp.offset) else "")
+            else "D ${StationFormat.lengthValue(lp.distance, 2)}" + (if (lp.offset != 0.0) " " + StationFormat.offset(lp.offset) else "")
             out += CogoPoint((next++).toString(), listOf(g.prefix.trim(), where).filter { it.isNotEmpty() }.joinToString(" "), lp.position.x, lp.position.y, zz)
         }
     } else {
-        val dx = num(g.dx)?.takeIf { it > 0 } ?: return null to "Espaçamento X inválido."
-        val dy = num(g.dy)?.takeIf { it > 0 } ?: return null to "Espaçamento Y inválido."
+        val dx = len(g.dx)?.takeIf { it > 0 } ?: return null to "Espaçamento X inválido."
+        val dy = len(g.dy)?.takeIf { it > 0 } ?: return null to "Espaçamento Y inválido."
         val rot = num(g.rotation) ?: return null to "Rotação inválida."
         if (g.zSource == ZSource.LINE) return null to "Na malha, use cota da superfície ou fixa."
         val area: List<Point2> = when (g.area) {
@@ -174,7 +175,7 @@ fun GeneratePointsDialog(
                         }, style = MaterialTheme.typography.bodyMedium)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(g.spacing, { g.spacing = it }, label = { Text("Distância entre pontos (m)") }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
+                        OutlinedTextField(g.spacing, { g.spacing = it }, label = { Text("Distância entre pontos (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
                         OutlinedTextField(g.offsets, { g.offsets = it }, label = { Text("Offsets (+D / −E), ex.: -3,5; 0; 3,5") }, singleLine = true, modifier = Modifier.width(330.dp), keyboardOptions = text)
                         Checkbox(checked = g.includeVertices, onCheckedChange = { g.includeVertices = it })
                         Text("Incluir vértices", style = MaterialTheme.typography.bodySmall)
@@ -199,8 +200,8 @@ fun GeneratePointsDialog(
                         else -> {}
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(g.dx, { g.dx = it }, label = { Text("Espaçamento X (m)") }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
-                        OutlinedTextField(g.dy, { g.dy = it }, label = { Text("Espaçamento Y (m)") }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
+                        OutlinedTextField(g.dx, { g.dx = it }, label = { Text("Espaçamento X (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
+                        OutlinedTextField(g.dy, { g.dy = it }, label = { Text("Espaçamento Y (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
                         OutlinedTextField(g.rotation, { g.rotation = it }, label = { Text("Rotação (°)") }, singleLine = true, modifier = Modifier.width(130.dp), keyboardOptions = text)
                         TextButton(onClick = { onPick(GenPick.ROTATION) }) { Text("Alinhar a uma linha") }
                     }
@@ -223,11 +224,11 @@ fun GeneratePointsDialog(
                         }
                     }
                     if (g.zSource == ZSource.FIXED) {
-                        OutlinedTextField(g.fixedZ, { g.fixedZ = it }, label = { Text("Cota (m)") }, singleLine = true, modifier = Modifier.width(140.dp), keyboardOptions = text)
+                        OutlinedTextField(g.fixedZ, { g.fixedZ = it }, label = { Text("Cota (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(140.dp), keyboardOptions = text)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(g.refHeight, { g.refHeight = it }, label = { Text("Altura referencial (+/− m)") }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
+                    OutlinedTextField(g.refHeight, { g.refHeight = it }, label = { Text("Altura referencial (+/− ${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
                     OutlinedTextField(g.prefix, { g.prefix = it }, label = { Text("Prefixo da descrição") }, singleLine = true, modifier = Modifier.width(220.dp))
                 }
                 Text("Numeração continua a partir do ponto ${PointFile.nextNumber(existing)}.", style = MaterialTheme.typography.bodySmall)

@@ -65,7 +65,7 @@ class EditState {
     var dx by mutableStateOf("0"); var dy by mutableStateOf("0"); var dz by mutableStateOf("0")
     var distance by mutableStateOf("3,5"); var azimuth by mutableStateOf("0")
     var count by mutableStateOf("1")
-    var offsets by mutableStateOf("3,5")
+    var offsets by mutableStateOf(StationFormat.decimal(3.5, 1))
     var side by mutableStateOf(1) // 1 right, −1 left, 0 both
     var grade by mutableStateOf("0")
     var gradeAsRatio by mutableStateOf(false)
@@ -81,7 +81,9 @@ class EditState {
     var message by mutableStateOf<String?>(null)
 }
 
-private fun num(s: String) = s.trim().replace(',', '.').toDoubleOrNull()
+private fun num(s: String) = StationFormat.number(s)
+/** Lengths typed in the shown unit, in metres. */
+private fun len(s: String) = StationFormat.parseLength(s)
 
 /**
  * Result of the chosen operation on the selected lines: new lines and whether they replace the
@@ -95,12 +97,12 @@ fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Trip
     return when (e.op) {
         LineOp.MOVE, LineOp.COPY -> {
             val d = when (e.moveBy) {
-                MoveBy.DELTA -> Point2(num(e.dx) ?: return bad("ΔX"), num(e.dy) ?: return bad("ΔY"))
-                MoveBy.POLAR -> LineOps.polar(num(e.distance) ?: return bad("Distância"), num(e.azimuth) ?: return bad("Azimute"))
+                MoveBy.DELTA -> Point2(len(e.dx) ?: return bad("ΔX"), len(e.dy) ?: return bad("ΔY"))
+                MoveBy.POLAR -> LineOps.polar(len(e.distance) ?: return bad("Distância"), num(e.azimuth) ?: return bad("Azimute"))
                 MoveBy.POINTS -> if (e.picked.size >= 2) Point2(e.picked[1].x - e.picked[0].x, e.picked[1].y - e.picked[0].y)
                     else return Triple(null, false, "Toque o ponto de origem e o de destino.")
             }
-            val dz = num(e.dz) ?: return bad("ΔZ")
+            val dz = len(e.dz) ?: return bad("ΔZ")
             if (e.op == LineOp.MOVE) Triple(lines.map { LineOps.move(it, d.x, d.y, dz) }, true, null)
             else {
                 val n = e.count.trim().toIntOrNull()?.takeIf { it in 1..200 } ?: return bad("Número de cópias")
@@ -108,22 +110,22 @@ fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Trip
             }
         }
         LineOp.OFFSET -> {
-            val ds = com.appdwg.core.PointGen.parseOffsets(e.offsets) ?: return bad("Lista de offsets")
-            val dz = num(e.dz) ?: return bad("ΔZ")
+            val ds = com.appdwg.core.PointGen.parseOffsets(e.offsets)?.map { StationFormat.fromLength(it) } ?: return bad("Lista de offsets")
+            val dz = len(e.dz) ?: return bad("ΔZ")
             val g = num(e.grade) ?: return bad("Rampa")
             // H:V ratio becomes a percent grade (1,5:1 falls 66,7 %).
             val pct = if (e.gradeAsRatio) (if (g == 0.0) 0.0 else -100 / g) else g
             val signed = ds.flatMap { d -> when (e.side) { 1 -> listOf(abs(d)); -1 -> listOf(-abs(d)); else -> listOf(abs(d), -abs(d)) } }.distinct()
             Triple(lines.flatMap { l -> signed.map { d -> LineOps.offset(l, d, layer, dz, pct) } }, false, null)
         }
-        LineOp.DZ -> Triple(lines.map { LineOps.move(it, 0.0, 0.0, num(e.dz) ?: return bad("ΔZ")) }, true, null)
+        LineOp.DZ -> Triple(lines.map { LineOps.move(it, 0.0, 0.0, len(e.dz) ?: return bad("ΔZ")) }, true, null)
         LineOp.DRAPE -> {
             val s = project.surfaces.firstOrNull { it.name == e.surface } ?: project.surfaces.firstOrNull()
                 ?: return Triple(null, false, "Sem superfície para projetar.")
-            val step = num(e.step)?.takeIf { it > 0 } ?: return bad("Espaçamento")
+            val step = len(e.step)?.takeIf { it > 0 } ?: return bad("Espaçamento")
             Triple(lines.map { LineOps.drape(it, s, step) }, true, null)
         }
-        LineOp.FLATTEN -> Triple(lines.map { LineOps.flatten(it, num(e.z) ?: return bad("Cota")) }, true, null)
+        LineOp.FLATTEN -> Triple(lines.map { LineOps.flatten(it, len(e.z) ?: return bad("Cota")) }, true, null)
         LineOp.ROTATE -> {
             val a = num(e.angle) ?: return bad("Ângulo")
             val c = e.picked.firstOrNull() ?: lines.first().let { l -> Point2(l.xs.average(), l.ys.average()) }
@@ -137,7 +139,7 @@ fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Trip
         LineOp.JOIN -> Triple(LineOps.join(lines), true, null)
         LineOp.EXPLODE -> Triple(lines.flatMap { LineOps.explode(it) }, true, null)
         LineOp.DIVIDE -> {
-            val every = num(e.divideEvery)
+            val every = len(e.divideEvery)
             val parts = e.divideParts.trim().toIntOrNull()
             if (every == null && (parts == null || parts < 1)) return bad("Divisão")
             Triple(lines.flatMap { if (every != null && every > 0) LineOps.divide(it, every = every) else LineOps.divide(it, parts = parts) }, true, null)
@@ -162,9 +164,9 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, on
             }, style = MaterialTheme.typography.bodyMedium)
             one?.let { l ->
                 val i = LineOps.info(l)
-                Text("Camada ${l.layer} · ${i.vertices} vértices · 2D ${StationFormat.decimal(i.length2d, 3)} m" +
-                    (i.length3d?.let { " · 3D ${StationFormat.decimal(it, 3)} m" } ?: "") +
-                    (i.zStart?.let { " · cotas ${StationFormat.decimal(it, 3)} → ${StationFormat.decimal(i.zEnd!!, 3)}" } ?: "") +
+                Text("Camada ${l.layer} · ${i.vertices} vértices · 2D ${StationFormat.length(i.length2d, 3)}" +
+                    (i.length3d?.let { " · 3D ${StationFormat.length(it, 3)}" } ?: "") +
+                    (i.zStart?.let { " · cotas ${StationFormat.lengthValue(it)} → ${StationFormat.lengthValue(i.zEnd!!)}" } ?: "") +
                     (i.gradePercent?.let { " · rampa ${StationFormat.decimal(it, 2)} %" } ?: ""),
                     style = MaterialTheme.typography.bodySmall)
             }
@@ -221,23 +223,23 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             when (e.moveBy) {
-                                MoveBy.DELTA -> { field(e.dx, { e.dx = it }, "ΔX (m)"); field(e.dy, { e.dy = it }, "ΔY (m)") }
-                                MoveBy.POLAR -> { field(e.distance, { e.distance = it }, "Distância (m)"); field(e.azimuth, { e.azimuth = it }, "Azimute (°)") }
+                                MoveBy.DELTA -> { field(e.dx, { e.dx = it }, "ΔX (${StationFormat.lengthUnit})"); field(e.dy, { e.dy = it }, "ΔY (${StationFormat.lengthUnit})") }
+                                MoveBy.POLAR -> { field(e.distance, { e.distance = it }, "Distância (${StationFormat.lengthUnit})"); field(e.azimuth, { e.azimuth = it }, "Azimute (°)") }
                                 MoveBy.POINTS -> OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.FROM_TO) }) {
                                     Text(if (e.picked.size >= 2) "Pontos escolhidos (trocar)" else "Tocar origem e destino")
                                 }
                             }
-                            field(e.dz, { e.dz = it }, "ΔZ (m)")
+                            field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
                             if (e.op == LineOp.COPY) { field(e.count, { e.count = it }, "Nº de cópias", 130); field(e.layer, { e.layer = it }, "Camada nova", 170) }
                         }
                     }
                     LineOp.OFFSET -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            field(e.offsets, { e.offsets = it }, "Distâncias (ex.: 3,5; 7)", 220)
+                            field(e.offsets, { e.offsets = it }, "Distâncias (${StationFormat.lengthUnit}; ex.: ${StationFormat.decimal(3.5, 1)}; 7)", 220)
                             listOf(1 to "Direita", -1 to "Esquerda", 0 to "Ambos").forEach { (v, l) -> FilterChip(selected = e.side == v, onClick = { e.side = v }, label = { Text(l) }) }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            field(e.dz, { e.dz = it }, "ΔZ (m)")
+                            field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
                             field(e.grade, { e.grade = it }, if (e.gradeAsRatio) "Talude H:V (desce)" else "Rampa % (− desce)", 190)
                             Checkbox(checked = e.gradeAsRatio, onCheckedChange = { e.gradeAsRatio = it })
                             Text("em H:V", style = MaterialTheme.typography.bodySmall)
@@ -245,9 +247,9 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                         }
                         Text("Offset com rampa gera crista ou pé de talude: a cota muda pela distância × rampa, mais o ΔZ.", style = MaterialTheme.typography.bodySmall)
                     }
-                    LineOp.DZ -> field(e.dz, { e.dz = it }, "ΔZ (m)")
+                    LineOp.DZ -> field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
                     LineOp.DRAPE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        field(e.step, { e.step = it }, "Densificar a cada (m)", 190)
+                        field(e.step, { e.step = it }, "Densificar a cada (${StationFormat.lengthUnit})", 190)
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
@@ -257,7 +259,7 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                             }
                         }
                     }
-                    LineOp.FLATTEN -> field(e.z, { e.z = it }, "Cota (m)")
+                    LineOp.FLATTEN -> field(e.z, { e.z = it }, "Cota (${StationFormat.lengthUnit})")
                     LineOp.ROTATE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         field(e.angle, { e.angle = it }, "Ângulo (°, anti-horário)", 200)
                         OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.CENTER) }) {
@@ -274,7 +276,7 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                     }
                     LineOp.DIVIDE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         field(e.divideParts, { e.divideParts = it }, "Em N partes", 140)
-                        field(e.divideEvery, { e.divideEvery = it }, "Ou a cada (m)", 140)
+                        field(e.divideEvery, { e.divideEvery = it }, "Ou a cada (${StationFormat.lengthUnit})", 140)
                     }
                     LineOp.LAYER -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         field(e.layer, { e.layer = it }, "Camada", 200)
