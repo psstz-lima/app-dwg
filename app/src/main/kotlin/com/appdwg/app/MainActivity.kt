@@ -146,6 +146,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
 
     val g = LocalG.current
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     Scaffold(
         containerColor = g.bg,
         topBar = {
@@ -156,16 +157,37 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         is ProjectState.Loading -> state.fileName
                         else -> null
                     },
+                    compact = compact,
                 ) {
-                    if (viewModel.recent.isNotEmpty()) GButton("Recentes", { showRecent = true })
-                    GButton("Abrir", openFile)
-                    if (state is ProjectState.Loaded) {
-                        GButton("Salvar como", { afterSave = null; saver.launch(projectName()) })
-                        GButton("Salvar", { save() }, primary = true)
-                    }
-                    val gear = remember(g.iconStroke) { GIcon.SETTINGS.vector(g.iconStroke) }
-                    androidx.compose.material3.IconButton(onClick = { showAppearance = true }) {
-                        androidx.compose.material3.Icon(gear, "Configurações", tint = if (g.choice == ThemeChoice.SUN) Color.White else g.text)
+                    val onBar = if (g.choice == ThemeChoice.SUN) Color.White else g.text
+                    if (compact) {
+                        // Phones: the main action plus a menu with the rest.
+                        if (state is ProjectState.Loaded) GButton("Salvar", { save() }, primary = true) else GButton("Abrir", openFile)
+                        var menu by remember { mutableStateOf(false) }
+                        Box {
+                            androidx.compose.material3.IconButton(onClick = { menu = true }) {
+                                Text("⋮", color = onBar, fontSize = androidx.compose.ui.unit.TextUnit(24f, androidx.compose.ui.unit.TextUnitType.Sp), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            }
+                            androidx.compose.material3.DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                @Composable fun item(label: String, action: () -> Unit) =
+                                    androidx.compose.material3.DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
+                                if (state is ProjectState.Loaded) item("Abrir", openFile)
+                                if (viewModel.recent.isNotEmpty()) item("Recentes") { showRecent = true }
+                                if (state is ProjectState.Loaded) item("Salvar como") { afterSave = null; saver.launch(projectName()) }
+                                item("Aparência") { showAppearance = true }
+                            }
+                        }
+                    } else {
+                        if (viewModel.recent.isNotEmpty()) GButton("Recentes", { showRecent = true })
+                        GButton("Abrir", openFile)
+                        if (state is ProjectState.Loaded) {
+                            GButton("Salvar como", { afterSave = null; saver.launch(projectName()) })
+                            GButton("Salvar", { save() }, primary = true)
+                        }
+                        val gear = remember(g.iconStroke) { GIcon.SETTINGS.vector(g.iconStroke) }
+                        androidx.compose.material3.IconButton(onClick = { showAppearance = true }) {
+                            androidx.compose.material3.Icon(gear, "Configurações", tint = onBar)
+                        }
                     }
                 }
             }
@@ -507,6 +529,7 @@ private fun ProjectScreen(
     }
 
     val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 900
+    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
@@ -582,7 +605,7 @@ private fun ProjectScreen(
     Column(Modifier.fillMaxSize().background(g.bg)) {
     Row(Modifier.weight(1f).fillMaxWidth().then(if (g.floating) Modifier.padding(top = 4.dp) else Modifier)) {
         val full = vm.fullScreen
-        if (!full) ToolRail(railTools())
+        if (!full && !compact) ToolRail(railTools())
         Box(
             Modifier.weight(1f).fillMaxHeight()
                 .then(if (g.floating) Modifier.padding(start = 12.dp, end = if (wide) 12.dp else 12.dp, bottom = 12.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
@@ -757,14 +780,16 @@ private fun ProjectScreen(
                 if (differenceOverlay != null && difference != null && !show3d && !wide) DifferenceLegend(difference, Modifier)
             }
             if (!show3d) {
-                NorthArrow(Modifier.align(Alignment.TopEnd).padding(16.dp))
+                // On phones the view switch spans the top, so north and the buttons go below it.
+                NorthArrow(Modifier.align(Alignment.TopEnd).padding(start = 16.dp, end = 16.dp, top = if (compact) 84.dp else 16.dp))
                 ZoomButtons(
                     onIn = { planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 1.6) },
                     onOut = { planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 1 / 1.6) },
                     onFit = { planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 0.0) },
                     fullScreen = vm.fullScreen,
                     onFullScreen = { vm.fullScreen = !vm.fullScreen },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    modifier = if (compact) Modifier.align(Alignment.TopEnd).padding(top = 150.dp, end = 12.dp) else Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                    plusMinus = !compact,
                 )
             }
                 if (show3d) {
@@ -861,7 +886,7 @@ private fun ProjectScreen(
                         range = profileRange,
                         onRange = { profileRange = it },
                         onClose = { showProfile = false },
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(0.45f),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
                         editPvis = roadPvis,
                         onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list) },
                         onRecalc = { vm.designRoad() },
@@ -877,7 +902,7 @@ private fun ProjectScreen(
                         halfWidth = sectionHalfWidth,
                         onHalfWidth = { sectionHalfWidth = it },
                         onClose = { showSection = false },
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(0.45f),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
                     )
                 } else if (!wide || full) {
                     NarrowCards()
@@ -920,6 +945,7 @@ private fun ProjectScreen(
     // Footer: the tapped point, else the GPS position; station on the axis; plan scale; GPS fix.
     val shown = current ?: gpsInfo
     val metersPerInch = viewport?.let { vp -> if (planWidthPx > 0) vp.width / planWidthPx * xdpi else null }
+    if (!vm.fullScreen && compact) ToolBar(railTools())
     if (!vm.fullScreen) StatusFooter(
         items = buildList {
             shown?.let { p ->

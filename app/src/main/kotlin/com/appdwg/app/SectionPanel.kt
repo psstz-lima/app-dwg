@@ -1,5 +1,9 @@
 package com.appdwg.app
 
+import androidx.compose.foundation.rememberScrollState
+
+import androidx.compose.foundation.horizontalScroll
+
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -79,29 +83,31 @@ fun SectionPanel(
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Seção", style = MaterialTheme.typography.titleSmall)
-                if (alignmentNames.size > 1) {
-                    var open by remember { mutableStateOf(false) }
-                    TextButton(onClick = { open = true }) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
-                    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        alignmentNames.forEachIndexed { i, n ->
-                            DropdownMenuItem(text = { Text(n) }, onClick = { onAlignment(i); open = false })
+                // Scrolls sideways on a narrow panel (phone) instead of squashing the controls.
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Seção", style = MaterialTheme.typography.titleSmall)
+                    if (alignmentNames.size > 1) {
+                        var open by remember { mutableStateOf(false) }
+                        TextButton(onClick = { open = true }) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            alignmentNames.forEachIndexed { i, n ->
+                                DropdownMenuItem(text = { Text(n) }, onClick = { onAlignment(i); open = false })
+                            }
                         }
+                    } else {
+                        Text(alignmentNames.firstOrNull() ?: "", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                     }
-                } else {
-                    Text(alignmentNames.firstOrNull() ?: "", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                    // Steps land on whole 20 m stakes, so a station off a stake goes to the next one.
+                    TextButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }) { Text("−20") }
+                    StationField(station, onStation)
+                    TextButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
+                    Text("Largura", style = MaterialTheme.typography.labelMedium)
+                    SECTION_WIDTHS.forEach { w ->
+                        FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±${w.toInt()}") })
+                    }
                 }
-                // Steps land on whole 20 m stakes, so a station off a stake goes to the next one.
-                TextButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }) { Text("−20") }
-                StationField(station, onStation)
-                TextButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
-                Text("Largura", style = MaterialTheme.typography.labelMedium)
-                SECTION_WIDTHS.forEach { w ->
-                    FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±${w.toInt()}") })
-                }
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onClose) { Text("Fechar") }
-                }
+                TextButton(onClick = onClose) { Text("Fechar") }
             }
             if (section == null) {
                 Text("Sem seção nesta estaca.", Modifier.padding(16.dp))

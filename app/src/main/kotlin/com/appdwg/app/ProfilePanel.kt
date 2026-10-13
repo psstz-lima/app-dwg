@@ -1,5 +1,9 @@
 package com.appdwg.app
 
+import androidx.compose.foundation.rememberScrollState
+
+import androidx.compose.foundation.horizontalScroll
+
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -68,14 +72,16 @@ fun ProfilePanel(
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Perfil · ${profile.alignment}", style = MaterialTheme.typography.titleSmall)
-                Text("Janela", style = MaterialTheme.typography.labelMedium)
-                PROFILE_RANGES.forEach { r ->
-                    FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) "Inteiro" else "±${r.toInt()} m") })
+                // The window chips scroll sideways when the panel is narrow (phone) instead of squashing the chart.
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Perfil · ${profile.alignment}", style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                    Text("Janela", style = MaterialTheme.typography.labelMedium)
+                    PROFILE_RANGES.forEach { r ->
+                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) "Inteiro" else "±${r.toInt()} m") })
+                    }
                 }
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onClose) { Text("Fechar") }
-                }
+                TextButton(onClick = onClose) { Text("Fechar") }
             }
             if (editPvis != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("Greide: arraste um PVI (bolinha vermelha) para mudar a cota; toque para escolher.", style = MaterialTheme.typography.labelMedium)
@@ -196,14 +202,17 @@ private fun ProfileChart(
         fun y(z: Double) = (bottom - (z - zMin) / (zMax - zMin) * (bottom - top)).toFloat()
 
         // Station grid on whole 20 m stakes, elevation grid on round steps.
-        val sStep = max(20.0, niceStep((s1 - s0) / 8))
+        // As many labels as fit, so a short or narrow chart (phone) does not pile them up.
+        val sCount = ((right - left) / 70.dp.toPx()).toInt().coerceIn(3, 8)
+        val zCount = ((bottom - top) / 28.dp.toPx()).toInt().coerceIn(2, 5)
+        val sStep = max(20.0, niceStep((s1 - s0) / sCount))
         var s = ceil(s0 / sStep) * sStep
         while (s <= s1 + 1e-9) {
             drawLine(grid, Offset(x(s), top), Offset(x(s), bottom), strokeWidth = 1f)
             text(StationFormat.estaca(s).substringBefore(" + 0,00"), x(s) - 14f, bottom + 18.dp.toPx(), fg, small = true)
             s += sStep
         }
-        val zStep = niceStep((zMax - zMin) / 5)
+        val zStep = niceStep((zMax - zMin) / zCount)
         var z = ceil(zMin / zStep) * zStep
         while (z <= zMax) {
             drawLine(grid, Offset(left, y(z)), Offset(right, y(z)), strokeWidth = 1f)

@@ -26,6 +26,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
@@ -116,7 +117,7 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
 
 /** Top bar: the mark, the app's name, the open file and the file actions. */
 @Composable
-fun GTopBar(fileName: String?, actions: @Composable RowScope.() -> Unit) {
+fun GTopBar(fileName: String?, compact: Boolean = false, actions: @Composable RowScope.() -> Unit) {
     val g = LocalG.current
     Row(
         Modifier.fillMaxWidth().height(64.dp).background(g.topBar)
@@ -127,7 +128,7 @@ fun GTopBar(fileName: String?, actions: @Composable RowScope.() -> Unit) {
     ) {
         AppMark(Modifier.size(if (g.choice == ThemeChoice.EARTH) 42.dp else 38.dp))
         Text("Gromatic", color = g.onTopBar, fontSize = 22.sp, fontWeight = if (g.choice == ThemeChoice.EARTH) FontWeight.ExtraBold else FontWeight.Bold)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { if (fileName != null) {
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { if (fileName != null && !compact) {
             if (g.choice == ThemeChoice.EARTH) {
                 Box(Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(g.chip).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                     Text(fileName, color = g.muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -152,6 +153,28 @@ private fun Modifier.drawBehindLine(c: Color, w: Dp, top: Boolean) = Modifier.dr
 
 /** One tool of the rail: icon over its name; [active] while the tool is on. */
 data class RailTool(val icon: GIcon, val label: String, val active: Boolean = false, val onClick: () -> Unit)
+
+/** Tool bar along the bottom on phones: the rail's buttons in a scrolling row. */
+@Composable
+fun ToolBar(tools: List<RailTool>, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    val scroll = rememberScrollState()
+    Row(
+        modifier.fillMaxWidth().background(g.rail)
+            .then(if (!g.floating) Modifier.drawTopBorder(g.border, g.borderWidth) else Modifier)
+            .drawWithContent {
+                drawContent()
+                val w = 36.dp.toPx()
+                if (scroll.canScrollForward) drawRect(Brush.horizontalGradient(listOf(Color.Transparent, g.rail), size.width - w, size.width),
+                    Offset(size.width - w, 0f), Size(w, size.height))
+                if (scroll.canScrollBackward) drawRect(Brush.horizontalGradient(listOf(g.rail, Color.Transparent), 0f, w), Offset.Zero, Size(w, size.height))
+            }
+            .horizontalScroll(scroll).padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        for (t in tools) RailButton(t)
+    }
+}
 
 /** Vertical tool rail with icon and label, scrolling when the tools do not fit. */
 @Composable
@@ -247,13 +270,13 @@ fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modi
 
 /** Zoom in, out and fit, at the plan's lower right. */
 @Composable
-fun ZoomButtons(onIn: () -> Unit, onOut: () -> Unit, onFit: () -> Unit, fullScreen: Boolean, onFullScreen: () -> Unit, modifier: Modifier = Modifier) {
+fun ZoomButtons(onIn: () -> Unit, onOut: () -> Unit, onFit: () -> Unit, fullScreen: Boolean, onFullScreen: () -> Unit, modifier: Modifier = Modifier, plusMinus: Boolean = true) {
     val g = LocalG.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for ((icon, desc, act) in listOf(
             Triple(if (fullScreen) GIcon.EXIT_FULLSCREEN else GIcon.FULLSCREEN, if (fullScreen) "Sair da tela cheia" else "Tela cheia", onFullScreen),
             Triple(GIcon.PLUS, "Aproximar", onIn), Triple(GIcon.MINUS, "Afastar", onOut), Triple(GIcon.FIT, "Ver tudo", onFit),
-        )) {
+        ).filter { plusMinus || (it.first != GIcon.PLUS && it.first != GIcon.MINUS) }) {
             val shape = if (g.choice == ThemeChoice.EARTH) CircleShape else RoundedCornerShape(if (g.choice == ThemeChoice.SUN) 8.dp else 10.dp)
             val bg = if (g.choice == ThemeChoice.EARTH) g.rail else g.panel
             val fg = if (g.choice == ThemeChoice.EARTH) g.panel else g.text
@@ -314,9 +337,10 @@ fun StatusFooter(items: List<String>, gpsText: String?, gpsColor: Color) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        for (s in items) Text(s, color = g.onFooter, fontFamily = g.mono, fontSize = if (g.choice == ThemeChoice.SUN) 14.sp else 13.sp, maxLines = 1,
-            fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Medium else FontWeight.Normal)
-        Spacer(Modifier.weight(1f))
+        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            for (s in items) Text(s, color = g.onFooter, fontFamily = g.mono, fontSize = if (g.choice == ThemeChoice.SUN) 14.sp else 13.sp, maxLines = 1,
+                fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Medium else FontWeight.Normal)
+        }
         run {
             val chip = g.choice == ThemeChoice.EARTH
             Row(
