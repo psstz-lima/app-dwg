@@ -226,7 +226,7 @@ fun GromaticTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
 
 /** Units the user picked in Aparência; [AUTO] is imperial only in the United States. */
 enum class UnitChoice(val label: String, val hint: String) {
-    AUTO("Automático", "Pelo idioma do aparelho: imperial só nos EUA"),
+    AUTO("Automático", "Pelo idioma: imperial só em inglês dos EUA"),
     METRIC("Métrico", "m, m², ha, m³"),
     IMPERIAL("Imperial", "pé internacional (ft), ft², acre, jarda cúbica (yd³)"),
 }
@@ -250,4 +250,45 @@ class UnitStore(context: Context) {
         com.appdwg.core.Display.units = u
         return u
     }
+}
+
+/** Language picked in Aparência; [AUTO] follows the device. */
+enum class LanguageChoice(val label: String, val tag: String?) {
+    AUTO("Automático (do sistema)", null),
+    PORTUGUESE("Português (Brasil)", "pt-BR"),
+    ENGLISH("English", "en-US"),
+}
+
+/**
+ * The app's language. On Android 13+ it is Android's per-app language (also in Configurações >
+ * Apps > Gromatic > Idioma), which recreates the screen in it; before that it is kept here and only
+ * sets the number format and the automatic units.
+ */
+class LanguageStore(private val context: Context) {
+    private val prefs = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
+    var choice by mutableStateOf(read())
+        private set
+
+    private fun read(): LanguageChoice {
+        val tag = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales.takeIf { !it.isEmpty }?.get(0)?.toLanguageTag()
+        } else prefs.getString("language", null)
+        return LanguageChoice.entries.firstOrNull { c -> c.tag != null && tag != null && java.util.Locale.forLanguageTag(c.tag).language == java.util.Locale.forLanguageTag(tag).language }
+            ?: LanguageChoice.AUTO
+    }
+
+    /** Reads the choice again (it can change in Android's settings while the app is away). */
+    fun refresh() { choice = read() }
+
+    fun choose(c: LanguageChoice) {
+        choice = c
+        prefs.edit().putString("language", c.tag).apply()
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales =
+                if (c.tag == null) android.os.LocaleList.getEmptyLocaleList() else android.os.LocaleList.forLanguageTags(c.tag)
+        }
+    }
+
+    /** Locale for numbers and automatic units: the chosen one, else [system]. */
+    fun locale(system: java.util.Locale): java.util.Locale = choice.tag?.let { java.util.Locale.forLanguageTag(it) } ?: system
 }

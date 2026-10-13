@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) openFromIntent(intent)
         setContent {
             // Number format from the device's language, units from Aparência; the screens are rebuilt when either changes.
-            val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+            val locale = viewModel.languages.locale(androidx.compose.ui.platform.LocalConfiguration.current.locales[0])
             val system = remember(locale, viewModel.units.choice) { viewModel.units.apply(locale) }
             GromaticTheme(viewModel.themes.choice) { androidx.compose.runtime.key(locale, system) {
                 val full = viewModel.fullScreen && viewModel.state is ProjectState.Loaded
@@ -105,6 +105,12 @@ class MainActivity : ComponentActivity() {
                 AppScreen(viewModel)
             } }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The language may have been changed in Android's per-app settings meanwhile.
+        viewModel.languages.refresh()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -199,7 +205,8 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
         if (showAppearance) AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
             onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false },
-            units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) })
+            units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
+            language = viewModel.languages.choice, onLanguage = { viewModel.languages.choose(it) })
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },

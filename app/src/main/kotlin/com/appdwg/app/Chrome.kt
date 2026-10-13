@@ -388,7 +388,8 @@ fun StatusFooter(items: List<String>, gpsText: String?, gpsColor: Color) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbout: () -> Unit, onDismiss: () -> Unit,
-                     units: UnitChoice = UnitChoice.AUTO, onUnits: (UnitChoice) -> Unit = {}) {
+                     units: UnitChoice = UnitChoice.AUTO, onUnits: (UnitChoice) -> Unit = {},
+                     language: LanguageChoice = LanguageChoice.AUTO, onLanguage: (LanguageChoice) -> Unit = {}) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Configurações › Aparência") },
@@ -408,6 +409,19 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                     }
                 }
                 androidx.compose.material3.HorizontalDivider()
+                Text("Idioma", fontWeight = FontWeight.Bold)
+                for (l in LanguageChoice.entries) {
+                    Row(
+                        Modifier.fillMaxWidth().selectable(l == language, role = Role.RadioButton) { onLanguage(l) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        RadioButton(l == language, onClick = null)
+                        Text(l.label, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Text("Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades. Os textos do app ainda estão só em português.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                androidx.compose.material3.HorizontalDivider()
                 Text("Unidades", fontWeight = FontWeight.Bold)
                 for (u in UnitChoice.entries) {
                     Row(
@@ -422,7 +436,7 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                     }
                 }
                 Text("Só a exibição muda: os arquivos exportados continuam em metros, com ponto decimal. " +
-                    "Vírgula ou ponto nos números seguem o idioma do aparelho.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                    "Vírgula ou ponto nos números seguem o idioma acima.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
                 TextButton(onClick = onAbout) { Text("Sobre o Gromatic") }
             }
         },

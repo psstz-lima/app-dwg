@@ -873,6 +873,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     val basemap = BasemapStore(app)
     val themes = ThemeStore(app)
     val units = UnitStore(app)
+    val languages = LanguageStore(app)
 
     override fun onCleared() { gnss.disconnect() }
 
