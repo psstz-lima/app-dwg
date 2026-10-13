@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -267,6 +268,7 @@ fun PlanView(
 
     Canvas(
         modifier = modifier
+            .clipToBounds()
             .onSizeChanged { size = it }
             .pointerInput(project) {
                 detectTransformGestures { centroid, pan, zoom, _ ->

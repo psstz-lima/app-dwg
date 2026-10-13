@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -136,6 +137,7 @@ private fun ProfileChart(
 
     Canvas(
         modifier
+            .clipToBounds()
             .pointerInput(s0, s1, editPvis) {
                 fun nearPvi(o: Offset): Int? {
                     val pv = editPvis ?: return null

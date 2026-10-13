@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -149,6 +150,7 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
 
     Canvas(
         modifier
+            .clipToBounds()
             .pointerInput(s.offsets.last()) {
                 fun pick(x: Float) {
                     val left = 64.dp.toPx()
