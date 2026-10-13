@@ -159,10 +159,9 @@ fun PlanView(
     /** Field notes, drawn as pins; a tap on one calls [onNoteTap]. */
     notes: List<FieldNote> = emptyList(),
     onNoteTap: ((FieldNote) -> Unit)? = null,
-    /** Background map drawn under everything, in the project's UTM [basemapZone]; null hides it. */
+    /** Background map drawn under everything, placed with the project's coordinate system; null hides it. */
     basemap: BasemapStore? = null,
-    basemapZone: Int = 23,
-    basemapSouth: Boolean = true,
+    basemapCrs: com.appdwg.core.Crs = com.appdwg.core.CrsCatalog.byEpsg("31983")!!,
     zoom: ZoomRequest? = null,
     /** Rings around checked points (as-built), each in its status colour. */
     marks: List<Pair<Point2, Color>> = emptyList(),
@@ -338,7 +337,7 @@ fun PlanView(
             basemap.version // redraw as tiles arrive
             val halfW = size.width / 2.0 / cam.scale; val halfH = size.height / 2.0 / cam.scale
             val cx = cam.centerX + origin.x; val cy = cam.centerY + origin.y
-            val tiles = basemap.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale, basemapZone, basemapSouth)
+            val tiles = basemap.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale, basemapCrs)
             drawBasemap(tiles, basemap.opacity) { toScreen(it, cam) }
         }
 

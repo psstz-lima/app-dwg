@@ -833,11 +833,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         writeTo(target, "CSV de anotações") { it.write(("\uFEFF" + NotesExport.csv(list)).toByteArray(Charsets.UTF_8)) }
     }
 
-    fun exportNotesKmz(target: Uri, zone: Int, south: Boolean) {
+    fun exportNotesKmz(target: Uri) {
+        val crs = crs()
         val list = notes
         val dir = notesDir
         val name = (state as? ProjectState.Loaded)?.fileName ?: "Gromatic"
-        writeTo(target, "KMZ de anotações") { out -> NotesExport.kmz(list, zone, south, name, out) { f -> java.io.File(dir, f).takeIf { it.exists() }?.readBytes() } }
+        writeTo(target, "KMZ de anotações") { out -> NotesExport.kmz(list, crs, name, out) { f -> java.io.File(dir, f).takeIf { it.exists() }?.readBytes() } }
     }
 
     /** Receiver connection; lives with the view model so rotating the screen keeps it. */
@@ -874,6 +875,39 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     val themes = ThemeStore(app)
     val units = UnitStore(app)
     val languages = LanguageStore(app)
+
+    // ---- Coordinate system ----
+
+    private val crsPrefs = app.getSharedPreferences("crs", android.content.Context.MODE_PRIVATE)
+    /** The user's own coordinate systems, kept on the device. */
+    var customCrs by mutableStateOf(readCustomCrs())
+        private set
+    /** Asks the open project screen to show the coordinate system dialog (from Configurações). */
+    var crsDialogRequested by mutableStateOf(false)
+
+    private fun readCustomCrs(): List<com.appdwg.core.Crs> = runCatching {
+        val a = org.json.JSONArray(crsPrefs.getString("custom", "[]"))
+        List(a.length()) { CrsJson.fromJson(a.getJSONObject(it)) }
+    }.getOrDefault(emptyList())
+
+    fun saveCustomCrs(c: com.appdwg.core.Crs) {
+        customCrs = customCrs.filter { it.id != c.id } + c
+        crsPrefs.edit().putString("custom", org.json.JSONArray(customCrs.map { CrsJson.toJson(it) }).toString()).apply()
+    }
+
+    fun deleteCustomCrs(c: com.appdwg.core.Crs) {
+        customCrs = customCrs.filter { it.id != c.id }
+        crsPrefs.edit().putString("custom", org.json.JSONArray(customCrs.map { CrsJson.toJson(it) }).toString()).apply()
+    }
+
+    /** Coordinate system in use: the project's choice, else the drawing's EPSG, else SIRGAS 2000 / UTM 23S. */
+    fun crs(): com.appdwg.core.Crs {
+        view?.crs?.let { return it }
+        val p = (state as? ProjectState.Loaded)?.project
+        return com.appdwg.core.CrsCatalog.byEpsg(p?.coordinateSystem?.epsgCode) ?: com.appdwg.core.CrsCatalog.byEpsg("31983")!!
+    }
+
+    fun chooseCrs(c: com.appdwg.core.Crs) { view?.crs = c }
 
     override fun onCleared() { gnss.disconnect() }
 
@@ -1596,29 +1630,33 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** GeoJSON in longitude/latitude (RFC 7946), from the project's UTM [zone]. */
-    fun exportGeoJson(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
+    fun exportGeoJson(target: Uri, extra: List<ExportLine>) {
         val (points, lines) = gisContent(extra) ?: return
+        val crs = crs()
         writeTo(target, "GeoJSON") { out ->
             out.writer(Charsets.UTF_8).let { w ->
-                com.appdwg.core.Gis.writeGeoJson(points, lines, { x, y -> Utm.toGeographic(x, y, zone, south).let { (lat, lon) -> lon to lat } }, w); w.flush()
+                com.appdwg.core.Gis.writeGeoJson(points, lines, { x, y -> crs.toWgs84(x, y).let { (lat, lon) -> lon to lat } }, w); w.flush()
             }
         }
     }
 
     /** Shapefiles in a ZIP, in the project's coordinates (SIRGAS 2000 / UTM .prj when the zone is known). */
-    fun exportShapefile(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
+    fun exportShapefile(target: Uri, extra: List<ExportLine>) {
         val (points, lines) = gisContent(extra) ?: return
-        writeTo(target, "Shapefile") { out -> com.appdwg.core.Gis.writeShapefileZip(points, lines, com.appdwg.core.Gis.sirgasUtmPrj(zone, south), out) }
+        // .prj of the project's system; none for a site grid, which has no standard definition.
+        val prj = crs().takeIf { !it.local }?.prj()
+        writeTo(target, "Shapefile") { out -> com.appdwg.core.Gis.writeShapefileZip(points, lines, prj, out) }
     }
 
-    fun exportKml(target: Uri, zone: Int, south: Boolean, extra: List<ExportLine>) {
+    fun exportKml(target: Uri, extra: List<ExportLine>) {
+        val crs = crs()
         val p = exportProject() ?: return
         val name = (state as? ProjectState.Loaded)?.fileName ?: "Gromatic"
         // Axes, drawing lines and the file's own points go too, not only the _POINTS layer.
         val lines = extra + p.alignments.map { a -> ExportLine(a.name, a.vertices, false, 1) } +
             p.polylines.map { l -> ExportLine(l.layer, List(l.xs.size) { Point2(l.xs[it], l.ys[it]) }, l.closed, 7) }
         val points = p.points + p.cgPoints.map { c -> CogoPoint(c.name, c.code ?: "", c.position.x, c.position.y, c.position.z) }
-        writeTo(target, "KML") { out -> out.writer(Charsets.UTF_8).let { w -> KmlWriter.write(points, lines, zone, south, name, w); w.flush() } }
+        writeTo(target, "KML") { out -> out.writer(Charsets.UTF_8).let { w -> KmlWriter.write(points, lines, crs, name, w); w.flush() } }
     }
 
     /** Volumes of the comparison, the matrix and the stages, as CSV (semicolon, decimal comma). */
@@ -1988,12 +2026,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val xs = ArrayList<Double>(); val ys = ArrayList<Double>()
         val raw = read { x, y -> xs += x; ys += y; Point2(x, y) }
         val geo = geographic ?: com.appdwg.core.Gis.looksGeographic(xs, ys)
-        if (!geo) return com.appdwg.core.Gis.toProject(raw, layer, epsg)
-        val open = (state as? ProjectState.Loaded)?.project?.coordinateSystem?.epsgCode
-        val zone = Utm.zoneOfEpsg(open) ?: com.appdwg.core.Gis.utmZoneOf(xs.average())
-        val south = Utm.zoneOfEpsg(open) != null || ys.average() < 0
-        val features = read { lon, lat -> UtmForward.fromGeographic(lat, lon, zone).let { if (south) it else Point2(it.x, it.y - 10_000_000) } }
-        return com.appdwg.core.Gis.toProject(features, layer, if (south && zone in 18..25) (31960 + zone).toString() else null)
+        val source = if (geo) com.appdwg.core.CrsCatalog.byEpsg("4326") else com.appdwg.core.CrsCatalog.byEpsg(epsg) ?: com.appdwg.core.CrsCatalog.byId(epsg)
+        // Into the open project's system; a file opened on its own keeps its system (or the UTM zone of its longitudes).
+        val target = if (state is ProjectState.Loaded) crs()
+            else if (geo) com.appdwg.core.CrsCatalog.utmFor(xs.average(), ys.average() < 0) else source
+        if (source == null || target == null || source.id == target.id || target.local) return com.appdwg.core.Gis.toProject(raw, layer, epsg)
+        val features = read { x, y ->
+            val (lat, lon) = if (source.isGeographic) y to x else source.toWgs84(x, y)
+            target.fromWgs84(lat, lon)
+        }
+        return com.appdwg.core.Gis.toProject(features, layer, target.epsg)
     }
 
     private fun read(uri: Uri, task: LoadTask? = null): LandXmlProject {

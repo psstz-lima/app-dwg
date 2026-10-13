@@ -208,7 +208,16 @@ object Gis {
         prj ?: return null
         Regex("UTM[_ ]zone[_ ](\\d{1,2})([NS])", RegexOption.IGNORE_CASE).find(prj)?.let { m ->
             val z = m.groupValues[1].toInt(); val s = m.groupValues[2].equals("S", true)
-            if ("SIRGAS" in prj.uppercase() && s && z in 18..25) return (31960 + z).toString()
+            val u = prj.uppercase()
+            val datum = when {
+                "SIRGAS" in u -> Datum.SIRGAS2000
+                "SAD" in u && "96" in u -> Datum.SAD69_96
+                "SAD" in u || "SOUTH_AMERICAN_1969" in u -> Datum.SAD69
+                "CORREGO" in u -> Datum.CORREGO_ALEGRE
+                "WGS" in u -> Datum.WGS84
+                else -> return null
+            }
+            return CrsCatalog.byId(CrsCatalog.utm(datum, z, s, null).id)?.let { it.epsg ?: it.id }
         }
         return null
     }

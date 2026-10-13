@@ -42,26 +42,25 @@ object WebTiles {
     fun zoomFor(mpp: Double, lat: Double, minZ: Int = 1, maxZ: Int = 19): Int =
         Math.round(log2(156543.03392804097 * cos(Math.toRadians(lat)) / mpp)).toInt().coerceIn(minZ, maxZ)
 
-    fun corners(t: TileId, zone: Int, south: Boolean): TileCorners {
+    /** Corners of tile [t] in the plan coordinates of [crs]. */
+    fun corners(t: TileId, crs: Crs): TileCorners {
         fun utm(x: Double, y: Double): Point2 {
             val (la, lo) = latLon(x, y, t.z)
-            val p = UtmForward.fromGeographic(la, lo, zone)
-            // fromGeographic picks the false northing from the latitude; keep the project's.
-            return if (south && la >= 0) Point2(p.x, p.y + 10_000_000) else if (!south && la < 0) Point2(p.x, p.y - 10_000_000) else p
+            return crs.fromWgs84(la, lo)
         }
         val x = t.x.toDouble(); val y = t.y.toDouble()
         return TileCorners(utm(x, y), utm(x + 1, y), utm(x + 1, y + 1), utm(x, y + 1))
     }
 
-    /** Tiles at zoom [z] covering the UTM area [b]. */
-    fun covering(b: Bounds, zone: Int, south: Boolean, z: Int): List<TileId> {
+    /** Tiles at zoom [z] covering the plan area [b] of [crs]. */
+    fun covering(b: Bounds, crs: Crs, z: Int): List<TileId> {
         var minX = Double.MAX_VALUE; var minY = Double.MAX_VALUE; var maxX = -Double.MAX_VALUE; var maxY = -Double.MAX_VALUE
         // Edges sampled, since the UTM rectangle is slightly curved in Mercator.
         for (i in 0..4) for ((e, n) in listOf(
             b.minX + b.width * i / 4 to b.minY, b.minX + b.width * i / 4 to b.maxY,
             b.minX to b.minY + b.height * i / 4, b.maxX to b.minY + b.height * i / 4,
         )) {
-            val (la, lo) = Utm.toGeographic(e, n, zone, south)
+            val (la, lo) = crs.toWgs84(e, n)
             val (x, y) = tileXY(la, lo, z)
             minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y)
         }
@@ -73,8 +72,8 @@ object WebTiles {
     }
 
     /** Tiles from [minZ] to [maxZ] over [b], for offline download. */
-    fun pyramid(b: Bounds, zone: Int, south: Boolean, minZ: Int, maxZ: Int): List<TileId> =
-        (minZ..maxZ).flatMap { covering(b, zone, south, it) }
+    fun pyramid(b: Bounds, crs: Crs, minZ: Int, maxZ: Int): List<TileId> =
+        (minZ..maxZ).flatMap { covering(b, crs, it) }
 
     /** URL of [t] from a template with {z}, {x} and {y} (and {s} for a server letter). */
     fun url(template: String, t: TileId): String = template

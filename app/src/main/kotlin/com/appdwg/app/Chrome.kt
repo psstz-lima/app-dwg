@@ -436,12 +436,22 @@ fun MenuTitle(text: String) {
 @Composable
 fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbout: () -> Unit, onDismiss: () -> Unit,
                      units: UnitChoice = UnitChoice.AUTO, onUnits: (UnitChoice) -> Unit = {},
-                     language: LanguageChoice = LanguageChoice.AUTO, onLanguage: (LanguageChoice) -> Unit = {}) {
+                     language: LanguageChoice = LanguageChoice.AUTO, onLanguage: (LanguageChoice) -> Unit = {},
+                     /** Opens the open project's coordinate system; null without a project. */
+                     crsName: String? = null, onCrs: (() -> Unit)? = null) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Configurações") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (onCrs != null) {
+                    Text("Projeto", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Sistema de coordenadas: ${crsName ?: ""}", Modifier.weight(1f))
+                        androidx.compose.material3.OutlinedButton(onClick = onCrs) { Text("Trocar…") }
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                }
                 Text("Idioma", fontWeight = FontWeight.Bold)
                 for (l in LanguageChoice.entries) {
                     Row(

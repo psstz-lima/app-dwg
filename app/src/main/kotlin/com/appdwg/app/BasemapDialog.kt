@@ -39,14 +39,14 @@ import java.util.Locale
 @Composable
 fun BasemapDialog(
     store: BasemapStore,
-    zone: String,
-    onZone: (String) -> Unit,
+    crs: com.appdwg.core.Crs,
+    onCrs: () -> Unit,
     projectArea: Bounds?,
     viewArea: Bounds?,
     onDismiss: () -> Unit,
 ) {
-    val zoneNumber = zone.trimEnd('S', 's', 'N', 'n').toIntOrNull()?.takeIf { it in 1..60 }
-    val south = !zone.endsWith("N", true)
+    // The map needs a projected system to sit under the drawing.
+    val zoneNumber = if (crs.isGeographic) null else 1
     var useView by remember { mutableStateOf(false) }
     var maxZoom by remember { mutableStateOf(18) }
     var usage by remember { mutableLongStateOf(-1L) }
@@ -56,8 +56,8 @@ fun BasemapDialog(
         val m = maxOf(200.0, 0.1 * maxOf(b.width, b.height))
         Bounds(b.minX - m, b.minY - m, b.maxX + m, b.maxY + m)
     }
-    val count = remember(area, zoneNumber, south, maxZoom) {
-        if (area == null || zoneNumber == null) 0 else runCatching { store.count(area, zoneNumber, south, maxZoom) }.getOrDefault(0)
+    val count = remember(area, crs, maxZoom) {
+        if (area == null || zoneNumber == null) 0 else runCatching { store.count(area, crs, maxZoom) }.getOrDefault(0)
     }
 
     AlertDialog(
@@ -81,11 +81,10 @@ fun BasemapDialog(
                     Switch(store.online, store::allowOnline)
                     Text("Baixar da internet o que faltar ao navegar (desligado = só offline)")
                 }
-                OutlinedTextField(
-                    zone, onZone, label = { Text("Zona UTM do projeto") }, singleLine = true, modifier = Modifier.width(190.dp),
-                    isError = zoneNumber == null,
-                    supportingText = { Text(if (zoneNumber == null) "ex.: 23S" else "SIRGAS 2000 / UTM $zone") },
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Sistema do projeto: ${crs.name}", Modifier.weight(1f, fill = false))
+                    OutlinedButton(onClick = onCrs) { Text("Trocar…") }
+                }
 
                 Text("Uso offline", style = MaterialTheme.typography.titleSmall)
                 if (!store.source.bulk) {
@@ -103,7 +102,7 @@ fun BasemapDialog(
                     }
                     val tooMany = count > MAX_TILES
                     Text(
-                        if (zoneNumber == null) "Informe a zona UTM."
+                        if (zoneNumber == null) "Escolha um sistema projetado (UTM, LTM…) para o mapa."
                         else "$count tiles (≈ ${mb(count * 25_000L)})" + if (tooMany) " — área grande demais, use menos detalhe ou a área na tela." else "",
                         color = if (tooMany) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     )
@@ -116,7 +115,7 @@ fun BasemapDialog(
                         }
                     } else {
                         OutlinedButton(
-                            onClick = { if (area != null && zoneNumber != null) store.download(area, zoneNumber, south, maxZoom) },
+                            onClick = { if (area != null && zoneNumber != null) store.download(area, crs, maxZoom) },
                             enabled = area != null && zoneNumber != null && count in 1..MAX_TILES,
                         ) { Text("Baixar para uso offline") }
                     }

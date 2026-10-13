@@ -57,6 +57,38 @@ class ViewState(project: LandXmlProject) {
     var pointLabels by mutableStateOf(true)
     /** Decimal places of the coordinates in the footer. */
     var coordDigits by mutableStateOf(3)
+    /** Coordinate system of the project; null = from the drawing's EPSG, else SIRGAS 2000 / UTM 23S. */
+    var crs by mutableStateOf<com.appdwg.core.Crs?>(null)
+}
+
+/** Coordinate systems as JSON, for the project file and the user's own systems. */
+object CrsJson {
+    fun toJson(c: com.appdwg.core.Crs): JSONObject = JSONObject().apply {
+        put("id", c.id); put("name", c.name); c.epsg?.let { put("epsg", it) }; put("custom", c.custom); put("local", c.local)
+        val d = c.datum; val e = d.ellipsoid; val h = d.toSirgas
+        put("datum", JSONObject().put("id", d.id).put("name", d.name).put("wkt", d.wktName)
+            .put("ellipsoid", JSONObject().put("name", e.name).put("a", e.a).put("invF", e.invF))
+            .put("toSirgas", JSONArray(listOf(h.dx, h.dy, h.dz, h.rx, h.ry, h.rz, h.ds))))
+        when (val p = c.projection) {
+            com.appdwg.core.Projection.Geographic -> put("projection", JSONObject().put("type", "geographic"))
+            is com.appdwg.core.Projection.TransverseMercator -> put("projection", JSONObject().put("type", "tm").put("lat0", p.lat0).put("lon0", p.lon0)
+                .put("k0", p.k0).put("fe", p.falseEasting).put("fn", p.falseNorthing))
+        }
+    }
+
+    fun fromJson(o: JSONObject): com.appdwg.core.Crs {
+        // Built-in systems come back from the catalog, so a fix to it reaches old projects too.
+        com.appdwg.core.CrsCatalog.byId(o.optString("id"))?.takeIf { !o.optBoolean("custom") }?.let { return it }
+        val d = o.getJSONObject("datum"); val e = d.getJSONObject("ellipsoid"); val h = d.getJSONArray("toSirgas")
+        val datum = com.appdwg.core.Datum(d.getString("id"), d.getString("name"),
+            com.appdwg.core.Ellipsoid(e.getString("name"), e.getDouble("a"), e.getDouble("invF")),
+            com.appdwg.core.Helmert(h.getDouble(0), h.getDouble(1), h.getDouble(2), h.getDouble(3), h.getDouble(4), h.getDouble(5), h.getDouble(6)),
+            d.optString("wkt", d.getString("name")))
+        val p = o.getJSONObject("projection")
+        val proj = if (p.getString("type") == "geographic") com.appdwg.core.Projection.Geographic
+        else com.appdwg.core.Projection.TransverseMercator(p.getDouble("lat0"), p.getDouble("lon0"), p.getDouble("k0"), p.getDouble("fe"), p.getDouble("fn"))
+        return com.appdwg.core.Crs(o.getString("id"), o.getString("name"), o.optString("epsg").ifEmpty { null }, datum, proj, o.optBoolean("custom"), o.optBoolean("local"))
+    }
 }
 
 /** One line of the measurement bulletin; quantities in the item's unit, price per unit. */
@@ -238,6 +270,7 @@ class ProjectDoc(
             put("sheets", v.sheetParams.toJson())
             put("pointLabels", v.pointLabels)
             put("coordDigits", v.coordDigits)
+            v.crs?.let { put("crs", CrsJson.toJson(it)) }
         }
 
         fun applyView(o: JSONObject, v: ViewState) {
@@ -285,6 +318,7 @@ class ProjectDoc(
             o.optJSONObject("sheets")?.let { v.sheetParams = SheetParams.fromJson(it) }
             v.pointLabels = o.optBoolean("pointLabels", true)
             v.coordDigits = o.optInt("coordDigits", 3).coerceIn(0, 6)
+            v.crs = o.optJSONObject("crs")?.let { runCatching { CrsJson.fromJson(it) }.getOrNull() }
         }
     }
 }

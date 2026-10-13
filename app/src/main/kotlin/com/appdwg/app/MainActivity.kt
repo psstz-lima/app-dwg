@@ -207,7 +207,9 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (showAppearance) AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
             onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false },
             units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
-            language = viewModel.languages.choice, onLanguage = { viewModel.languages.choose(it) })
+            language = viewModel.languages.choice, onLanguage = { viewModel.languages.choose(it) },
+            crsName = if (state is ProjectState.Loaded) viewModel.crs().name else null,
+            onCrs = if (state is ProjectState.Loaded) ({ showAppearance = false; viewModel.crsDialogRequested = true }) else null)
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
@@ -346,14 +348,16 @@ private fun ProjectScreen(
     fun newNote(p: Point2, z: Double?) = com.appdwg.core.FieldNote(vm.nextNoteId(), p.x, p.y, z ?: Double.NaN, "", null,
         java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT).format(java.util.Date()))
     var gpsFollow by remember(fileName) { mutableStateOf(true) }
-    var gpsZone by remember(fileName) { mutableStateOf((com.appdwg.core.Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
+    // Coordinate system of the project: GPS positions, background map and GIS files go through it.
+    val crs = vm.crs()
+    var showCrs by remember(fileName) { mutableStateOf(false) }
+    LaunchedEffect(vm.crsDialogRequested) { if (vm.crsDialogRequested) { vm.crsDialogRequested = false; showCrs = true } }
     val gnssFix = vm.gnss.fix
     // GNSS position in the local grid: UTM, the chosen geoid height and the site calibration when on.
     val calibration = remember(v.calibrationPairs, v.calibrationFixScale, v.calibrationOn) {
         if (v.calibrationOn) com.appdwg.core.Calibration.fit(v.calibrationPairs, v.calibrationFixScale) else null
     }
-    val gpsZoneNumber = gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull()
-    val gpsLocal = gnssFix?.let { f -> gpsZoneNumber?.let { z -> vm.geo.local(f, z, calibration) } }
+    val gpsLocal = gnssFix?.let { f -> vm.geo.local(f, crs, calibration) }
     val gpsPoint = gpsLocal?.let { Point2(it.x, it.y) }
     val gpsHeight = gpsLocal?.z?.takeIf { !it.isNaN() }
     var showCalibration by remember(fileName) { mutableStateOf(false) }
@@ -441,7 +445,6 @@ private fun ProjectScreen(
     var focus by remember(fileName) { mutableStateOf<Point2?>(null) }
     var focusKey by remember(fileName) { mutableStateOf(0) }
     var includeSurfaces by remember(fileName) { mutableStateOf(false) }
-    var utmZone by remember(fileName) { mutableStateOf((Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
     var pendingExport by remember { mutableStateOf<ExportKind?>(null) }
     var screenShot by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var captureFor by remember { mutableStateOf<ExportKind?>(null) }
@@ -454,11 +457,11 @@ private fun ProjectScreen(
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
                 ExportKind.POINTS -> vm.exportPoints(uri)
-                ExportKind.KML -> vm.exportKml(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
-                ExportKind.GEOJSON -> vm.exportGeoJson(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
-                ExportKind.SHAPEFILE -> vm.exportShapefile(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
+                ExportKind.KML -> vm.exportKml(uri, line)
+                ExportKind.GEOJSON -> vm.exportGeoJson(uri, line)
+                ExportKind.SHAPEFILE -> vm.exportShapefile(uri, line)
                 ExportKind.VOLUMES -> vm.exportVolumes(uri)
-                ExportKind.NOTES_KMZ -> vm.exportNotesKmz(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true))
+                ExportKind.NOTES_KMZ -> vm.exportNotesKmz(uri)
                 ExportKind.NOTES_CSV -> vm.exportNotesCsv(uri)
                 ExportKind.PNG, ExportKind.PDF -> screenShot?.let { vm.exportImage(uri, it, kind == ExportKind.PDF) }
             }
@@ -755,9 +758,8 @@ private fun ProjectScreen(
                     gpsColor = fixColor(gnssFix?.quality),
                     notes = vm.notes,
                     onNoteTap = if (measuring || addingPoints || editing) null else { n -> openNote = n; tapped = null; selectedPoint = null },
-                    basemap = vm.basemap.takeIf { it.enabled && gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull() in 1..60 },
-                    basemapZone = gpsZone.trimEnd('S', 's', 'N', 'n').toIntOrNull() ?: 23,
-                    basemapSouth = !gpsZone.endsWith("N", true),
+                    basemap = vm.basemap.takeIf { it.enabled && !crs.isGeographic && !crs.local },
+                    basemapCrs = crs,
                     onLineSelected = { ref ->
                         roadTargetPick?.let { (i, side) ->
                             com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
@@ -1015,7 +1017,6 @@ private fun ProjectScreen(
     if (!vm.fullScreen) {
         val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
         val digits = v.coordDigits
-        val zoneNumber = gpsZoneNumber
         StatusFooter(
             items = buildList {
                 shown?.let { p ->
@@ -1098,9 +1099,19 @@ private fun ProjectScreen(
                 add(FooterItem("Tema") { close ->
                     for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }
                 })
-                add(FooterItem(project.coordinateSystem?.epsgCode?.let { "EPSG $it" } ?: ("UTM " + gpsZone)) { close ->
-                    MenuTitle("Zona UTM do GPS e do mapa")
-                    for (zn in 18..25) MenuLine("${zn}S", checked = zoneNumber == zn && !gpsZone.endsWith("N", true)) { close(); gpsZone = "${zn}S" }
+                add(FooterItem(crs.epsg?.let { "EPSG $it" } ?: crs.name.take(28)) { close ->
+                    MenuTitle(crs.name)
+                    // Neighbouring zones of the same datum, for a quick change.
+                    val tm = crs.projection as? com.appdwg.core.Projection.TransverseMercator
+                    if (tm != null && tm.k0 == 0.9996 && !crs.local) {
+                        val zone = ((tm.lon0 + 183) / 6).toInt(); val south = tm.falseNorthing > 0
+                        for (zn in (zone - 1)..(zone + 1)) if (zn in 1..60) {
+                            val c = com.appdwg.core.CrsCatalog.byId(com.appdwg.core.CrsCatalog.utm(crs.datum, zn, south, null).id)
+                                ?: com.appdwg.core.CrsCatalog.utm(crs.datum, zn, south, null)
+                            MenuLine(c.name, checked = c.id == crs.id) { close(); vm.chooseCrs(c) }
+                        }
+                    }
+                    MenuLine("Escolher sistema de coordenadas…") { close(); showCrs = true }
                 })
                 val fix = gnssFix
                 add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: "GPS desligado",
@@ -1141,7 +1152,7 @@ private fun ProjectScreen(
     }
 
     if (showCalibration) {
-        CalibrationDialog(vm, v, project, gpsZoneNumber, onLoadGrid = { geoidPicker.launch(arrayOf("*/*")) }, onDismiss = { showCalibration = false })
+        CalibrationDialog(vm, v, project, crs, onLoadGrid = { geoidPicker.launch(arrayOf("*/*")) }, onDismiss = { showCalibration = false })
     }
 
     if (showAsBuilt) {
@@ -1269,7 +1280,7 @@ private fun ProjectScreen(
     editingNote?.let { (n, isNew) -> key(n.id) { NoteDialog(vm, n, isNew, onDismiss = { editingNote = null }) } }
 
     if (showGps) {
-        GpsDialog(vm.gnss, gpsZone, { gpsZone = it.trim().uppercase() }, gpsFollow, { gpsFollow = it },
+        GpsDialog(vm.gnss, crs, { showGps = false; showCrs = true }, gpsFollow, { gpsFollow = it },
             onNeedPermissions = { src, then ->
                 // Only what the chosen source needs: the antenna sends its own position over Bluetooth.
                 val perms = when {
@@ -1285,7 +1296,8 @@ private fun ProjectScreen(
     }
 
     if (showCalc) CalcDialog(vm, project, onDismiss = { showCalc = false })
-    if (showBasemap) BasemapDialog(vm.basemap, gpsZone, { gpsZone = it.trim().uppercase() }, project.bounds, viewport, onDismiss = { showBasemap = false })
+    if (showBasemap) BasemapDialog(vm.basemap, crs, { showBasemap = false; showCrs = true }, project.bounds, viewport, onDismiss = { showBasemap = false })
+    if (showCrs) CrsDialog(vm, crs, onDismiss = { showCrs = false })
 
     if (showGoTo) {
         GoToDialog(project.copy(points = vm.userPoints), onGo = { p ->
@@ -1308,8 +1320,8 @@ private fun ProjectScreen(
             onIncludeContours = { includeContours = it },
             includeModels = includeModels,
             onIncludeModels = { includeModels = it },
-            zone = utmZone,
-            onZone = { utmZone = it.trim().uppercase() },
+            crs = crs,
+            onCrs = { showExport = false; showCrs = true },
             onExport = { kind ->
                 showExport = false
                 if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind

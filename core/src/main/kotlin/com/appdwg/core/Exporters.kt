@@ -303,10 +303,10 @@ object Utm {
 
 /** KML of points and lines, in latitude and longitude from UTM. */
 object KmlWriter {
-    fun write(points: List<CogoPoint>, lines: List<ExportLine>, zone: Int, south: Boolean, name: String, out: Writer) {
+    fun write(points: List<CogoPoint>, lines: List<ExportLine>, crs: Crs, name: String, out: Writer) {
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         fun coord(x: Double, y: Double, z: Double = Double.NaN): String {
-            val (lat, lon) = Utm.toGeographic(x, y, zone, south)
+            val (lat, lon) = crs.toWgs84(x, y)
             return String.format(Locale.ROOT, "%.8f,%.8f", lon, lat) + if (z.isNaN()) "" else String.format(Locale.ROOT, ",%.3f", z)
         }
         out.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n<Document>\n")

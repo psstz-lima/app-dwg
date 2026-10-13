@@ -32,12 +32,12 @@ object NotesExport {
      * KMZ: a KML with a placemark per note (photo shown in the balloon) and the photos in the zip.
      * [photo] gives the bytes of a photo by file name.
      */
-    fun kmz(notes: List<FieldNote>, zone: Int, south: Boolean, name: String, out: OutputStream, photo: (String) -> ByteArray?) {
+    fun kmz(notes: List<FieldNote>, crs: Crs, name: String, out: OutputStream, photo: (String) -> ByteArray?) {
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         val kml = buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n<Document>\n<name>${esc(name)}</name>\n")
             for (n in notes) {
-                val (lat, lon) = Utm.toGeographic(n.x, n.y, zone, south)
+                val (lat, lon) = crs.toWgs84(n.x, n.y)
                 append("<Placemark><name>${esc(n.text.lineSequence().firstOrNull()?.take(40) ?: n.id)}</name><description><![CDATA[")
                 append(n.text.replace("]]>", "] ]>")).append("<br/>").append(n.time)
                 n.photo?.let { append("<br/><img src=\"files/$it\" width=\"400\"/>") }

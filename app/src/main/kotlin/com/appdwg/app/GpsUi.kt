@@ -55,8 +55,8 @@ fun fixColor(q: FixQuality?): Color = when (q) {
 @Composable
 fun GpsDialog(
     gnss: GnssManager,
-    zone: String,
-    onZone: (String) -> Unit,
+    crs: com.appdwg.core.Crs,
+    onCrs: () -> Unit,
     follow: Boolean,
     onFollow: (Boolean) -> Unit,
     onNeedPermissions: (GnssSource, () -> Unit) -> Unit,
@@ -101,7 +101,8 @@ fun GpsDialog(
                 }
                 Text(gnss.status, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(zone, onZone, label = { Text("Zona UTM do projeto") }, singleLine = true, modifier = Modifier.width(190.dp))
+                    Text("Sistema: ${crs.name}", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = onCrs) { Text("Trocar…") }
                     Checkbox(checked = follow, onCheckedChange = onFollow)
                     Text("Seguir a posição na planta")
                 }

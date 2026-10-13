@@ -174,6 +174,46 @@
     <string name="sh_export">folhas de seções (PDF)</string>
     <string name="sh_none">nenhuma seção cruza as superfícies nesse trecho</string>
 
+    <!-- Coordinate systems -->
+    <string name="crs_title">Sistema de coordenadas do projeto</string>
+    <string name="crs_current">Atual: %1$s</string>
+    <string name="crs_search">Buscar por nome ou EPSG (ex.: SIRGAS 23S, 31983, SAD 69)</string>
+    <string name="crs_mine">Meus sistemas</string>
+    <string name="crs_catalog">Catálogo</string>
+    <string name="crs_special">LTM, RTM e local</string>
+    <string name="crs_ltm">LTM (fuso de 1°)</string>
+    <string name="crs_rtm">RTM (fuso de 2°)</string>
+    <string name="crs_mc">Meridiano central (°)</string>
+    <string name="crs_local">Local / sem projeção</string>
+    <string name="crs_local_hint">Coordenadas locais da obra: o GPS é projetado em UTM da zona escolhida e levado ao sistema local pela calibração (Calibrar).</string>
+    <string name="crs_zone">Zona UTM (ex.: 23S)</string>
+    <string name="crs_use">Usar</string>
+    <string name="crs_new">Novo sistema personalizado</string>
+    <string name="crs_edit">Editar</string>
+    <string name="crs_delete">Excluir</string>
+    <string name="crs_name">Nome</string>
+    <string name="crs_datum">Datum</string>
+    <string name="crs_datum_custom">Outro (parâmetros abaixo)</string>
+    <string name="crs_ellipsoid">Elipsoide</string>
+    <string name="crs_a">Semieixo a (m)</string>
+    <string name="crs_invf">1/f</string>
+    <string name="crs_helmert">Transformação para SIRGAS 2000 (Helmert, vetor-posição)</string>
+    <string name="crs_t">%1$s (m)</string>
+    <string name="crs_r">%1$s (″)</string>
+    <string name="crs_ds">Escala (ppm)</string>
+    <string name="crs_projection">Projeção</string>
+    <string name="crs_geographic">Geográficas (lat/long)</string>
+    <string name="crs_tm">Transversa de Mercator</string>
+    <string name="crs_lat0">Latitude de origem (°)</string>
+    <string name="crs_lon0">Meridiano central (°)</string>
+    <string name="crs_k0">Fator de escala k</string>
+    <string name="crs_fe">Falso E (m)</string>
+    <string name="crs_fn">Falso N (m)</string>
+    <string name="crs_save">Salvar e usar</string>
+    <string name="crs_cancel">Cancelar</string>
+    <string name="crs_ibge_note">Datums SAD 69, SAD 69 (96) e Córrego Alegre com os parâmetros oficiais do IBGE (R.PR 1/2005) para SIRGAS 2000.</string>
+    <string name="crs_change_note">Trocar o sistema não move o desenho: muda como o GPS, o mapa de fundo e os arquivos GIS se relacionam com ele.</string>
+
     <!-- As-built check -->
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>

@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.appdwg.core.Bounds
+import com.appdwg.core.Crs
 import com.appdwg.core.TileCorners
 import com.appdwg.core.TileId
 import com.appdwg.core.Utm
@@ -139,23 +140,24 @@ class BasemapStore(context: Context) {
         } finally { b.recycle() }
     }
 
-    private fun cornersOf(t: TileId, zone: Int, south: Boolean): TileCorners {
-        val k = "$zone$south/${t.z}/${t.x}/${t.y}"
-        return corners.get(k) ?: WebTiles.corners(t, zone, south).also { corners.put(k, it) }
+    private fun cornersOf(t: TileId, crs: Crs): TileCorners {
+        val k = "${crs.id}/${t.z}/${t.x}/${t.y}"
+        return corners.get(k) ?: WebTiles.corners(t, crs).also { corners.put(k, it) }
     }
 
     /** Tiles to draw over the UTM area [view] at [mpp] metres per screen pixel. */
-    fun visible(view: Bounds, mpp: Double, zone: Int, south: Boolean): List<BasemapTile> {
+    fun visible(view: Bounds, mpp: Double, crs: Crs): List<BasemapTile> {
         val s = source
-        val lat = runCatching { Utm.toGeographic(view.center.x, view.center.y, zone, south).first }.getOrNull() ?: return emptyList()
+        if (crs.isGeographic) return emptyList()
+        val lat = runCatching { crs.toWgs84(view.center.x, view.center.y).first }.getOrNull() ?: return emptyList()
         if (lat.isNaN() || kotlin.math.abs(lat) > 85) return emptyList()
         val z = WebTiles.zoomFor(mpp, lat, 2, s.maxZoom)
-        val tiles = WebTiles.covering(view, zone, south, z)
+        val tiles = WebTiles.covering(view, crs, z)
         if (tiles.size > 400) return emptyList()
         val out = ArrayList<BasemapTile>(tiles.size)
         for (t in tiles) {
             val own = bitmap(t, fetch = true)
-            if (own != null) { out += BasemapTile(own, android.graphics.Rect(0, 0, own.width, own.height), cornersOf(t, zone, south)); continue }
+            if (own != null) { out += BasemapTile(own, android.graphics.Rect(0, 0, own.width, own.height), cornersOf(t, crs)); continue }
             // Coarser tile, cropped to this tile's part of it.
             var p = t
             for (up in 1..6) {
@@ -165,7 +167,7 @@ class BasemapStore(context: Context) {
                 val n = 1 shl up
                 val cw = b.width / n; val ch = b.height / n
                 val ox = (t.x - (p.x shl up)) * cw; val oy = (t.y - (p.y shl up)) * ch
-                if (cw > 0 && ch > 0) out += BasemapTile(b, android.graphics.Rect(ox, oy, ox + cw, oy + ch), cornersOf(t, zone, south))
+                if (cw > 0 && ch > 0) out += BasemapTile(b, android.graphics.Rect(ox, oy, ox + cw, oy + ch), cornersOf(t, crs))
                 break
             }
         }
@@ -178,12 +180,12 @@ class BasemapStore(context: Context) {
     var progress by mutableStateOf<Pair<Int, Int>?>(null); private set
     var lastResult by mutableStateOf<String?>(null); private set
 
-    fun count(area: Bounds, zone: Int, south: Boolean, maxZoom: Int) = WebTiles.pyramid(area, zone, south, 10, maxZoom).size
+    fun count(area: Bounds, crs: Crs, maxZoom: Int) = WebTiles.pyramid(area, crs, 10, maxZoom).size
 
-    fun download(area: Bounds, zone: Int, south: Boolean, maxZoom: Int) {
+    fun download(area: Bounds, crs: Crs, maxZoom: Int) {
         val s = source
         if (!s.bulk || downloadJob?.isActive == true) return
-        val tiles = WebTiles.pyramid(area, zone, south, 10, maxZoom)
+        val tiles = WebTiles.pyramid(area, crs, 10, maxZoom)
         progress = 0 to tiles.size
         lastResult = null
         downloadJob = scope.launch {

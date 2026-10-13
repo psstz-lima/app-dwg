@@ -49,7 +49,7 @@ fun CalibrationDialog(
     vm: ProjectViewModel,
     v: ViewState,
     project: LandXmlProject,
-    zone: Int?,
+    crs: com.appdwg.core.Crs,
     onLoadGrid: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -115,10 +115,10 @@ fun CalibrationDialog(
                         }
                     }
                     OutlinedButton(
-                        enabled = picked != null && fix != null && zone != null,
+                        enabled = picked != null && fix != null,
                         onClick = {
                             val p = picked ?: return@OutlinedButton
-                            val m = geo.measured(fix ?: return@OutlinedButton, zone ?: return@OutlinedButton)
+                            val m = geo.measured(fix ?: return@OutlinedButton, crs)
                             v.calibrationPairs = v.calibrationPairs.filter { it.name != p.number } +
                                 CalibrationPair(p.number, m, Point3(p.x, p.y, p.z), useVertical = !p.z.isNaN() && !m.z.isNaN())
                             picked = null

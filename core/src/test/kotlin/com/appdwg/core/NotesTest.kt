@@ -24,7 +24,7 @@ class NotesTest {
     @Test
     fun kmzHoldsKmlAndPhotos() {
         val out = ByteArrayOutputStream()
-        NotesExport.kmz(notes, 23, true, "Teste", out) { if (it == "n1.jpg") byteArrayOf(1, 2, 3) else null }
+        NotesExport.kmz(notes, CrsCatalog.byEpsg("31983")!!, "Teste", out) { if (it == "n1.jpg") byteArrayOf(1, 2, 3) else null }
         val names = ArrayList<String>(); var kml = ""
         ZipInputStream(ByteArrayInputStream(out.toByteArray())).use { z ->
             while (true) { val e = z.nextEntry ?: break; names += e.name; if (e.name == "doc.kml") kml = z.readBytes().toString(Charsets.UTF_8) }

@@ -46,8 +46,8 @@ fun ExportDialog(
     onIncludeContours: (Boolean) -> Unit,
     includeModels: Boolean,
     onIncludeModels: (Boolean) -> Unit,
-    zone: String,
-    onZone: (String) -> Unit,
+    crs: com.appdwg.core.Crs,
+    onCrs: () -> Unit,
     onExport: (ExportKind) -> Unit,
     onSheets: (() -> Unit)? = null,
     onDismiss: () -> Unit,
@@ -76,27 +76,24 @@ fun ExportDialog(
                 OutlinedButton(onClick = { onExport(ExportKind.LANDXML) }) { Text(ExportKind.LANDXML.label) }
                 onSheets?.let { OutlinedButton(onClick = it) { Text(androidx.compose.ui.res.stringResource(R.string.sh_open)) } }
                 OutlinedButton(onClick = { onExport(ExportKind.POINTS) }, enabled = vm.userPoints.isNotEmpty()) { Text(ExportKind.POINTS.label) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { onExport(ExportKind.KML) }, enabled = zone.trimEnd('S', 's', 'N', 'n').toIntOrNull() in 1..60) {
-                        Text(ExportKind.KML.label)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedTextField(
-                        zone, onZone, label = { Text("Zona UTM") }, singleLine = true, modifier = Modifier.width(120.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Sistema de coordenadas: ${crs.name}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false))
+                    OutlinedButton(onClick = onCrs) { Text("Trocar…") }
                 }
+                // A site grid has no known link to latitude and longitude.
+                val geoOk = !crs.local
                 Row {
-                    val zoneOk = zone.trimEnd('S', 's', 'N', 'n').toIntOrNull() in 1..60
-                    OutlinedButton(onClick = { onExport(ExportKind.GEOJSON) }, enabled = zoneOk) { Text(ExportKind.GEOJSON.label) }
+                    OutlinedButton(onClick = { onExport(ExportKind.KML) }, enabled = geoOk) { Text(ExportKind.KML.label) }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { onExport(ExportKind.SHAPEFILE) }, enabled = zoneOk) { Text(ExportKind.SHAPEFILE.label) }
+                    OutlinedButton(onClick = { onExport(ExportKind.GEOJSON) }, enabled = geoOk) { Text(ExportKind.GEOJSON.label) }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { onExport(ExportKind.SHAPEFILE) }) { Text(ExportKind.SHAPEFILE.label) }
                 }
-                Text("GeoJSON em longitude/latitude (WGS84 ≈ SIRGAS 2000); Shapefile nas coordenadas do projeto, com .prj SIRGAS 2000 / UTM da zona acima. " +
+                Text("KML e GeoJSON em longitude/latitude (WGS84 ≈ SIRGAS 2000), convertidos do sistema do projeto; Shapefile nas coordenadas do projeto, com o .prj desse sistema. " +
                     "Para importar, abra ou adicione (Comparar) um .geojson, .json, .shp ou um .zip com o shapefile.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { onExport(ExportKind.VOLUMES) }, enabled = vm.hasVolumes) { Text(ExportKind.VOLUMES.label) }
                 Row {
-                    OutlinedButton(onClick = { onExport(ExportKind.NOTES_KMZ) }, enabled = vm.notes.isNotEmpty()) { Text(ExportKind.NOTES_KMZ.label) }
+                    OutlinedButton(onClick = { onExport(ExportKind.NOTES_KMZ) }, enabled = vm.notes.isNotEmpty() && !crs.local) { Text(ExportKind.NOTES_KMZ.label) }
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(onClick = { onExport(ExportKind.NOTES_CSV) }, enabled = vm.notes.isNotEmpty()) { Text(ExportKind.NOTES_CSV.label) }
                 }

@@ -8,7 +8,6 @@ import com.appdwg.core.Calibration
 import com.appdwg.core.GeoidGrid
 import com.appdwg.core.GnssFix
 import com.appdwg.core.Point3
-import com.appdwg.core.UtmForward
 
 /** Where the GNSS height comes from. */
 enum class HeightMode { RECEIVER, GEOID_GRID, FIXED_N }
@@ -42,13 +41,13 @@ class Geodesy(context: Context) {
         else -> fix.ellipsoidalHeight?.let { h -> undulation(fix)?.let { h - it } }
     } ?: Double.NaN
 
-    /** UTM position and height of the fix, before the site calibration. */
-    fun measured(fix: GnssFix, zone: Int): Point3 =
-        UtmForward.fromGeographic(fix.latitude, fix.longitude, zone).let { Point3(it.x, it.y, height(fix)) }
+    /** Position of the fix in the project's coordinate system, and its height, before the site calibration. */
+    fun measured(fix: GnssFix, crs: com.appdwg.core.Crs): Point3 =
+        crs.fromWgs84(fix.latitude, fix.longitude).let { Point3(it.x, it.y, height(fix)) }
 
     /** Position in the local grid: the calibration applied when there is one. */
-    fun local(fix: GnssFix, zone: Int, calibration: Calibration?): Point3 {
-        val m = measured(fix, zone)
+    fun local(fix: GnssFix, crs: com.appdwg.core.Crs, calibration: Calibration?): Point3 {
+        val m = measured(fix, crs)
         return calibration?.apply(m) ?: m
     }
 }
