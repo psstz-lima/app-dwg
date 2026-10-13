@@ -981,6 +981,108 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- As-built check ----
+
+    /** Last as-built check, also drawn on the plan as coloured rings. */
+    var asBuilt by mutableStateOf<com.appdwg.core.AsBuiltReport?>(null)
+        private set
+
+    fun checkAsBuilt(points: List<CogoPoint>, surface: Surface, alignment: com.appdwg.core.Alignment?, tolerance: Double) {
+        asBuilt = com.appdwg.core.AsBuiltReport.check(points, surface, alignment, tolerance)
+    }
+
+    fun clearAsBuilt() { asBuilt = null }
+
+    private fun asBuiltStatus(s: com.appdwg.core.AsBuiltStatus) = getApplication<Application>().getString(when (s) {
+        com.appdwg.core.AsBuiltStatus.OK -> R.string.asbuilt_status_ok
+        com.appdwg.core.AsBuiltStatus.ABOVE -> R.string.asbuilt_status_above
+        com.appdwg.core.AsBuiltStatus.BELOW -> R.string.asbuilt_status_below
+        com.appdwg.core.AsBuiltStatus.OUTSIDE -> R.string.asbuilt_status_outside
+    })
+
+    /** Cells of one report row: point, description, E, N, surveyed, design, difference, station, offset, status. */
+    private fun asBuiltCells(r: com.appdwg.core.AsBuiltReport, row: com.appdwg.core.AsBuiltRow): List<String> {
+        fun n(v: Double?, d: Int = 3) = v?.let { StationFormat.decimal(it, d) } ?: ""
+        val p = row.point
+        return listOf(p.number, p.description, n(p.x), n(p.y), n(p.z), n(row.design), n(row.delta),
+            row.stationOffset?.let { StationFormat.estaca(it.station) } ?: "", row.stationOffset?.let { StationFormat.offset(it.offset) } ?: "",
+            asBuiltStatus(r.status(row)))
+    }
+
+    private fun asBuiltSummary(r: com.appdwg.core.AsBuiltReport): Pair<String, String> {
+        val app = getApplication<Application>()
+        fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: "—"
+        return app.getString(R.string.asbuilt_summary, r.checked, StationFormat.decimal(r.passRate * 100, 1), r.above, r.below, r.outside) to
+            app.getString(R.string.asbuilt_stats, n(r.mean), n(r.rms), n(r.stdDev), n(r.min), n(r.max))
+    }
+
+    fun exportAsBuiltCsv(target: Uri, title: String) {
+        val r = asBuilt ?: return
+        val app = getApplication<Application>()
+        val head = listOf(R.string.asbuilt_col_point, R.string.asbuilt_col_desc).map(app::getString) + listOf("E", "N") +
+            listOf(R.string.asbuilt_col_surveyed, R.string.asbuilt_col_design, R.string.asbuilt_col_delta, R.string.asbuilt_col_station,
+                R.string.asbuilt_col_offset, R.string.asbuilt_col_status).map(app::getString)
+        val (summary, stats) = asBuiltSummary(r)
+        val text = buildString {
+            append(app.getString(R.string.asbuilt_report_title)).append(" — ").append(title).append("\r\n")
+            append(summary).append("\r\n").append(stats).append("\r\n\r\n")
+            append(head.joinToString(";")).append("\r\n")
+            for (row in r.rows) append(asBuiltCells(r, row).joinToString(";") { it.replace(';', ',') }).append("\r\n")
+        }
+        writeTo(target, app.getString(R.string.asbuilt_export_csv)) { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
+    }
+
+    /** A4 portrait: heading and summary on every page, 40 rows per page, the status in colour. */
+    fun exportAsBuiltPdf(target: Uri, title: String) {
+        val r = asBuilt ?: return
+        val app = getApplication<Application>()
+        val (summary, stats) = asBuiltSummary(r)
+        val date = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt", "BR")).format(java.util.Date())
+        writeTo(target, app.getString(R.string.asbuilt_export_pdf)) { out ->
+            val doc = android.graphics.pdf.PdfDocument()
+            val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
+            val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true }
+            val head = listOf(R.string.asbuilt_col_point, R.string.asbuilt_col_desc).map(app::getString) + listOf("E", "N") +
+                listOf(R.string.asbuilt_col_surveyed, R.string.asbuilt_col_design, R.string.asbuilt_col_delta, R.string.asbuilt_col_station,
+                    R.string.asbuilt_col_offset, R.string.asbuilt_col_status).map(app::getString)
+            val colX = floatArrayOf(28f, 70f, 140f, 205f, 275f, 325f, 375f, 425f, 480f, 525f)
+            val chunks = r.rows.chunked(40).ifEmpty { listOf(emptyList()) }
+            chunks.forEachIndexed { pi, chunk ->
+                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, pi + 1).create())
+                val c = page.canvas
+                c.drawText(app.getString(R.string.asbuilt_report_title), 28f, 40f, android.graphics.Paint(bold).apply { textSize = 13f })
+                c.drawText(app.getString(R.string.asbuilt_report_head, title, r.surface, r.alignment ?: "—", StationFormat.decimal(r.tolerance, 3), date), 28f, 56f, paint)
+                c.drawText(summary, 28f, 70f, bold)
+                c.drawText(stats, 28f, 82f, paint)
+                c.drawText(app.getString(R.string.asbuilt_sign), 28f, 94f, paint)
+                var y = 116f
+                head.forEachIndexed { k, h -> c.drawText(h, colX[k], y, bold) }
+                c.drawLine(28f, y + 4f, 567f, y + 4f, paint)
+                y += 16f
+                for (row in chunk) {
+                    val cells = asBuiltCells(r, row)
+                    cells.forEachIndexed { k, v ->
+                        val pp = if (k == cells.lastIndex) android.graphics.Paint(bold).apply {
+                            color = when (r.status(row)) {
+                                com.appdwg.core.AsBuiltStatus.OK -> 0xFF2E7D32.toInt()
+                                com.appdwg.core.AsBuiltStatus.ABOVE -> 0xFF1565C0.toInt()
+                                com.appdwg.core.AsBuiltStatus.BELOW -> 0xFFC62828.toInt()
+                                com.appdwg.core.AsBuiltStatus.OUTSIDE -> 0xFF757575.toInt()
+                            }
+                        } else paint
+                        // Long descriptions are cut so they do not run into the next column.
+                        c.drawText(if (k == 1 && v.length > 14) v.take(13) + "…" else v, colX[k], y, pp)
+                    }
+                    y += 17f
+                }
+                c.drawText(app.getString(R.string.asbuilt_page, pi + 1, chunks.size), 500f, 820f, paint)
+                doc.finishPage(page)
+            }
+            doc.writeTo(out)
+            doc.close()
+        }
+    }
+
     // ---- 3D models ----
 
     /** Models added to the project, each with its placement. */
@@ -1538,6 +1640,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     keptOriginals = project.polylines.indices.toList()
                     undoStack.clear(); redoStack.clear(); canUndo = false; canRedo = false
                     platform = null
+                    asBuilt = null
                     road = null
                     roadMessage = null
                     platformVolumes = null

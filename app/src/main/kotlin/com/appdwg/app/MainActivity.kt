@@ -350,6 +350,14 @@ private fun ProjectScreen(
     var showContourDialog by remember(fileName) { mutableStateOf(false) }
     var showPlatform by remember(fileName) { mutableStateOf(false) }
     var showRoad by remember(fileName) { mutableStateOf(false) }
+    var showAsBuilt by remember(fileName) { mutableStateOf(false) }
+    val asBuiltState = remember(fileName) { AsBuiltState() }
+    val asBuiltCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportAsBuiltCsv(uri, fileName)
+    }
+    val asBuiltPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) vm.exportAsBuiltPdf(uri, fileName)
+    }
     var drawingRoad by v::drawingRoad
     // Region and side whose edge target line is being tapped.
     var roadTargetPick by remember(fileName) { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -530,6 +538,7 @@ private fun ProjectScreen(
 
     val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 900
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+    val asBuiltLabel = androidx.compose.ui.res.stringResource(R.string.asbuilt_tool)
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
@@ -547,6 +556,7 @@ private fun ProjectScreen(
             add(RailTool(GIcon.PLATFORM, "Plataforma", drawingPlatform || vm.platform != null) { showPlatform = true })
             add(RailTool(GIcon.ROAD, "Estrada", drawingRoad || v.roadBuilt) { showRoad = true })
         }
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, "Modelos") { showModels = true })
         add(RailTool(GIcon.NOTE, "Anotar", addingNote) { addingNote = true; measuring = false; show3d = false })
         add(RailTool(GIcon.GPS, "GPS", vm.gnss.connected) { showGps = true })
@@ -741,6 +751,7 @@ private fun ProjectScreen(
                     onContours = { contourDrawn = it },
                     viewKey = fileName,
                     zoom = planZoom,
+                    marks = vm.asBuilt?.let { r -> r.rows.map { Point2(it.point.x, it.point.y) to asBuiltColor(r.status(it)) } }.orEmpty(),
                 )
 
 
@@ -958,6 +969,14 @@ private fun ProjectScreen(
         gpsText = gnssFix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.decimal(it, 3) + " m" } ?: "") },
         gpsColor = if (gnssFix?.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(gnssFix?.quality),
     )
+    }
+
+    if (showAsBuilt) {
+        AsBuiltDialog(vm, project, asBuiltState,
+            onImport = { pointImporter.launch(arrayOf("text/*", "application/octet-stream", "*/*")) },
+            onCsv = { asBuiltCsv.launch("$baseName-as-built.csv") },
+            onPdf = { asBuiltPdf.launch("$baseName-as-built.pdf") },
+            onDismiss = { showAsBuilt = false })
     }
 
     if (showDrape) {

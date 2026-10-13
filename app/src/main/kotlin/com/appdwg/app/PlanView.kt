@@ -162,6 +162,8 @@ fun PlanView(
     basemapZone: Int = 23,
     basemapSouth: Boolean = true,
     zoom: ZoomRequest? = null,
+    /** Rings around checked points (as-built), each in its status colour. */
+    marks: List<Pair<Point2, Color>> = emptyList(),
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -379,6 +381,15 @@ fun PlanView(
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors) { toScreen(it, cam) }
         if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors) { toScreen(it, cam) }
+        if (marks.isNotEmpty()) {
+            val r = 7.sp.toPx()
+            for ((p, c) in marks) {
+                val sp = toScreen(p, cam)
+                if (sp.x < -r || sp.y < -r || sp.x > size.width + r || sp.y > size.height + r) continue
+                drawCircle(Color.Black.copy(alpha = 0.5f), radius = r, center = sp, style = Stroke(width = 5f))
+                drawCircle(c, radius = r, center = sp, style = Stroke(width = 3f))
+            }
+        }
 
         for ((k, l) in designLines.withIndex()) {
             if (l.size < 2) continue

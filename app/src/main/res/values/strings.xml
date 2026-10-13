@@ -1,4 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Gromatic</string>
+
+    <string name="close">Fechar</string>
+
+    <!-- As-built check -->
+    <string name="asbuilt_tool">As-built</string>
+    <string name="asbuilt_title">Conferência de as-built</string>
+    <string name="asbuilt_intro">Compara os pontos levantados com a superfície de projeto: diferença de cota em cada ponto, dentro ou fora da tolerância.</string>
+    <string name="asbuilt_points">Pontos levantados</string>
+    <string name="asbuilt_points_user">Pontos (_POINTS): %1$d</string>
+    <string name="asbuilt_points_file">Pontos do arquivo: %1$d</string>
+    <string name="asbuilt_points_all">Todos: %1$d</string>
+    <string name="asbuilt_import">Importar pontos</string>
+    <string name="asbuilt_design">Superfície de projeto</string>
+    <string name="asbuilt_alignment">Eixo (estaca e afastamento)</string>
+    <string name="asbuilt_none">Nenhum</string>
+    <string name="asbuilt_tolerance">Tolerância (± cm)</string>
+    <string name="asbuilt_check">Conferir</string>
+    <string name="asbuilt_clear">Limpar</string>
+    <string name="asbuilt_no_points">Não há pontos com cota. Importe o levantamento em Pontos ou aqui.</string>
+    <string name="asbuilt_no_surface">O projeto não tem superfície para comparar.</string>
+    <string name="asbuilt_summary">%1$d pontos conferidos · %2$s%% dentro da tolerância · %3$d acima · %4$d abaixo · %5$d fora do projeto</string>
+    <string name="asbuilt_stats">Diferença média %1$s m · RMS %2$s m · desvio padrão %3$s m · mín. %4$s m · máx. %5$s m</string>
+    <string name="asbuilt_sign">Diferença = levantado − projeto (positivo: acima do projeto).</string>
+    <string name="asbuilt_csv">Relatório (CSV)</string>
+    <string name="asbuilt_pdf">Relatório (PDF)</string>
+    <string name="asbuilt_report_title">Relatório de conferência de as-built</string>
+    <string name="asbuilt_report_head">Projeto: %1$s · Superfície: %2$s · Eixo: %3$s · Tolerância: ± %4$s m · %5$s</string>
+    <string name="asbuilt_col_point">Ponto</string>
+    <string name="asbuilt_col_desc">Descrição</string>
+    <string name="asbuilt_col_surveyed">Levantado</string>
+    <string name="asbuilt_col_design">Projeto</string>
+    <string name="asbuilt_col_delta">Diferença</string>
+    <string name="asbuilt_col_station">Estaca</string>
+    <string name="asbuilt_col_offset">Afast.</string>
+    <string name="asbuilt_col_status">Situação</string>
+    <string name="asbuilt_page">página %1$d de %2$d</string>
+    <string name="asbuilt_status_ok">OK</string>
+    <string name="asbuilt_status_above">Acima</string>
+    <string name="asbuilt_status_below">Abaixo</string>
+    <string name="asbuilt_status_outside">Fora do projeto</string>
+    <string name="asbuilt_export_csv">relatório de as-built (CSV)</string>
+    <string name="asbuilt_export_pdf">relatório de as-built (PDF)</string>
 </resources>
