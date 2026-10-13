@@ -70,6 +70,11 @@ exporta com os dados reais de projeto.
   borda, bermas e offset), o mapa de corte/aterro e os volumes contra o terreno; entra na seção, no
   perfil e no comparativo, é salva no projeto e exportada em LandXML (com breaklines e limite) e DXF
   (`_PLAT_BORDA`, `_PLAT_OFFSET`, `_PLAT_BERMA`, em 3D).
+- Gerar pontos ("Pontos" > "Gerar pontos…"): sobre uma linha, polilinha 3D ou eixo tocado (distância
+  entre pontos, offsets como "-3,5; 0; 3,5", vértices ou pontos notáveis do eixo, faixa de estacas)
+  ou em malha (polígono desenhado, polilinha fechada, área visível ou limite da superfície; espaçamento
+  X/Y e rotação, que pode vir de uma linha). Cota da linha 3D, da superfície ou fixa, mais altura
+  referencial; numeração continua a existente; pré-visualização na planta antes de criar e desfazer.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

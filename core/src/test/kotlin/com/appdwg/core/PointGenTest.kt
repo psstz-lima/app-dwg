@@ -26,6 +26,9 @@ class PointGenTest {
         val axis = PointGen.Path(doubleArrayOf(0.0, 100.0), doubleArrayOf(0.0, 0.0), null, false, start = 1000.0)
         val pts = PointGen.alongLine(axis, 20.0, listOf(0.0), includeVertices = false, from = 1030.0, to = 1070.0)
         assertEquals(listOf(1030.0, 1040.0, 1060.0, 1070.0), pts.map { it.distance })
+        // An alignment's dense curve vertices are not points; only its element ends are.
+        val curved = PointGen.Path(DoubleArray(11) { it * 10.0 }, DoubleArray(11) { 0.0 }, null, false, breaks = doubleArrayOf(0.0, 45.0, 100.0))
+        assertEquals(listOf(0.0, 45.0, 50.0, 100.0), PointGen.alongLine(curved, 50.0, listOf(0.0), includeVertices = true).map { it.distance })
         assertNull(pts.first().lineZ)
     }
 

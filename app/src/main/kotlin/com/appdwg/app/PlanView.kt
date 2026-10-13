@@ -690,6 +690,7 @@ private fun DrawScope.drawCogoPoints(
     }
     val r = 5.sp.toPx()
     val canvas = drawContext.canvas.nativeCanvas
+    val taken = ArrayList<android.graphics.RectF>()
     for (pt in points) {
         val sp = toScreen(Point2(pt.x, pt.y))
         if (sp.x < -100f || sp.y < -60f || sp.x > size.width + 20f || sp.y > size.height + 60f) continue
@@ -697,11 +698,18 @@ private fun DrawScope.drawCogoPoints(
         drawLine(color, sp - Offset(r * 1.6f, 0f), sp + Offset(r * 1.6f, 0f), strokeWidth = 1.5f)
         drawLine(color, sp - Offset(0f, r * 1.6f), sp + Offset(0f, r * 1.6f), strokeWidth = 1.5f)
         if (pt == selected) drawCircle(colors.marker, radius = r * 2.2f, center = sp, style = Stroke(width = 3f))
-        if (labels) {
+        if (labels && taken.size < 400) {
             val x = sp.x + r * 1.8f
-            canvas.drawText(pt.number, x, sp.y - r * 0.6f, paint)
             val line2 = listOfNotNull(pt.description.takeIf { it.isNotEmpty() }, pt.z.takeIf { !it.isNaN() }?.let { StationFormat.decimal(it, 3) })
-            if (line2.isNotEmpty()) canvas.drawText(line2.joinToString("  "), x, sp.y + paint.textSize, paint)
+                .joinToString("  ")
+            val box = android.graphics.RectF(x, sp.y - r * 0.6f - paint.textSize, x + maxOf(paint.measureText(pt.number), paint.measureText(line2)),
+                sp.y + paint.textSize * 1.3f)
+            // A label that would cover one already drawn is left out; zooming in brings it back.
+            if (taken.none { android.graphics.RectF.intersects(it, box) }) {
+                taken += box
+                canvas.drawText(pt.number, x, sp.y - r * 0.6f, paint)
+                if (line2.isNotEmpty()) canvas.drawText(line2, x, sp.y + paint.textSize, paint)
+            }
         }
     }
 }

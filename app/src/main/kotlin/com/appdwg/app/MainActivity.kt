@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -449,8 +450,9 @@ private fun ProjectScreen(
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
             Card {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelMedium)
+                // Scrolls sideways when the tools do not fit, instead of wrapping into a tall bar.
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelMedium, maxLines = 1)
                     if (has3d) {
                         TextButton(onClick = { show3d = !show3d }) { Text(if (show3d) "Planta" else "3D") }
                     }

@@ -46,12 +46,22 @@ object PointGen {
     }
 
     /** Vertices, 3D elevations (or null), closure and start distance of a picked line. */
-    class Path(val xs: DoubleArray, val ys: DoubleArray, val zs: DoubleArray?, val closed: Boolean, val start: Double = 0.0)
+    class Path(
+        val xs: DoubleArray,
+        val ys: DoubleArray,
+        val zs: DoubleArray?,
+        val closed: Boolean,
+        val start: Double = 0.0,
+        /** Distances (from 0) of the "vertices" worth a point; null means every vertex. Alignments list their element ends. */
+        val breaks: DoubleArray? = null,
+    )
 
     fun path(project: LandXmlProject, ref: LineRef): Path? = when (ref) {
         is LineRef.Drawing -> project.polylines.getOrNull(ref.index)?.let { Path(it.xs, it.ys, it.zs, it.closed) }
         is LineRef.Axis -> project.alignments.getOrNull(ref.index)?.let { a ->
-            Path(DoubleArray(a.vertices.size) { a.vertices[it].x }, DoubleArray(a.vertices.size) { a.vertices[it].y }, null, false, a.startStation)
+            // Element ends (tangent, curve and spiral points), not the dense vertices of the drawn curve.
+            val ends = a.elements.runningFold(0.0) { acc, e -> acc + e.length }.toDoubleArray()
+            Path(DoubleArray(a.vertices.size) { a.vertices[it].x }, DoubleArray(a.vertices.size) { a.vertices[it].y }, null, false, a.startStation, ends)
         }
     }
 
@@ -82,9 +92,10 @@ object PointGen {
         val ds = sortedSetOf<Double>()
         // Whole multiples of the spacing in station terms, then the range ends and vertices.
         var k = ceil((path.start + a) / spacing - 1e-9)
-        while (k * spacing - path.start <= b + 1e-9) { ds += k * spacing - path.start; k++ }
+        // Adding 0.0 turns −0.0 into 0.0, which a sorted set would keep as a different value.
+        while (k * spacing - path.start <= b + 1e-9) { ds += k * spacing - path.start + 0.0; k++ }
         ds += a; ds += b
-        if (includeVertices) for (c in cum) if (c in a..b) ds += c
+        if (includeVertices) for (c in path.breaks ?: cum) if (c in a..b) ds += c
         val out = ArrayList<LinePoint>()
         for (d in ds) {
             var i = 0
