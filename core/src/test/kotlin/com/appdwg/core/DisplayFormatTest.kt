@@ -51,3 +51,19 @@ class DisplayFormatTest {
         assertEquals("10,00 ft", StationFormat.length(3.048))
     }
 }
+
+class ReportUnitsTest {
+    @kotlin.test.AfterTest
+    fun reset() { Display.locale = java.util.Locale.forLanguageTag("pt-BR"); Display.units = UnitSystem.METRIC }
+
+    @Test
+    fun csvStaysMetricPdfFollowsTheChoice() {
+        Display.units = UnitSystem.IMPERIAL
+        val csv = ReportUnits(metric = true)
+        val pdf = ReportUnits()
+        assertEquals("3,048", csv.l(3.048)); assertEquals("10,000", pdf.l(3.048))
+        assertEquals("12 + 5,40", csv.station(245.4)); assertEquals("8+05,12", pdf.station(245.4))
+        assertEquals("1,3 yd³", pdf.vu(1.0)); assertEquals("1,0 m³", csv.vu(1.0))
+        assertEquals("ft2", pdf.areaAscii)
+    }
+}

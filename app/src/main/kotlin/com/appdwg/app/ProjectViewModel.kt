@@ -965,8 +965,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val r = road ?: return
         fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: ""
         val text = buildString {
-            append("Estaca;Estaca (m);Terreno eixo;Greide;Corte/aterro eixo;Bordo E afast.;Bordo E cota;Bordo D afast.;Bordo D cota;" +
-                "Offset E tipo;Offset E afast.;Offset E cota;Offset D tipo;Offset D afast.;Offset D cota;Área corte (m2);Área aterro (m2)\r\n")
+            // CSV stays in metres (for spreadsheets and other programs), as the header says.
+            append("Estaca;Estaca (m);Terreno eixo (m);Greide (m);Corte/aterro eixo (m);Bordo E afast. (m);Bordo E cota (m);Bordo D afast. (m);Bordo D cota (m);" +
+                "Offset E tipo;Offset E afast. (m);Offset E cota (m);Offset D tipo;Offset D afast. (m);Offset D cota (m);Área corte (m2);Área aterro (m2)\r\n")
             for (s in r.sections) {
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
                 val oe = s.top.first(); val od = s.top.last()
@@ -987,25 +988,27 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Service note as a PDF table, A4 landscape, a page per 30 stations. */
     fun exportServiceNotePdf(target: Uri, title: String) {
         val r = road ?: return
-        fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: ""
+        val u = com.appdwg.core.ReportUnits()
+        fun n(v: Double?) = v?.let { u.l(it) } ?: ""
         writeTo(target, "nota de serviço (PDF)") { out ->
             val doc = android.graphics.pdf.PdfDocument()
             val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
             val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true }
-            val head = listOf("Estaca", "Terreno", "Greide", "C/A eixo", "Bordo E (af./cota)", "Bordo D (af./cota)", "Offset E (tipo af./cota)", "Offset D (tipo af./cota)", "Área C", "Área A")
+            val head = listOf("Estaca", "Terreno (${u.len})", "Greide (${u.len})", "C/A eixo (${u.len})", "Bordo E (af./cota)", "Bordo D (af./cota)",
+                "Offset E (tipo af./cota)", "Offset D (tipo af./cota)", "Área C (${u.area})", "Área A (${u.area})")
             val colX = floatArrayOf(20f, 80f, 130f, 180f, 230f, 330f, 430f, 570f, 710f, 760f)
             val rows = r.sections.map { s ->
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
                 val oe = s.top.first(); val od = s.top.last(); val ca = s.terrainAxis?.let { s.grade - it }
-                listOf(StationFormat.estacaMetric(s.station), n(s.terrainAxis), n(s.grade), ca?.let { (if (it >= 0) "A " else "C ") + n(kotlin.math.abs(it)) } ?: "",
+                listOf(u.station(s.station), n(s.terrainAxis), n(s.grade), ca?.let { (if (it >= 0) "A " else "C ") + n(kotlin.math.abs(it)) } ?: "",
                     "${n(be?.offset?.let { -it })} / ${n(be?.z)}", "${n(bd?.offset)} / ${n(bd?.z)}",
-                    "${oe.code} ${n(-oe.offset)} / ${n(oe.z)}", "${od.code} ${n(od.offset)} / ${n(od.z)}", n(s.cutArea), n(s.fillArea))
+                    "${oe.code} ${n(-oe.offset)} / ${n(oe.z)}", "${od.code} ${n(od.offset)} / ${n(od.z)}", u.a(s.cutArea), u.a(s.fillArea))
             }
             rows.chunked(30).forEachIndexed { pi, chunk ->
                 val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(842, 595, pi + 1).create())
                 val c = page.canvas
                 c.drawText("Nota de serviço — $title — eixo ${r.alignment.name}", 20f, 30f, android.graphics.Paint(bold).apply { textSize = 11f })
-                c.drawText("Corte total ${StationFormat.decimal(r.totalCut, 1)} m³ · Aterro total ${StationFormat.decimal(r.totalFill, 1)} m³ · página ${pi + 1}", 20f, 45f, paint)
+                c.drawText("Corte total ${u.vu(r.totalCut)} · Aterro total ${u.vu(r.totalFill)} · página ${pi + 1}", 20f, 45f, paint)
                 var y = 65f
                 head.forEachIndexed { k, h -> c.drawText(h, colX[k], y, bold) }
                 y += 14f
@@ -1267,34 +1270,41 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     })
 
     /** Cells of one report row: point, description, E, N, surveyed, design, difference, station, offset, status. */
-    private fun asBuiltCells(r: com.appdwg.core.AsBuiltReport, row: com.appdwg.core.AsBuiltRow): List<String> {
-        fun n(v: Double?, d: Int = 3) = v?.let { StationFormat.decimal(it, d) } ?: ""
+    private fun asBuiltCells(r: com.appdwg.core.AsBuiltReport, row: com.appdwg.core.AsBuiltRow, u: com.appdwg.core.ReportUnits): List<String> {
+        fun n(v: Double?) = v?.takeIf { !it.isNaN() }?.let { u.l(it) } ?: ""
         val p = row.point
         return listOf(p.number, p.description, n(p.x), n(p.y), n(p.z), n(row.design), n(row.delta),
-            row.stationOffset?.let { StationFormat.estacaMetric(it.station) } ?: "", row.stationOffset?.let { StationFormat.offset(it.offset) } ?: "",
+            row.stationOffset?.let { u.station(it.station) } ?: "", row.stationOffset?.let { u.offset(it.offset) } ?: "",
             asBuiltStatus(r.status(row)))
     }
 
-    private fun asBuiltSummary(r: com.appdwg.core.AsBuiltReport): Pair<String, String> {
+    private fun asBuiltSummary(r: com.appdwg.core.AsBuiltReport, u: com.appdwg.core.ReportUnits): Pair<String, String> {
         val app = getApplication<Application>()
-        // Reports stay in metres whatever the shown units; the number format follows the language.
-        fun l(v: Double?) = v?.let { StationFormat.decimal(it, 3) + " m" } ?: "—"
+        fun l(v: Double?) = v?.let { u.lu(it) } ?: "—"
         return app.getString(R.string.asbuilt_summary, r.checked, StationFormat.decimal(r.passRate * 100, 1), r.above, r.below, r.outside) to
             app.getString(R.string.asbuilt_stats, l(r.mean), l(r.rms), l(r.stdDev), l(r.min), l(r.max))
+    }
+
+    /** Column titles of the as-built table, with the length unit where it applies. */
+    private fun asBuiltHead(u: com.appdwg.core.ReportUnits): List<String> {
+        val app = getApplication<Application>()
+        fun w(id: Int) = app.getString(id) + " (" + u.len + ")"
+        return listOf(app.getString(R.string.asbuilt_col_point), app.getString(R.string.asbuilt_col_desc), "E (${u.len})", "N (${u.len})",
+            w(R.string.asbuilt_col_surveyed), w(R.string.asbuilt_col_design), w(R.string.asbuilt_col_delta), app.getString(R.string.asbuilt_col_station),
+            app.getString(R.string.asbuilt_col_offset), app.getString(R.string.asbuilt_col_status))
     }
 
     fun exportAsBuiltCsv(target: Uri, title: String) {
         val r = asBuilt ?: return
         val app = getApplication<Application>()
-        val head = listOf(R.string.asbuilt_col_point, R.string.asbuilt_col_desc).map(app::getString) + listOf("E", "N") +
-            listOf(R.string.asbuilt_col_surveyed, R.string.asbuilt_col_design, R.string.asbuilt_col_delta, R.string.asbuilt_col_station,
-                R.string.asbuilt_col_offset, R.string.asbuilt_col_status).map(app::getString)
-        val (summary, stats) = asBuiltSummary(r)
+        val u = com.appdwg.core.ReportUnits(metric = true)
+        val head = asBuiltHead(u)
+        val (summary, stats) = asBuiltSummary(r, u)
         val text = buildString {
             append(app.getString(R.string.asbuilt_report_title)).append(" — ").append(title).append("\r\n")
             append(summary).append("\r\n").append(stats).append("\r\n\r\n")
             append(head.joinToString(";")).append("\r\n")
-            for (row in r.rows) append(asBuiltCells(r, row).joinToString(";") { it.replace(';', ',') }).append("\r\n")
+            for (row in r.rows) append(asBuiltCells(r, row, u).joinToString(";") { it.replace(';', ',') }).append("\r\n")
         }
         writeTo(target, app.getString(R.string.asbuilt_export_csv)) { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
     }
@@ -1303,22 +1313,21 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun exportAsBuiltPdf(target: Uri, title: String) {
         val r = asBuilt ?: return
         val app = getApplication<Application>()
-        val (summary, stats) = asBuiltSummary(r)
+        val u = com.appdwg.core.ReportUnits()
+        val (summary, stats) = asBuiltSummary(r, u)
         val date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
         writeTo(target, app.getString(R.string.asbuilt_export_pdf)) { out ->
             val doc = android.graphics.pdf.PdfDocument()
             val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
             val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true }
-            val head = listOf(R.string.asbuilt_col_point, R.string.asbuilt_col_desc).map(app::getString) + listOf("E", "N") +
-                listOf(R.string.asbuilt_col_surveyed, R.string.asbuilt_col_design, R.string.asbuilt_col_delta, R.string.asbuilt_col_station,
-                    R.string.asbuilt_col_offset, R.string.asbuilt_col_status).map(app::getString)
+            val head = asBuiltHead(u)
             val colX = floatArrayOf(28f, 70f, 140f, 205f, 275f, 325f, 375f, 425f, 480f, 525f)
             val chunks = r.rows.chunked(40).ifEmpty { listOf(emptyList()) }
             chunks.forEachIndexed { pi, chunk ->
                 val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, pi + 1).create())
                 val c = page.canvas
                 c.drawText(app.getString(R.string.asbuilt_report_title), 28f, 40f, android.graphics.Paint(bold).apply { textSize = 13f })
-                c.drawText(app.getString(R.string.asbuilt_report_head, title, r.surface, r.alignment ?: "—", StationFormat.decimal(r.tolerance, 3) + " m", date), 28f, 56f, paint)
+                c.drawText(app.getString(R.string.asbuilt_report_head, title, r.surface, r.alignment ?: "—", u.lu(r.tolerance), date), 28f, 56f, paint)
                 c.drawText(summary, 28f, 70f, bold)
                 c.drawText(stats, 28f, 82f, paint)
                 c.drawText(app.getString(R.string.asbuilt_sign), 28f, 94f, paint)
@@ -1327,7 +1336,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 c.drawLine(28f, y + 4f, 567f, y + 4f, paint)
                 y += 16f
                 for (row in chunk) {
-                    val cells = asBuiltCells(r, row)
+                    val cells = asBuiltCells(r, row, u)
                     cells.forEachIndexed { k, v ->
                         val pp = if (k == cells.lastIndex) android.graphics.Paint(bold).apply {
                             color = when (r.status(row)) {

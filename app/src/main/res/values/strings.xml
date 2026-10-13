@@ -158,8 +158,8 @@
     <string name="sh_alignment">Eixo</string>
     <string name="sh_from">Estaca inicial</string>
     <string name="sh_to">Estaca final</string>
-    <string name="sh_interval">Intervalo (m)</string>
-    <string name="sh_half">Meia largura (m)</string>
+    <string name="sh_interval">Intervalo (%1$s)</string>
+    <string name="sh_half">Meia largura (%1$s)</string>
     <string name="sh_paper">Folha</string>
     <string name="sh_scale">Escala horizontal</string>
     <string name="sh_exag">Exagero vertical</string>

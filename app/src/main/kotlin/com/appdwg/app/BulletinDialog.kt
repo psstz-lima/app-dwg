@@ -39,16 +39,22 @@ import com.appdwg.core.StationFormat
 fun bulletinFromRoad(ctx: android.content.Context, vm: ProjectViewModel, swell: Double): List<BulletinItem> {
     val r = vm.road ?: return emptyList()
     val m = MassHaul.of(r.volumes, swell)
+    // Quantities in the chosen units (yd³ in imperial); the haul bands keep the DNIT names in metres.
+    val unit = StationFormat.volumeUnit
+    fun q(m3: Double) = volumeIn(unit, m3)
     return buildList {
-        m.bands.forEach { b -> add(BulletinItem(ctx.getString(R.string.bm_item_cut, b.label), contracted = b.volume)) }
-        if (m.lateral > 0) add(BulletinItem(ctx.getString(R.string.bm_item_lateral), contracted = m.lateral))
-        if (r.totalFill > 0) add(BulletinItem(ctx.getString(R.string.bm_item_fill), contracted = r.totalFill))
-        if (m.spoil > 0) add(BulletinItem(ctx.getString(R.string.bm_item_spoil), contracted = m.spoil))
-        if (m.borrow > 0) add(BulletinItem(ctx.getString(R.string.bm_item_borrow), contracted = m.borrow))
+        m.bands.forEach { b -> add(BulletinItem(ctx.getString(R.string.bm_item_cut, b.label), unit, contracted = q(b.volume))) }
+        if (m.lateral > 0) add(BulletinItem(ctx.getString(R.string.bm_item_lateral), unit, contracted = q(m.lateral)))
+        if (r.totalFill > 0) add(BulletinItem(ctx.getString(R.string.bm_item_fill), unit, contracted = q(r.totalFill)))
+        if (m.spoil > 0) add(BulletinItem(ctx.getString(R.string.bm_item_spoil), unit, contracted = q(m.spoil)))
+        if (m.borrow > 0) add(BulletinItem(ctx.getString(R.string.bm_item_borrow), unit, contracted = q(m.borrow)))
     }
 }
 
 /** "1.234,56" or "1234.56"; with a comma, dots are thousands separators. */
+/** [m3] in an item's volume unit: yd³ when it says so, m³ otherwise. */
+private fun volumeIn(unit: String, m3: Double) = if (unit.trim().equals("yd³", true) || unit.trim().equals("yd3", true)) m3 / StationFormat.CUBIC_YARD else m3
+
 private fun num(s: String): Double? {
     val t = s.trim()
     return (if (',' in t) t.replace(".", "").replace(',', '.') else t).toDoubleOrNull()?.takeIf { it.isFinite() }
@@ -102,18 +108,18 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                             note = null
                             // Cut of the period spread over the cut items by their contracted share; fill to the fill item.
                             val fillName = ctx.getString(R.string.bm_item_fill)
-                            val cutItems = items.filter { it.description != fillName && it.unit == "m³" }
+                            val cutItems = items.filter { it.description != fillName && it.unit.trim() in setOf("m³", "m3", "yd³", "yd3") }
                             val cutTotal = cutItems.sumOf { it.contracted }
                             v.bulletinItems = items.map { it ->
                                 when {
-                                    it.description == fillName -> it.copy(period = p.fill)
-                                    it in cutItems && cutTotal > 0 -> it.copy(period = p.cut * it.contracted / cutTotal)
+                                    it.description == fillName -> it.copy(period = volumeIn(it.unit, p.fill))
+                                    it in cutItems && cutTotal > 0 -> it.copy(period = volumeIn(it.unit, p.cut) * it.contracted / cutTotal)
                                     else -> it
                                 }
                             }
                         }
                     }) { Text(stringResource(R.string.bm_from_stages)) }
-                    OutlinedButton(onClick = { v.bulletinItems = items + BulletinItem("") }) { Text(stringResource(R.string.bm_add)) }
+                    OutlinedButton(onClick = { v.bulletinItems = items + BulletinItem("", StationFormat.volumeUnit) }) { Text(stringResource(R.string.bm_add)) }
                     OutlinedButton(enabled = items.any { it.period != 0.0 }, onClick = {
                         v.bulletinItems = items.map { it.copy(previous = it.accumulated, period = 0.0) }
                         v.bulletinNumber = ((v.bulletinNumber.trim().toIntOrNull() ?: 0) + 1).toString()

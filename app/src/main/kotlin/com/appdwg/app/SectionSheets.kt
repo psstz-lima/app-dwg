@@ -55,12 +55,19 @@ data class SheetParams(
  * axis heights and (with a road) cut and fill areas; a title block (carimbo) on every sheet.
  */
 object SectionSheets {
+    /** Units of the sheets being drawn: the shown ones; [k] is metres per unit. */
+    private object U {
+        var u = com.appdwg.core.ReportUnits()
+        val k get() = if (u.metric) 1.0 else StationFormat.FOOT
+    }
+
     private const val PT_PER_MM = 72f / 25.4f
     private val COLORS = intArrayOf(0xFF6D4C41.toInt(), 0xFFD32F2F.toInt(), 0xFF1565C0.toInt(), 0xFF2E7D32.toInt(), 0xFF6A1B9A.toInt())
 
     class Built(val pages: Int, val sections: Int)
 
     fun render(doc: PdfDocument, p: SheetParams, axis: Alignment, surfaces: List<Surface>, road: List<RoadSection>?, title: String, date: String): Built {
+        U.u = com.appdwg.core.ReportUnits()
         val (pw, ph) = if (p.paper == "A4") 842f to 595f else 1191f to 842f
         val margin = 28f
         val blockH = 118f
@@ -87,8 +94,11 @@ object SectionSheets {
                 rs?.let { r -> (r.top + r.datum).filter { abs(it.offset) <= p.halfWidth }.map { it.z } }.orEmpty()
             if (zs.isEmpty()) return@mapNotNull null
             // Whole metres around the section, at least 4 m tall.
-            var lo = floor(zs.min()) - 1; var hi = ceil(zs.max()) + 1
+            // Whole units (m or ft) around the section, at least 4 units tall; kept in metres.
+            val k = U.k
+            var lo = floor(zs.min() / k) - 1; var hi = ceil(zs.max() / k) + 1
             if (hi - lo < 4) { val c = (hi + lo) / 2; lo = floor(c - 2); hi = lo + 4 }
+            lo *= k; hi *= k
             val h = headH + ((hi - lo) * vScale).toFloat() + footH
             Box(sec, rs, lo, hi, min(h, areaBottom - areaTop))
         }
@@ -132,18 +142,23 @@ object SectionSheets {
         val bottom = top + ((zMax - zMin) * vScale).toFloat()
         fun x(o: Double) = left + ((o + hw) * hScale).toFloat()
         fun y(z: Double) = bottom - ((z - zMin) * vScale).toFloat()
-        // Grid: every 5 m across (labels every 10 m), every metre up (labels every 1, 2 or 5 m).
-        var o = -hw
-        while (o <= hw + 1e-9) {
-            c.drawLine(x(o), top, x(o), bottom, thin)
-            if (abs(o % 10.0) < 1e-6) c.drawText(if (o == 0.0) "0" else StationFormat.decimal(abs(o), 0), x(o) - 4f, bottom + 9f, text)
-            o += 5.0
+        // Grid in the report unit: every 5 m (10 ft) across, labels every 10 m (20 ft); every 1, 2 or 5 units up.
+        val k = U.k
+        val across = if (U.u.metric) 5.0 else 10.0
+        val hwU = hw / k
+        var o = ceil(-hwU / across) * across
+        while (o <= hwU + 1e-9) {
+            c.drawLine(x(o * k), top, x(o * k), bottom, thin)
+            if (abs(o % (2 * across)) < 1e-6) c.drawText(if (o == 0.0) "0" else StationFormat.decimal(abs(o), 0), x(o * k) - 4f, bottom + 9f, text)
+            o += across
         }
-        val zStep = when { zMax - zMin > 40 -> 5.0; zMax - zMin > 15 -> 2.0; else -> 1.0 }
-        var z = ceil(zMin / zStep) * zStep
-        while (z <= zMax + 1e-9) {
-            c.drawLine(left, y(z), x(hw), y(z), thin)
-            c.drawText(StationFormat.decimal(z, 0), x0, y(z) + 2.5f, text)
+        // Labels at least 9 pt apart, whatever the unit and scale.
+        val ptPerUnit = vScale * k
+        val zStep = listOf(1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0).firstOrNull { it * ptPerUnit >= 9 } ?: 100.0
+        var z = ceil(zMin / k / zStep) * zStep
+        while (z <= zMax / k + 1e-9) {
+            c.drawLine(left, y(z * k), x(hw), y(z * k), thin)
+            c.drawText(StationFormat.decimal(z, 0), x0, y(z * k) + 2.5f, text)
             z += zStep
         }
         c.drawRect(left, top, x(hw), bottom, frame)
@@ -165,12 +180,12 @@ object SectionSheets {
         }
         s.design?.let { d -> c.drawCircle(x(0.0), y(d), 1.8f, Paint().apply { color = 0xFFD32F2F.toInt(); isAntiAlias = true }) }
         // Heading: station, axis heights, areas.
-        c.drawText("Estaca " + StationFormat.estacaMetric(s.station), left, y0 + 9f, bold)
+        c.drawText("Estaca " + U.u.station(s.station), left, y0 + 9f, bold)
         val parts = buildList {
-            s.terrainOnAxis?.let { add("Terreno ${StationFormat.decimal(it, 3)}") }
-            (road?.grade ?: s.design)?.let { add("Greide ${StationFormat.decimal(it, 3)}") }
-            road?.terrainAxis?.let { t -> val d = road.grade - t; add((if (d >= 0) "Aterro " else "Corte ") + StationFormat.decimal(abs(d), 3)) }
-            road?.let { add("Área C ${StationFormat.decimal(it.cutArea, 2)} m² · A ${StationFormat.decimal(it.fillArea, 2)} m²") }
+            s.terrainOnAxis?.let { add("Terreno ${U.u.l(it)}") }
+            (road?.grade ?: s.design)?.let { add("Greide ${U.u.l(it)}") }
+            road?.terrainAxis?.let { t -> val d = road.grade - t; add((if (d >= 0) "Aterro " else "Corte ") + U.u.l(abs(d))) }
+            road?.let { add("Área C ${U.u.a(it.cutArea)} ${U.u.area} · A ${U.u.a(it.fillArea)} ${U.u.area}") }
         }
         c.drawText(parts.joinToString(" · "), left, y0 + 19f, text)
     }
@@ -197,7 +212,7 @@ object SectionSheets {
         // Title on two lines so it stays inside its cell.
         c.drawText("Desenho", x0 + 4f, rows[1] + 8f, text)
         c.drawText("SEÇÕES TRANSVERSAIS", x0 + 4f, rows[1] + 16f, Paint(bold).apply { textSize = 7f })
-        c.drawText(fit("Eixo $axis · estacas ${StationFormat.estacaMetric(s0)} a ${StationFormat.estacaMetric(s1)}", text, w * 0.6f - 8f), x0 + 4f, rows[1] + 22.5f, text)
+        c.drawText(fit("Eixo $axis · estacas ${U.u.station(s0)} a ${U.u.station(s1)}", text, w * 0.6f - 8f), x0 + 4f, rows[1] + 22.5f, text)
         cell("Folha", "$page / $pages", x0 + w * 0.6f, rows[1])
         cell("Escalas", "H 1:${p.scale} · V 1:${p.scale / max(1, p.exaggeration)}", x0, rows[2])
         cell("Data", date, x0 + w * 0.6f, rows[2])
@@ -212,6 +227,7 @@ object SectionSheets {
             c.drawLine(margin, ly - 2.5f, margin + 24f, ly - 2.5f, paint)
             c.drawText(n, margin + 30f, ly, text); ly += 10f
         }
-        c.drawText("Cotas e distâncias em metros. Gerado pelo Gromatic.", margin, ph - margin - 2f, text)
+        c.drawText(if (U.u.metric) "Cotas e distâncias em metros. Gerado pelo Gromatic." else "Cotas e distâncias em pés (ft). Gerado pelo Gromatic.",
+            margin, ph - margin - 2f, text)
     }
 }

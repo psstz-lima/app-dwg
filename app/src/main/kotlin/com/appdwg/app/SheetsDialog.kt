@@ -33,7 +33,11 @@ import com.appdwg.core.StationFormat
 @Composable
 fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String, onMake: (SheetParams) -> Unit, onDismiss: () -> Unit) {
     val v = vm.view ?: return
-    var p by remember { mutableStateOf(vm.sheetDefaults(v.sheetParams).let { if (it.work.isBlank()) it.copy(work = fileName) else it }) }
+    var p by remember { mutableStateOf(vm.sheetDefaults(v.sheetParams).let { if (it.work.isBlank()) it.copy(work = fileName) else it }.let {
+        // In imperial a section every 100 ft and 100 ft each side by default, instead of 20 m and 30 m;
+        // with a road the 20 m default stays, so sheets fall on its sections and show their areas.
+        if (com.appdwg.core.Display.imperial && vm.road == null && it.interval == 20.0 && it.halfWidth == 30.0) it.copy(interval = 100 * StationFormat.FOOT, halfWidth = 100 * StationFormat.FOOT) else it
+    }) }
     val names = project.alignments.map { it.name }
     val axisName = p.alignment?.takeIf { it in names } ?: names.firstOrNull()
     val axis = project.alignments.firstOrNull { it.name == axisName }
@@ -42,7 +46,7 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
     fun num(s: String) = StationFormat.number(s)?.takeIf { it > 0 }
     @Composable
     fun field(value: String, label: Int, w: Int = 170, onValue: (String) -> Unit) =
-        OutlinedTextField(value, onValue, label = { Text(stringResource(label)) }, singleLine = true, modifier = Modifier.width(w.dp),
+        OutlinedTextField(value, onValue, label = { Text(stringResource(label, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(w.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
 
     AlertDialog(
@@ -67,10 +71,11 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     field(fromText, R.string.sh_from) { fromText = it }
                     field(toText, R.string.sh_to) { toText = it }
-                    var iv by remember { mutableStateOf(StationFormat.decimal(p.interval, 0)) }
-                    field(iv, R.string.sh_interval, 130) { iv = it; num(it)?.let { x -> p = p.copy(interval = x) } }
-                    var hw by remember { mutableStateOf(StationFormat.decimal(p.halfWidth, 0)) }
-                    field(hw, R.string.sh_half, 150) { hw = it; num(it)?.let { x -> p = p.copy(halfWidth = x) } }
+                    // Typed in the shown unit (m or ft), kept in metres.
+                    var iv by remember { mutableStateOf(StationFormat.lengthValue(p.interval, 0)) }
+                    field(iv, R.string.sh_interval, 150) { iv = it; num(it)?.let { x -> p = p.copy(interval = StationFormat.fromLength(x)) } }
+                    var hw by remember { mutableStateOf(StationFormat.lengthValue(p.halfWidth, 0)) }
+                    field(hw, R.string.sh_half, 170) { hw = it; num(it)?.let { x -> p = p.copy(halfWidth = StationFormat.fromLength(x)) } }
                 }
                 Text(stringResource(R.string.sh_paper), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

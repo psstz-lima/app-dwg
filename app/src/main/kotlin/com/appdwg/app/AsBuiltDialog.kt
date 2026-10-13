@@ -59,7 +59,8 @@ class AsBuiltState {
     var source by mutableStateOf(0) // 0 = _POINTS, 1 = file, 2 = both
     var surface by mutableStateOf<String?>(null)
     var alignment by mutableStateOf<String?>(null)
-    var toleranceCm by mutableStateOf("5")
+    // 5 cm, or 2 in in imperial.
+    var toleranceCm by mutableStateOf(if (com.appdwg.core.Display.imperial) "2" else "5")
 }
 
 @OptIn(ExperimentalLayoutApi::class)

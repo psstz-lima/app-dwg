@@ -167,3 +167,30 @@ object StationFormat {
         return length(abs(value)) + " " + if (value >= 0) right else left
     }
 }
+
+/**
+ * Numbers for a report or a file, in metres ([metric]) or in the shown units. CSV files stay
+ * metric (other programs read them); PDFs follow the user's choice. The number format always
+ * follows the display locale.
+ */
+class ReportUnits(val metric: Boolean = !Display.imperial) {
+    val len get() = if (metric) "m" else StationFormat.lengthUnit
+    val area get() = if (metric) "m²" else StationFormat.areaUnit
+    val vol get() = if (metric) "m³" else StationFormat.volumeUnit
+    /** Same as [area] and [vol] in plain ASCII, for CSV headers. */
+    val areaAscii get() = if (metric) "m2" else "ft2"
+    val volAscii get() = if (metric) "m3" else "yd3"
+
+    fun l(m: Double, d: Int = 3) = StationFormat.decimal(if (metric) m else m / StationFormat.FOOT, d)
+    fun a(m2: Double, d: Int = 2) = StationFormat.decimal(if (metric) m2 else m2 / StationFormat.SQ_FOOT, d)
+    fun v(m3: Double, d: Int = 1) = StationFormat.decimal(if (metric) m3 else m3 / StationFormat.CUBIC_YARD, d)
+    fun lu(m: Double, d: Int = 3) = l(m, d) + " " + len
+    fun au(m2: Double, d: Int = 2) = StationFormat.grouped(if (metric) m2 else m2 / StationFormat.SQ_FOOT, d) + " " + area
+    fun vu(m3: Double, d: Int = 1) = StationFormat.grouped(if (metric) m3 else m3 / StationFormat.CUBIC_YARD, d) + " " + vol
+    fun station(m: Double) = if (metric) StationFormat.estacaMetric(m) else StationFormat.estaca(m)
+    fun offset(m: Double): String {
+        val right = if (Display.portuguese) "D" else "R"
+        val left = if (Display.portuguese) "E" else "L"
+        return lu(kotlin.math.abs(m), 2) + " " + if (m >= 0) right else left
+    }
+}
