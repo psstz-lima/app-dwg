@@ -36,19 +36,27 @@ Abra no tablet ou no celular os arquivos exportados do Civil 3D e de outros soft
 • Comparação entre superfícies (B − A) com mapa de corte e aterro e volumes
 • Comparação cruzada entre várias superfícies e por etapas
 • Superfície gerada a partir de pontos
+• Volume de pilha e volume até uma cota
+• Mapas de declividade (classes da Embrapa) e de escoamento com talvegues
+• Edição de superfície: limite, furo, excluir e adicionar pontos, elevar e nivelar áreas, trocar arestas
 
 **Projeto**
-• Plataforma com taludes e bermas de corte e aterro, e inclinação da berma
+• Plataforma com taludes e bermas de corte e aterro, altura de cada berma e inclinação interna da berma
 • Corredor de estrada: eixo por PIs com espirais, greide, seção tipo, superelevação e taludes
 • Seções transversais e perfil longitudinal editável
+• Distribuição de massas (Brückner e DMT por faixa) e boletim de medição em PDF
+• Folhas de seções transversais em PDF, em escala, com carimbo
 • Gerar pontos sobre linhas ou em malha, e editar linhas
 
 **GPS e campo**
 • GPS do aparelho ou antena GNSS por Bluetooth (NMEA), com correções NTRIP (RTK)
+• Calibração local por pontos de controle e altura ortométrica pelo geoide (MAPGEO)
+• Conferência de as-built com relatório em PDF
 • Anotações com foto na planta, exportadas em KMZ/CSV
 
 **Exportação**
-• DXF, LandXML, PDENZ, KML/KMZ, CSV, PNG e PDF
+• DXF, LandXML, PDENZ, KML/KMZ, GeoJSON, Shapefile, CSV, PNG e PDF
+• Importa também GeoJSON e Shapefile
 • Projeto salvo em arquivo, para continuar depois
 
 Seus dados ficam no aparelho: sem conta, sem anúncios.
@@ -85,19 +93,27 @@ Open files exported from Civil 3D and other software on a tablet or phone: surfa
 • Surface comparison (B − A) with a cut/fill map and volumes
 • Cross comparison across many surfaces, and staged comparison
 • Surface built from points
+• Stockpile volume and volume to an elevation
+• Slope maps (relief classes) and flow maps with drainage lines
+• Surface editing: boundary, hole, delete and add points, raise and flatten areas, swap edges
 
 **Design**
-• Pads with cut and fill slopes, benches and bench cross slope
+• Pads with cut and fill slopes, benches with a height for each one and the bench's inner slope
 • Road corridor: PI-based alignment with spirals, vertical profile, typical section, superelevation and daylight slopes
 • Cross sections and an editable long profile
+• Mass haul (Brückner and haul distance by band) and a measurement bulletin in PDF
+• Cross-section sheets in PDF, to scale, with a title block
 • Generate points along lines or on a grid, and edit lines
 
 **GPS and fieldwork**
 • Device GPS or Bluetooth GNSS receiver (NMEA), with NTRIP corrections (RTK)
+• Site calibration from control points and orthometric height from a geoid grid
+• As-built check with a PDF report
 • Photo notes on the plan, exported as KMZ/CSV
 
 **Export**
-• DXF, LandXML, PNEZD, KML/KMZ, CSV, PNG and PDF
+• DXF, LandXML, PNEZD, KML/KMZ, GeoJSON, Shapefile, CSV, PNG and PDF
+• Imports GeoJSON and Shapefile too
 • Projects saved to a file, to pick up later
 
 Your data stays on your device: no account, no ads.
@@ -110,5 +126,5 @@ Your data stays on your device: no account, no ads.
 - Classificação etária: Livre (sem conteúdo gerado por usuário compartilhado, sem anúncios).
 - Seção "Segurança dos dados": nenhum dado coletado nem compartilhado pelo desenvolvedor. A localização é processada só no aparelho e não sai dele. Ver `docs/politica-de-privacidade.md`.
 - A política de privacidade precisa estar num endereço público (por exemplo GitHub Pages) antes do envio.
-- Capturas de tela: serão feitas depois da troca de tema da interface.
+- Capturas de tela: em `docs/store/screenshots` (pt-BR e en-US), feitas com o projeto de exemplo sintético `docs/store/exemplo/rodovia-exemplo.xml`. A interface ainda está só em português.
 - "Civil 3D" é marca da Autodesk. O texto só cita o formato dos arquivos, de forma descritiva. Se a revisão da Play reclamar, trocar por "dados de projeto e topografia (LandXML/DXF)".
