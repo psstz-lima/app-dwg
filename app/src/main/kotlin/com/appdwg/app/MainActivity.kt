@@ -257,6 +257,12 @@ private fun ProjectScreen(
     var showGoTo by remember(fileName) { mutableStateOf(false) }
     // GNSS: dialog, following the position, the project's UTM zone and the position in project coordinates.
     var showGps by remember(fileName) { mutableStateOf(false) }
+    // Field notes: placing mode, the note being edited (with whether it is new) and a tapped one.
+    var addingNote by remember(fileName) { mutableStateOf(false) }
+    var editingNote by remember(fileName) { mutableStateOf<Pair<com.appdwg.core.FieldNote, Boolean>?>(null) }
+    var openNote by remember(fileName) { mutableStateOf<com.appdwg.core.FieldNote?>(null) }
+    fun newNote(p: Point2, z: Double?) = com.appdwg.core.FieldNote(vm.nextNoteId(), p.x, p.y, z ?: Double.NaN, "", null,
+        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT).format(java.util.Date()))
     var gpsFollow by remember(fileName) { mutableStateOf(true) }
     var gpsZone by remember(fileName) { mutableStateOf((com.appdwg.core.Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
     val gnssFix = vm.gnss.fix
@@ -331,6 +337,8 @@ private fun ProjectScreen(
                 ExportKind.POINTS -> vm.exportPoints(uri)
                 ExportKind.KML -> vm.exportKml(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true), line)
                 ExportKind.VOLUMES -> vm.exportVolumes(uri)
+                ExportKind.NOTES_KMZ -> vm.exportNotesKmz(uri, utmZone.trimEnd('S', 's', 'N', 'n').toInt(), !utmZone.endsWith("N", true))
+                ExportKind.NOTES_CSV -> vm.exportNotesCsv(uri)
                 ExportKind.PNG, ExportKind.PDF -> screenShot?.let { vm.exportImage(uri, it, kind == ExportKind.PDF) }
             }
             showExport = true
@@ -455,6 +463,7 @@ private fun ProjectScreen(
             onTap = {
                 // Tapping the same snapped point twice would add a zero-length leg.
                 when {
+                    addingNote -> { addingNote = false; editingNote = newNote(it, PointQuery.at(project, it).terrainElevation) to true }
                     drawingRoad -> v.roadParams = v.roadParams.copy(pis = (v.roadParams.pis + it).let { l -> if (l.size > 1 && l[l.size - 2] == it) l.dropLast(1) else l })
                     modelPickFor != null -> {
                         when (alignPick) { 1 -> alignA = it; 2 -> alignB = it; else -> modelPoint = it }
@@ -510,6 +519,8 @@ private fun ProjectScreen(
             gps = gpsPoint,
             gpsAccuracy = gnssFix?.sigmaH ?: gnssFix?.hdop?.let { it * 3 },
             gpsColor = fixColor(gnssFix?.quality),
+            notes = vm.notes,
+            onNoteTap = if (measuring || addingPoints || editing) null else { n -> openNote = n; tapped = null; selectedPoint = null },
             onLineSelected = { ref ->
                 roadTargetPick?.let { (i, side) ->
                     com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
@@ -610,6 +621,7 @@ private fun ProjectScreen(
                         }) { Text(if (editing) "Fechar edição" else "Linhas") }
                     }
                     TextButton(onClick = { showModels = true }) { Text("Modelos 3D") }
+                    TextButton(onClick = { addingNote = true; measuring = false; show3d = false }) { Text("Anotar") }
                     TextButton(onClick = { showGps = true }) { Text(if (vm.gnss.connected) "GPS ●" else "GPS") }
                     TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
@@ -645,6 +657,17 @@ private fun ProjectScreen(
         } else if (editing) {
             EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
+        } else if (addingNote) {
+            Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toque na planta onde fica a anotação.", style = MaterialTheme.typography.bodyMedium)
+                    if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gnssFix?.altitude) to true }) { Text("Na posição do GPS") }
+                    TextButton(onClick = { addingNote = false }) { Text("Cancelar") }
+                }
+            }
+        } else if (openNote != null) {
+            NoteCard(vm, openNote!!, onEdit = { editingNote = openNote!! to false; openNote = null }, onClose = { openNote = null },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 520.dp))
         } else if (roadTargetPick != null) {
             Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -890,6 +913,8 @@ private fun ProjectScreen(
             },
         )
     }
+
+    editingNote?.let { (n, isNew) -> key(n.id) { NoteDialog(vm, n, isNew, onDismiss = { editingNote = null }) } }
 
     if (showGps) {
         GpsDialog(vm.gnss, gpsZone, { gpsZone = it.trim().uppercase() }, gpsFollow, { gpsFollow = it },

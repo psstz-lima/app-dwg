@@ -43,6 +43,8 @@ import com.appdwg.core.PlatformDesign
 import com.appdwg.core.PlatformResult
 import com.appdwg.core.Point3
 import com.appdwg.core.Polyline
+import com.appdwg.core.FieldNote
+import com.appdwg.core.NotesExport
 import com.appdwg.core.Model3D
 import com.appdwg.core.ModelPlacement
 import com.appdwg.core.ModelReader
@@ -788,6 +790,46 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
 
+    // ---- Field notes with photos ----
+
+    var notes by mutableStateOf<List<FieldNote>>(emptyList())
+        private set
+
+    /** Folder of the notes' photos, inside the app's storage. */
+    val notesDir: java.io.File get() = java.io.File(getApplication<Application>().filesDir, "notes").also { it.mkdirs() }
+
+    /** New, empty photo file for the camera to fill. */
+    fun newPhotoFile(): java.io.File = java.io.File(notesDir, "foto_" + System.currentTimeMillis() + ".jpg")
+
+    /** Copies a picture chosen from the gallery into the notes folder; returns its file name. */
+    fun importPhoto(uri: Uri): String? = runCatching {
+        val f = newPhotoFile()
+        getApplication<Application>().contentResolver.openInputStream(uri)?.use { i -> f.outputStream().use { i.copyTo(it) } }
+        f.name
+    }.getOrNull()
+
+    fun saveNote(note: FieldNote) {
+        notes = notes.filter { it.id != note.id } + note
+    }
+
+    fun deleteNote(note: FieldNote) {
+        notes = notes - note
+    }
+
+    fun nextNoteId(): String = ((notes.mapNotNull { it.id.toIntOrNull() }.maxOrNull() ?: 0) + 1).toString()
+
+    fun exportNotesCsv(target: Uri) {
+        val list = notes
+        writeTo(target, "CSV de anotações") { it.write(("\uFEFF" + NotesExport.csv(list)).toByteArray(Charsets.UTF_8)) }
+    }
+
+    fun exportNotesKmz(target: Uri, zone: Int, south: Boolean) {
+        val list = notes
+        val dir = notesDir
+        val name = (state as? ProjectState.Loaded)?.fileName ?: "App DWG"
+        writeTo(target, "KMZ de anotações") { out -> NotesExport.kmz(list, zone, south, name, out) { f -> java.io.File(dir, f).takeIf { it.exists() }?.readBytes() } }
+    }
+
     /** Receiver connection; lives with the view model so rotating the screen keeps it. */
     val gnss = GnssManager(app)
 
@@ -1253,6 +1295,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             userLines = userLines,
             hiddenLines = hiddenOriginals.toList(),
             models = models.map { m -> m.uris.map { it.toString() } to m.placement },
+            notes = notes,
         )
     }
 
@@ -1347,6 +1390,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 problems += main.second
             }
         }
+        notes = doc.notes
         userLines = doc.userLines
         hiddenOriginals = doc.hiddenLines.toSet()
         if (doc.pointsSurface) surfaceFromPointsNow()
@@ -1420,6 +1464,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     drapeUris = emptyList()
                     models = emptyList()
                     modelMessage = null
+                    notes = emptyList()
                     userLines = emptyList()
                     hiddenOriginals = emptySet()
                     keptOriginals = project.polylines.indices.toList()

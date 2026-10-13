@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import com.appdwg.core.Alignment
 import com.appdwg.core.Bounds
 import com.appdwg.core.CogoPoint
+import com.appdwg.core.FieldNote
+import com.appdwg.core.NOTES_LAYER
 import com.appdwg.core.LineRef
 import com.appdwg.core.PointGen
 import com.appdwg.core.POINTS_LAYER
@@ -146,6 +148,9 @@ fun PlanView(
     gps: Point2? = null,
     gpsAccuracy: Double? = null,
     gpsColor: Color = Color.Gray,
+    /** Field notes, drawn as pins; a tap on one calls [onNoteTap]. */
+    notes: List<FieldNote> = emptyList(),
+    onNoteTap: ((FieldNote) -> Unit)? = null,
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -254,7 +259,7 @@ fun PlanView(
                     frame++
                 }
             }
-            .pointerInput(project, snap, hiddenLayers, points, onPointTap != null, selectLine) {
+            .pointerInput(project, snap, hiddenLayers, points, onPointTap != null, selectLine, notes, onNoteTap != null) {
                 detectTapGestures(
                     // Double tap zooms in 2x around the finger, handy with one hand.
                     onDoubleTap = { offset ->
@@ -271,6 +276,11 @@ fun PlanView(
                         val world = Point2(local.x + origin.x, local.y + origin.y)
                         val radius = SNAP_DP * density / cam.scale
                         val showPoints = POINTS_LAYER !in hiddenLayers
+                        if (!snap && onNoteTap != null && NOTES_LAYER !in hiddenLayers) {
+                            notes.minByOrNull { hypot(it.x - world.x, it.y - world.y) }?.takeIf { hypot(it.x - world.x, it.y - world.y) <= radius }?.let {
+                                onNoteTap(it); return@detectTapGestures
+                            }
+                        }
                         val hit = if (!snap && onPointTap != null && showPoints) nearestPoint(points, world, radius) else null
                         if (selectLine) {
                             PointGen.nearestLine(project, world, radius * 1.5, hiddenLayers)?.let(onLineSelected)
@@ -380,6 +390,15 @@ fun PlanView(
             drawCircle(SECTION_LINE_COLOR, 5.sp.toPx(), (a + b) / 2f)
         }
 
+        if (NOTES_LAYER !in hiddenLayers) for (n in notes) {
+            val c = toScreen(Point2(n.x, n.y), cam)
+            val r = 7.sp.toPx()
+            // Pin: a dot on a short stem, purple, with a camera mark when it has a photo.
+            drawLine(Color(0xFF6A1B9A), c, c - Offset(0f, r * 2.2f), strokeWidth = 3f)
+            drawCircle(Color.White, r + 2f, c - Offset(0f, r * 2.6f))
+            drawCircle(Color(0xFF8E24AA), r, c - Offset(0f, r * 2.6f))
+            if (n.photo != null) drawCircle(Color.White, r * 0.35f, c - Offset(0f, r * 2.6f))
+        }
         if (gps != null) {
             val g = toScreen(gps, cam)
             gpsAccuracy?.let { acc -> drawCircle(gpsColor.copy(alpha = 0.18f), radius = maxOf((acc * cam.scale).toFloat(), 4f), center = g) }

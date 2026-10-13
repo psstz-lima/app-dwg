@@ -108,6 +108,9 @@ exporta com os dados reais de projeto.
   na zona UTM do projeto, estaca/afastamento no eixo mais próximo e cota da antena menos o terreno;
   opção de seguir a posição. Cliente NTRIP (caster, porta, mountpoint, usuário e senha) repassa as
   correções RTCM à antena e envia a posição (GGA) ao caster a cada 10 s.
+- Anotações (botão "Anotar"): toque na planta ou use a posição do GPS; texto, cota e foto da câmera
+  ou da galeria (guardada no app). Aparecem como alfinetes; tocar mostra texto, coordenadas e foto.
+  Entram no projeto salvo e exportam em KMZ (Google Earth, com as fotos) e CSV.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

@@ -29,6 +29,8 @@ enum class ExportKind(val label: String, val suffix: String) {
     POINTS("Pontos PDENZ (TXT)", "-pontos.txt"),
     KML("Pontos e linhas KML (Google Earth)", ".kml"),
     VOLUMES("Volumes CSV", "-volumes.csv"),
+    NOTES_KMZ("Anotações com fotos KMZ (Google Earth)", "-anotacoes.kmz"),
+    NOTES_CSV("Anotações CSV", "-anotacoes.csv"),
     PNG("Imagem da tela PNG", ".png"),
     PDF("Imagem da tela PDF", ".pdf"),
 }
@@ -81,6 +83,11 @@ fun ExportDialog(
                     )
                 }
                 OutlinedButton(onClick = { onExport(ExportKind.VOLUMES) }, enabled = vm.hasVolumes) { Text(ExportKind.VOLUMES.label) }
+                Row {
+                    OutlinedButton(onClick = { onExport(ExportKind.NOTES_KMZ) }, enabled = vm.notes.isNotEmpty()) { Text(ExportKind.NOTES_KMZ.label) }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { onExport(ExportKind.NOTES_CSV) }, enabled = vm.notes.isNotEmpty()) { Text(ExportKind.NOTES_CSV.label) }
+                }
                 Row {
                     OutlinedButton(onClick = { onExport(ExportKind.PNG) }) { Text(ExportKind.PNG.label) }
                     Spacer(Modifier.width(8.dp))

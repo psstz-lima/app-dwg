@@ -65,6 +65,8 @@ class ProjectDoc(
     val hiddenLines: List<Int> = emptyList(),
     /** Files of each 3D model and its placement. */
     val models: List<Pair<List<String>, com.appdwg.core.ModelPlacement>> = emptyList(),
+    /** Field notes; their photos stay in the app's storage, named here. */
+    val notes: List<com.appdwg.core.FieldNote> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -91,6 +93,10 @@ class ProjectDoc(
             }
         }))
         put("hiddenLines", JSONArray(hiddenLines))
+        put("notes", JSONArray(notes.map { n ->
+            JSONObject().put("id", n.id).put("x", n.x).put("y", n.y).put("text", n.text).put("time", n.time)
+                .apply { if (!n.z.isNaN()) put("z", n.z); n.photo?.let { put("photo", it) } }
+        }))
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -138,6 +144,13 @@ class ProjectDoc(
                 o.getString("main"), files, o.optBoolean("pointsSurface"), strings("drape"), o.optBoolean("drapeVisible", true),
                 points, o.optJSONObject("view") ?: JSONObject(), o.optBoolean("compareShown"), strings("cross"),
                 strings("unloaded"), strings("detached"), edits, lines, hidden, models,
+                o.optJSONArray("notes")?.let { a ->
+                    List(a.length()) {
+                        val n = a.getJSONObject(it)
+                        com.appdwg.core.FieldNote(n.getString("id"), n.getDouble("x"), n.getDouble("y"), n.optDouble("z", Double.NaN),
+                            n.optString("text"), n.optString("photo").ifEmpty { null }, n.optString("time"))
+                    }
+                }.orEmpty(),
             )
         }
 
