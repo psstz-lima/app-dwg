@@ -37,6 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -156,11 +159,20 @@ data class RailTool(val icon: GIcon, val label: String, val active: Boolean = fa
 fun ToolRail(tools: List<RailTool>, modifier: Modifier = Modifier) {
     val g = LocalG.current
     val shape = if (g.floating) RoundedCornerShape(20.dp) else RoundedCornerShape(0.dp)
+    val scroll = rememberScrollState()
     Column(
         modifier.width(if (g.choice == ThemeChoice.SUN) 92.dp else 84.dp).then(if (g.floating) Modifier.padding(start = 12.dp, bottom = 12.dp) else Modifier.fillMaxHeight())
             .clip(shape).background(g.rail)
             .then(if (!g.floating) Modifier.drawRightBorder(g.border, g.borderWidth) else Modifier)
-            .verticalScroll(rememberScrollState()).padding(vertical = 8.dp),
+            .drawWithContent {
+                drawContent()
+                // Fade the cut edge so it reads as "more tools this way".
+                val h = 36.dp.toPx()
+                if (scroll.canScrollForward) drawRect(Brush.verticalGradient(listOf(Color.Transparent, g.rail), size.height - h, size.height),
+                    Offset(0f, size.height - h), Size(size.width, h))
+                if (scroll.canScrollBackward) drawRect(Brush.verticalGradient(listOf(g.rail, Color.Transparent), 0f, h), Offset.Zero, Size(size.width, h))
+            }
+            .verticalScroll(scroll).padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -303,14 +315,14 @@ fun StatusFooter(items: List<String>, gpsText: String?, gpsColor: Color) {
         for (s in items) Text(s, color = g.onFooter, fontFamily = g.mono, fontSize = if (g.choice == ThemeChoice.SUN) 14.sp else 13.sp, maxLines = 1,
             fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Medium else FontWeight.Normal)
         Spacer(Modifier.weight(1f))
-        if (gpsText != null) {
+        run {
             val chip = g.choice == ThemeChoice.EARTH
             Row(
                 Modifier.then(if (chip) Modifier.height(28.dp).clip(RoundedCornerShape(14.dp)).background(g.rail).padding(horizontal = 12.dp) else Modifier),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(gpsColor))
-                Text(gpsText, color = if (chip) g.panel else if (g.choice == ThemeChoice.SUN) Color.White else g.text, fontFamily = g.mono, fontSize = 13.sp,
+                Box(Modifier.size(10.dp).clip(CircleShape).background(if (gpsText != null) gpsColor else g.muted))
+                Text(gpsText ?: "GPS desligado", color = if (chip) g.panel else if (g.choice == ThemeChoice.SUN) Color.White else if (gpsText == null) g.muted else g.text, fontFamily = g.mono, fontSize = 13.sp,
                     fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Normal)
             }
         }
