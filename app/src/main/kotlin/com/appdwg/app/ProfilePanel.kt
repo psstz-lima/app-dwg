@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -96,7 +97,7 @@ fun ProfilePanel(
                     if (i in editPvis.indices) {
                         TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
                         TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
-                        TextButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text("Remover PVI") }
+                        OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text("Remover PVI") }
                         Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.decimal(editPvis[i].elevation, 3)}",
                             style = MaterialTheme.typography.labelMedium)
                     }

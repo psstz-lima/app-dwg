@@ -138,7 +138,7 @@ fun CalibrationDialog(
                         val r = cal?.residual(p)
                         Text(if (r == null) "" else stringResource(R.string.calib_residual, n(r.x), n(r.y), n(r.z)),
                             Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        TextButton(onClick = { v.calibrationPairs = v.calibrationPairs.filterIndexed { j, _ -> j != i } }) { Text(stringResource(R.string.calib_remove)) }
+                        OutlinedButton(onClick = { v.calibrationPairs = v.calibrationPairs.filterIndexed { j, _ -> j != i } }) { Text(stringResource(R.string.calib_remove)) }
                     }
                 }
 

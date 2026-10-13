@@ -117,7 +117,7 @@ private fun ModelRow(
         }
         val ok = listOf(e, n, z, rot, scale).all { num(it) != null } && (num(scale) ?: 0.0) > 0
         OutlinedButton(enabled = ok, onClick = { vm.placeModel(index, ModelPlacement(num(e)!!, num(n)!!, num(z)!!, num(rot)!!, num(scale)!!, unit)) }) { Text("Aplicar") }
-        TextButton(onClick = { vm.removeModel(index) }) { Text("Remover") }
+        OutlinedButton(onClick = { vm.removeModel(index) }) { Text("Remover") }
     }
     // Two-point alignment: two points known in the model's own coordinates and where they are on the plan.
     val typed = alignInputs[index] ?: listOf("0", "0", "", "")

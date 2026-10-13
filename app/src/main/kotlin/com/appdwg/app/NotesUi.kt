@@ -85,7 +85,7 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
                         camera.launch(FileProvider.getUriForFile(context, context.packageName + ".notes", f))
                     }) { Text("Tirar foto") }
                     OutlinedButton(onClick = { gallery.launch("image/*") }) { Text("Da galeria") }
-                    if (photo != null) TextButton(onClick = { photo = null }) { Text("Remover foto") }
+                    if (photo != null) OutlinedButton(onClick = { photo = null }) { Text("Remover foto") }
                 }
                 thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 260.dp)) }
             }

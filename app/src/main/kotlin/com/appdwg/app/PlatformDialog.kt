@@ -85,7 +85,7 @@ fun PlatformDialog(
         },
         dismissButton = {
             Row {
-                if (vm.platform != null) TextButton(onClick = { vm.removePlatform() }) { Text("Remover projeto") }
+                if (vm.platform != null) OutlinedButton(onClick = { vm.removePlatform() }) { Text("Remover projeto") }
                 TextButton(onClick = { if (valid) v.platformParams = params(); onDismiss() }) { Text("Fechar") }
             }
         },

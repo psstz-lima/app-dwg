@@ -70,7 +70,7 @@ fun CompareDialog(
                 vm.addedFiles.forEach { (label, _) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(label, Modifier.weight(1f), maxLines = 1)
-                        TextButton(onClick = { vm.removeFile(label) }) { Text("Remover") }
+                        OutlinedButton(onClick = { vm.removeFile(label) }) { Text("Remover") }
                     }
                 }
                 vm.tasks.forEach { LoadProgress(it) }

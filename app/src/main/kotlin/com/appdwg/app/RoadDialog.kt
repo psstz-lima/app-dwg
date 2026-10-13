@@ -85,7 +85,7 @@ fun RoadDialog(
         },
         dismissButton = {
             Row {
-                if (vm.road != null) TextButton(onClick = { vm.removeRoad() }) { Text("Remover estrada") }
+                if (vm.road != null) OutlinedButton(onClick = { vm.removeRoad() }) { Text("Remover estrada") }
                 TextButton(onClick = { v.roadParams = rp; onDismiss() }) { Text("Fechar") }
             }
         },
@@ -150,7 +150,7 @@ fun RoadDialog(
                                 numField(p.curveLength, "Curva vertical (m)") { c -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(curveLength = c) }) }
                                 if (i > 0) Text("rampa " + f((p.elevation - rp.pvis[i - 1].elevation) / (p.station - rp.pvis[i - 1].station) * 100) + " %",
                                     style = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = { rp = rp.copy(pvis = rp.pvis.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                                OutlinedButton(onClick = { rp = rp.copy(pvis = rp.pvis.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
                             }
                         }
                         Row {
@@ -199,7 +199,7 @@ fun RoadDialog(
                                     label = { Text("Estaca") }, singleLine = true, modifier = Modifier.width(150.dp))
                                 numField(e.left, "Pista esquerda %") { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(left = v2) }) }
                                 numField(e.right, "Pista direita %") { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(right = v2) }) }
-                                TextButton(onClick = { rp = rp.copy(superelevation = rp.superelevation.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                                OutlinedButton(onClick = { rp = rp.copy(superelevation = rp.superelevation.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
                             }
                         }
                         Row {
@@ -224,7 +224,7 @@ fun RoadDialog(
                                 if (r.leftTarget != null || r.rightTarget != null) TextButton(onClick = {
                                     rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(leftTarget = null, rightTarget = null) })
                                 }) { Text("Sem alvos") }
-                                TextButton(onClick = { rp = rp.copy(regions = rp.regions.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                                OutlinedButton(onClick = { rp = rp.copy(regions = rp.regions.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
                             }
                             SideEditor("Esquerda", r.left) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(left = sd) }) }
                             SideEditor("Direita", r.right) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(right = sd) }) }

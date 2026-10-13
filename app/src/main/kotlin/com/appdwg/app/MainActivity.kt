@@ -199,16 +199,15 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
-                confirmButton = { TextButton(onClick = { showRecent = false }) { Text("Fechar") } },
+                confirmButton = { GButton("Fechar", { showRecent = false }) },
                 title = { Text("Arquivos recentes") },
                 text = {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                    // Each file is a button that opens it, with its own Remover button.
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         viewModel.recent.forEach { (name, uri) ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(onClick = { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }, modifier = Modifier.weight(1f)) {
-                                    Text(name, maxLines = 1, modifier = Modifier.fillMaxWidth())
-                                }
-                                TextButton(onClick = { viewModel.forgetRecent(uri) }) { Text("Remover") }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                RecentButton(name, Modifier.weight(1f)) { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }
+                                GButton("Remover", { viewModel.forgetRecent(uri) }, outlined = true)
                             }
                         }
                     }
@@ -220,11 +219,11 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                 onDismissRequest = { confirm = null },
                 title = { Text("Salvar alterações?") },
                 text = { Text("O projeto tem alterações que ainda não foram salvas (camadas, pontos, medições, arquivos adicionados…).") },
-                confirmButton = { TextButton(onClick = { confirm = null; save(action) }) { Text("Salvar") } },
+                confirmButton = { GButton("Salvar", { confirm = null; save(action) }, primary = true) },
                 dismissButton = {
-                    Row {
-                        TextButton(onClick = { confirm = null; action() }) { Text("Descartar") }
-                        TextButton(onClick = { confirm = null }) { Text("Cancelar") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GButton("Descartar", { confirm = null; action() })
+                        GButton("Cancelar", { confirm = null })
                     }
                 },
             )
@@ -1267,7 +1266,7 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
         dismissButton = {
             Row {
                 TextButton(onClick = onPick) { Text(if (d == null) "Escolher" else "Trocar") }
-                if (d != null) TextButton(onClick = { vm.removeDrape(); onDismiss() }) { Text("Remover") }
+                if (d != null) OutlinedButton(onClick = { vm.removeDrape(); onDismiss() }) { Text("Remover") }
             }
         },
         title = { Text("Imagem sobre a superfície") },

@@ -129,7 +129,7 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                                     singleLine = true, modifier = Modifier.weight(1f), textStyle = MaterialTheme.typography.bodySmall)
                                 OutlinedTextField(it.unit, { u -> set(i, it.copy(unit = u)) }, label = { Text(stringResource(R.string.bm_unit)) },
                                     singleLine = true, modifier = Modifier.width(80.dp), textStyle = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = { v.bulletinItems = items.filterIndexed { j, _ -> j != i } }) { Text(stringResource(R.string.bm_remove)) }
+                                OutlinedButton(onClick = { v.bulletinItems = items.filterIndexed { j, _ -> j != i } }) { Text(stringResource(R.string.bm_remove)) }
                             }
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 NumField(it.contracted, stringResource(R.string.bm_contracted), 150.dp) { x -> set(i, it.copy(contracted = x)) }

@@ -85,8 +85,9 @@ fun AppMark(modifier: Modifier = Modifier.size(34.dp)) {
 }
 
 /** Button in the theme's style: filled with the accent, or outlined/tonal. */
+/** [outlined] keeps a border in every theme (Terra draws its buttons without one otherwise). */
 @Composable
-fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifier: Modifier = Modifier, enabled: Boolean = true, outlined: Boolean = false) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val bg = when {
@@ -101,6 +102,7 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
     }
     val border = when {
         primary && g.choice == ThemeChoice.SUN -> BorderStroke(2.dp, g.accent)
+        outlined && !primary -> BorderStroke(maxOf(g.borderWidth, 1.dp), if (g.choice == ThemeChoice.EARTH) g.muted else g.border)
         primary || g.choice == ThemeChoice.EARTH -> null
         else -> BorderStroke(maxOf(g.borderWidth, 1.dp), g.border)
     }
@@ -112,6 +114,33 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
     ) {
         Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
             fontSize = 15.sp, maxLines = 1)
+    }
+}
+
+/** A recent file as a full-width button: its type on the left, the name, and an arrow to open. */
+@Composable
+fun RecentButton(name: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val g = LocalG.current
+    val shape = RoundedCornerShape(g.buttonRadius)
+    val type = when {
+        name.endsWith(".gromatic", true) || name.endsWith(".appdwg", true) -> "PROJETO"
+        name.endsWith(".dxf", true) -> "DXF"
+        name.contains(".aecc.pnt", true) -> "PONTOS"
+        name.endsWith(".xml", true) -> "LANDXML"
+        else -> name.substringAfterLast('.', "").uppercase().take(7)
+    }
+    Row(
+        modifier.height(maxOf(g.target, 48.dp)).clip(shape).background(g.card)
+            .border(BorderStroke(maxOf(g.borderWidth, 1.dp), g.border), shape)
+            .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(g.accent).padding(horizontal = 6.dp, vertical = 2.dp)) {
+            Text(type, color = g.onAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        }
+        Text(name, color = g.text, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text("›", color = g.muted, fontSize = 22.sp)
     }
 }
 
