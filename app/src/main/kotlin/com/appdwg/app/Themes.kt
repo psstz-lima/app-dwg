@@ -354,3 +354,59 @@ private fun ThemePreview(p: GromaticPalette, modifier: Modifier) {
         }
     }
 }
+
+/** Stroke icons for the tool rail, drawn from 24×24 path data like the mockups. */
+object RailIcons {
+    const val PLAN = "M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14"
+    const val CUBE = "M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5"
+    const val SECTION = "M2 18h20 M5 18l4-7h6l4 7"
+    const val PROFILE = "M2 16c3 0 4-8 7-8s4 6 7 6 3-4 6-4 M2 20h20"
+    const val MEASURE = "M3 17L17 3l4 4L7 21z M7 13l2 2 M10 10l2 2 M13 7l2 2"
+    const val LAYERS = "M12 3l9 5-9 5-9-5z M3 13l9 5 9-5"
+    const val POINTS = "M6 5a2 2 0 1 0 0.01 0z M17 7a2 2 0 1 0 0.01 0z M10 15a2 2 0 1 0 0.01 0z"
+    const val LINES = "M3 18l5-9 6 5 7-10"
+    const val ROAD = "M8 3L5 21 M16 3l3 18 M12 4v3 M12 10v4 M12 17v3"
+    const val PLATFORM = "M3 17l5-8h8l5 8z M8 9l-2-4 M16 9l2-4"
+    const val CONTOURS = "M3 8c4-3 6 3 9 0s5-3 9 0 M3 14c4-3 6 3 9 0s5-3 9 0 M3 20c4-3 6 3 9 0s5-3 9 0"
+    const val COMPARE = "M4 5h7v14H4z M13 5h7v14h-7z M6 15l3-4 2 2 M15 9l3 3 2-2"
+    const val IMAGE = "M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6"
+    const val MODELS = "M4 7l8-4 8 4v10l-8 4-8-4z M4 7l8 4 8-4 M12 11v10"
+    const val NOTE = "M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z M12 8a2 2 0 1 0 0.01 0z"
+    const val GPS = "M12 5a7 7 0 1 0 0.01 0z M12 10a2 2 0 1 0 0.01 0z M12 2v3 M12 19v3 M2 12h3 M19 12h3"
+    const val BASEMAP = "M12 3a9 9 0 1 0 0.01 0z M3 12h18 M12 3c3 3 3 15 0 18 M12 3c-3 3-3 15 0 18"
+    const val CALC = "M5 3h14v18H5z M8 7h8 M8 12h2 M14 12h2 M8 16h2 M14 16h2"
+    const val GOTO = "M4 12h14 M13 6l6 6-6 6"
+    const val EXPORT = "M12 15V3 M7 8l5-5 5 5 M4 15v6h16v-6"
+    const val REFERENCES = "M6 3h9l4 4v14H6z M15 3v4h4 M9 12h7 M9 16h7"
+    const val WARNING = "M12 3l10 18H2z M12 10v5 M12 18v0.5"
+    const val EXAGGERATION = "M12 3v18 M8 7l4-4 4 4 M8 17l4 4 4-4"
+}
+
+/** One tool on the side rail: icon over a short label; the active one is tinted with the accent. */
+@Composable
+fun RailButton(label: String, icon: String, active: Boolean = false, badge: Boolean = false, onClick: () -> Unit) {
+    val p = LocalGromatic.current
+    val path = remember(icon) { PathParser().parsePathString(icon).toPath() }
+    val fg = if (active) (if (p.accent == Color(0xFFFFD400)) Color.Black else p.accent) else p.muted
+    val bg = if (active) (if (p.accent == Color(0xFFFFD400)) p.accent else p.accent.copy(alpha = if (p.dark) 0.16f else 0.12f)) else Color.Transparent
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        color = bg,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.width(72.dp).height(maxOf(p.touch + 12.dp, 56.dp)),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Box {
+                Canvas(Modifier.size(22.dp)) {
+                    val k = size.width / 24f
+                    scale(k, k, pivot = Offset.Zero) {
+                        drawPath(path, fg, style = Stroke(width = if (p.touch > 48.dp) 2.2f else 1.8f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                    }
+                }
+                if (badge) Box(Modifier.align(Alignment.TopEnd).size(8.dp).background(p.gps, RoundedCornerShape(50)))
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(label, color = fg, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    }
+}
