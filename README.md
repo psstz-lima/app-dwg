@@ -57,6 +57,9 @@ exporta com os dados reais de projeto.
 - Perfil longitudinal (botão "Perfil"): terreno de cada superfície e greide ao longo do eixo, PVIs
   com curvas verticais e rampas em %, janela inteira ou ±500/±200/±50 m. Arraste no gráfico ou toque
   na planta para ler estaca, cotas e corte/aterro; a posição aparece na planta.
+- Ir para (botão "Ir para"): busca ponto, texto ou alinhamento pelo nome (sem diferenciar acentos),
+  vai a uma estaca e afastamento de um alinhamento ou a uma coordenada E/N; a planta centraliza e
+  mostra os dados do lugar.
 - Funciona offline.
 
 ## Como exportar do Civil 3D

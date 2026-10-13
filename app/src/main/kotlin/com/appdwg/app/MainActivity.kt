@@ -253,6 +253,10 @@ private fun ProjectScreen(
     }
     // Export: dialog, chosen kind waiting for the save picker, and the screen picture for PNG/PDF.
     var showExport by remember(fileName) { mutableStateOf(false) }
+    var showGoTo by remember(fileName) { mutableStateOf(false) }
+    // Point the plan centres on after a search; the key repeats it for the same place.
+    var focus by remember(fileName) { mutableStateOf<Point2?>(null) }
+    var focusKey by remember(fileName) { mutableStateOf(0) }
     var includeSurfaces by remember(fileName) { mutableStateOf(false) }
     var utmZone by remember(fileName) { mutableStateOf((Utm.zoneOfEpsg(project.coordinateSystem?.epsgCode) ?: 23).toString() + "S") }
     var pendingExport by remember { mutableStateOf<ExportKind?>(null) }
@@ -402,6 +406,8 @@ private fun ProjectScreen(
             points = vm.userPoints,
             onPointTap = if (measuring || addingPoints) null else { pt -> selectedPoint = pt; tapped = null },
             selectedPoint = selectedPoint,
+            focus = focus,
+            focusKey = focusKey,
         )
 
         Column(Modifier.align(Alignment.TopStart).padding(8.dp)) {
@@ -446,6 +452,7 @@ private fun ProjectScreen(
                     }
                     TextButton(onClick = { showCompare = true }) { Text("Comparar") }
                     TextButton(onClick = { showPoints = true }) { Text("Pontos") }
+                    TextButton(onClick = { showGoTo = true }) { Text("Ir para") }
                     TextButton(onClick = { showExport = true }) { Text("Exportar") }
                     if (vm.hasReferences) {
                         TextButton(onClick = { showReferences = true }) { Text("Referências") }
@@ -566,6 +573,18 @@ private fun ProjectScreen(
             onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
         )
+    }
+
+    if (showGoTo) {
+        GoToDialog(project.copy(points = vm.userPoints), onGo = { p ->
+            showGoTo = false
+            show3d = false
+            measuring = false
+            focus = p
+            focusKey++
+            selectedPoint = vm.userPoints.firstOrNull { it.x == p.x && it.y == p.y }
+            tapped = if (selectedPoint == null) p else null
+        }, onDismiss = { showGoTo = false })
     }
 
     if (showExport) {

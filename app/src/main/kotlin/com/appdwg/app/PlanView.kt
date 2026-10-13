@@ -115,6 +115,10 @@ fun PlanView(
     onPointTap: ((CogoPoint) -> Unit)? = null,
     /** Point highlighted as selected. */
     selectedPoint: CogoPoint? = null,
+    /** Centres the plan on this point whenever it changes (search, "go to"). */
+    focus: Point2? = null,
+    /** Bumped to centre on [focus] again even when it did not change. */
+    focusKey: Int = 0,
 ) {
     val bounds = project.bounds ?: return
     val origin = bounds.center
@@ -157,6 +161,16 @@ fun PlanView(
             val h = maxOf(bounds.height, 1.0)
             camera = Camera(0.0, 0.0, 0.9 * min(size.width / w, size.height / h))
         }
+    }
+
+    LaunchedEffect(focus, focusKey, size) {
+        val f = focus ?: return@LaunchedEffect
+        val cam = camera ?: return@LaunchedEffect
+        cam.centerX = f.x - origin.x
+        cam.centerY = f.y - origin.y
+        // Close enough to read stakes and point labels.
+        cam.scale = maxOf(cam.scale, 2.0)
+        frame++
     }
 
     fun toLocal(screen: Offset, cam: Camera) = Point2(
