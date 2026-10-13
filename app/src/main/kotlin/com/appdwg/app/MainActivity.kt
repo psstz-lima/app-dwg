@@ -361,6 +361,13 @@ private fun ProjectScreen(
     var showRoad by remember(fileName) { mutableStateOf(false) }
     var showAsBuilt by remember(fileName) { mutableStateOf(false) }
     var showVolume by remember(fileName) { mutableStateOf(false) }
+    var showBulletin by remember(fileName) { mutableStateOf(false) }
+    val bulletinPdf = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) vm.exportBulletinPdf(uri, fileName)
+    }
+    val bulletinCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) vm.exportBulletinCsv(uri, fileName)
+    }
     val volumeState = remember(fileName) { VolumeState() }
     val asBuiltState = remember(fileName) { AsBuiltState() }
     val asBuiltCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
@@ -552,6 +559,7 @@ private fun ProjectScreen(
     val asBuiltLabel = androidx.compose.ui.res.stringResource(R.string.asbuilt_tool)
     val calibLabel = androidx.compose.ui.res.stringResource(R.string.calib_tool)
     val volumeLabel = androidx.compose.ui.res.stringResource(R.string.vol_tool)
+    val bulletinLabel = androidx.compose.ui.res.stringResource(R.string.bm_tool)
     fun railTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
@@ -569,6 +577,7 @@ private fun ProjectScreen(
             add(RailTool(GIcon.PLATFORM, "Plataforma", drawingPlatform || vm.platform != null) { showPlatform = true })
             add(RailTool(GIcon.ROAD, "Estrada", drawingRoad || v.roadBuilt) { showRoad = true })
         }
+        if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, "Modelos") { showModels = true })
@@ -986,6 +995,11 @@ private fun ProjectScreen(
     )
     }
 
+    if (showBulletin) {
+        BulletinDialog(vm, onPdf = { bulletinPdf.launch("$baseName-boletim-${v.bulletinNumber}.pdf") },
+            onCsv = { bulletinCsv.launch("$baseName-boletim-${v.bulletinNumber}.csv") }, onDismiss = { showBulletin = false })
+    }
+
     if (showVolume) {
         VolumeDialog(vm, project, volumeState, measurePoints, onDraw = {
             showVolume = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
@@ -1078,6 +1092,7 @@ private fun ProjectScreen(
             drawingRoad = true
         }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") },
             onServiceNotePdf = { notePdfSaver.launch("$baseName-nota-de-servico.pdf") },
+            onBulletin = { showRoad = false; showBulletin = true },
             onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
             onDismiss = { showRoad = false })
     }

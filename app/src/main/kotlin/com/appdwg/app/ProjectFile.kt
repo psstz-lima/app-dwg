@@ -49,6 +49,33 @@ class ViewState(project: LandXmlProject) {
     var calibrationPairs by mutableStateOf<List<com.appdwg.core.CalibrationPair>>(emptyList())
     var calibrationOn by mutableStateOf(false)
     var calibrationFixScale by mutableStateOf(false)
+    // Measurement bulletin (boletim de medição).
+    var bulletinItems by mutableStateOf<List<BulletinItem>>(emptyList())
+    var bulletinNumber by mutableStateOf("1")
+    var bulletinPeriod by mutableStateOf("")
+}
+
+/** One line of the measurement bulletin; quantities in the item's unit, price per unit. */
+data class BulletinItem(
+    val description: String,
+    val unit: String = "m³",
+    val contracted: Double = 0.0,
+    val previous: Double = 0.0,
+    val period: Double = 0.0,
+    val price: Double = 0.0,
+) {
+    val accumulated get() = previous + period
+    val percent get() = if (contracted > 0) accumulated / contracted * 100 else 0.0
+    val periodValue get() = period * price
+    val accumulatedValue get() = accumulated * price
+    val contractedValue get() = contracted * price
+
+    fun toJson(): JSONObject = JSONObject().put("d", description).put("u", unit).put("c", contracted).put("a", previous).put("p", period).put("v", price)
+
+    companion object {
+        fun fromJson(o: JSONObject) = BulletinItem(o.optString("d"), o.optString("u", "m³"), o.optDouble("c", 0.0), o.optDouble("a", 0.0),
+            o.optDouble("p", 0.0), o.optDouble("v", 0.0))
+    }
 }
 
 /** Everything a saved project (.gromatic, antes .appdwg) holds; files are kept as content URIs, not copied. */
@@ -197,6 +224,9 @@ class ProjectDoc(
             }))
             put("calibrationOn", v.calibrationOn)
             put("calibrationFixScale", v.calibrationFixScale)
+            put("bulletin", JSONArray(v.bulletinItems.map { it.toJson() }))
+            put("bulletinNumber", v.bulletinNumber)
+            put("bulletinPeriod", v.bulletinPeriod)
         }
 
         fun applyView(o: JSONObject, v: ViewState) {
@@ -238,6 +268,9 @@ class ProjectDoc(
             }
             v.calibrationOn = o.optBoolean("calibrationOn")
             v.calibrationFixScale = o.optBoolean("calibrationFixScale")
+            o.optJSONArray("bulletin")?.let { a -> v.bulletinItems = List(a.length()) { BulletinItem.fromJson(a.getJSONObject(it)) } }
+            v.bulletinNumber = o.optString("bulletinNumber", "1")
+            v.bulletinPeriod = o.optString("bulletinPeriod")
         }
     }
 }

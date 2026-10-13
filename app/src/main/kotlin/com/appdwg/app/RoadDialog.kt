@@ -60,6 +60,7 @@ fun RoadDialog(
     onDrawAxis: () -> Unit,
     onServiceNote: () -> Unit,
     onServiceNotePdf: () -> Unit,
+    onBulletin: () -> Unit,
     /** Asks the plan for a line to be the edge target of region [index] on the left (−1) or right (1). */
     onPickTarget: (index: Int, side: Int) -> Unit,
     onDismiss: () -> Unit,
@@ -236,7 +237,7 @@ fun RoadDialog(
                     RoadTab.RESULT -> {
                         vm.tasks.forEach { LoadProgress(it) }
                         vm.roadMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        vm.road?.let { r -> RoadResult(r, onServiceNote, onServiceNotePdf) } ?: if (vm.tasks.isEmpty()) Text("Toque em Calcular.") else Unit
+                        vm.road?.let { r -> RoadResult(r, v.roadParams.swell, onServiceNote, onServiceNotePdf, onBulletin) } ?: if (vm.tasks.isEmpty()) Text("Toque em Calcular.") else Unit
                     }
                 }
             }
@@ -287,7 +288,7 @@ private fun SlopeEditor(title: String, r: SlopeRule, onChange: (SlopeRule) -> Un
 }
 
 @Composable
-private fun RoadResult(r: CorridorResult, onServiceNote: () -> Unit, onServiceNotePdf: () -> Unit) {
+private fun RoadResult(r: CorridorResult, swell: Double, onServiceNote: () -> Unit, onServiceNotePdf: () -> Unit, onBulletin: () -> Unit) {
     Text("Eixo ${r.alignment.name}: ${f(r.alignment.length)} m, ${r.sections.size} seções", style = MaterialTheme.typography.labelLarge)
     Text("Corte ${f(r.totalCut, 1)} m³ · Aterro ${f(r.totalFill, 1)} m³ · Saldo final (Brückner) ${f(r.volumes.last().accumulated, 1)} m³")
     Text("Superfícies \"$ROAD_LABEL\" (acabada) e \"$ROAD_LABEL (terraplenagem)\" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.",
@@ -312,8 +313,37 @@ private fun RoadResult(r: CorridorResult, onServiceNote: () -> Unit, onServiceNo
         vs.forEachIndexed { i, row -> if (i == 0) path.moveTo(x(row.station), y(row.accumulated)) else path.lineTo(x(row.station), y(row.accumulated)) }
         drawPath(path, Color(0xFF1E88E5), style = Stroke(width = 3f))
     }
+    HaulSummary(r, swell, onBulletin)
+    HorizontalDivider()
     Text("Estaca · corte · aterro · acumulado", style = MaterialTheme.typography.labelMedium)
     r.volumes.filterIndexed { i, _ -> i % maxOf(1, r.volumes.size / 40) == 0 || i == r.volumes.size - 1 }.forEach { row ->
         Text("${StationFormat.estaca(row.station)} · ${f(row.cut, 1)} · ${f(row.fill, 1)} · ${f(row.accumulated, 1)}", style = MaterialTheme.typography.bodySmall)
     }
+}
+
+/** Mass distribution from the Brückner diagram: waves, DMT, bands, spoil and borrow. */
+@Composable
+private fun HaulSummary(r: CorridorResult, swell: Double, onBulletin: () -> Unit) {
+    val m = remember(r, swell) { com.appdwg.core.MassHaul.of(r.volumes, swell) }
+    HorizontalDivider()
+    Text(androidx.compose.ui.res.stringResource(R.string.haul_title), style = MaterialTheme.typography.labelLarge)
+    Text(androidx.compose.ui.res.stringResource(R.string.haul_summary, f(m.hauled, 1), f(m.moment / 1000, 1), f(m.dmt, 0)),
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+    Text(androidx.compose.ui.res.stringResource(R.string.haul_local, f(m.lateral, 1), f(m.spoil, 1), f(m.borrow, 1)), style = MaterialTheme.typography.bodySmall)
+    if (m.bands.isNotEmpty()) {
+        Text(androidx.compose.ui.res.stringResource(R.string.haul_bands), style = MaterialTheme.typography.labelMedium)
+        m.bands.forEach { b ->
+            Text(androidx.compose.ui.res.stringResource(R.string.haul_band_row, b.label, f(b.volume, 1), f(if (b.volume > 0) b.moment / b.volume else 0.0, 0)),
+                style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    if (m.waves.isNotEmpty()) {
+        Text(androidx.compose.ui.res.stringResource(R.string.haul_waves), style = MaterialTheme.typography.labelMedium)
+        val fwd = androidx.compose.ui.res.stringResource(R.string.haul_forward); val back = androidx.compose.ui.res.stringResource(R.string.haul_back)
+        m.waves.take(40).forEach { w ->
+            Text(androidx.compose.ui.res.stringResource(R.string.haul_wave_row, StationFormat.estaca(w.start), StationFormat.estaca(w.end), f(w.volume, 1),
+                f(w.dmt, 0), if (w.forward) fwd else back), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    OutlinedButton(onClick = onBulletin) { Text(androidx.compose.ui.res.stringResource(R.string.haul_bulletin)) }
 }

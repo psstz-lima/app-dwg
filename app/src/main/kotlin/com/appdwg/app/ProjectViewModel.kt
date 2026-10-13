@@ -1011,6 +1011,96 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- Measurement bulletin ----
+
+    private fun bulletinRows(): Pair<List<String>, List<List<String>>> {
+        val app = getApplication<Application>()
+        val items = view?.bulletinItems.orEmpty()
+        fun q(x: Double) = grouped(x)
+        val head = listOf("Item", app.getString(R.string.bm_desc), app.getString(R.string.bm_unit), app.getString(R.string.bm_contracted),
+            app.getString(R.string.bm_previous), app.getString(R.string.bm_this), app.getString(R.string.bm_accum), app.getString(R.string.bm_percent),
+            app.getString(R.string.bm_price), app.getString(R.string.bm_value), app.getString(R.string.bm_value_acc))
+        val rows = items.mapIndexed { i, it ->
+            listOf((i + 1).toString(), it.description, it.unit, q(it.contracted), q(it.previous), q(it.period), q(it.accumulated),
+                StationFormat.decimal(it.percent, 1), q(it.price), q(it.periodValue), q(it.accumulatedValue))
+        }
+        return head to rows
+    }
+
+    /** 1.234.567,89 */
+    private fun grouped(x: Double): String = java.text.NumberFormat.getNumberInstance(java.util.Locale("pt", "BR")).apply {
+        minimumFractionDigits = 2; maximumFractionDigits = 2
+    }.format(x)
+
+    private fun bulletinTotals(): String {
+        val items = view?.bulletinItems.orEmpty()
+        val acc = items.sumOf { it.accumulatedValue }; val con = items.sumOf { it.contractedValue }
+        return getApplication<Application>().getString(R.string.bm_totals, grouped(items.sumOf { it.periodValue }),
+            grouped(acc), grouped(con), StationFormat.decimal(if (con > 0) acc / con * 100 else 0.0, 1))
+    }
+
+    fun exportBulletinCsv(target: Uri, title: String) {
+        val v = view ?: return
+        val app = getApplication<Application>()
+        val (head, rows) = bulletinRows()
+        val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date())
+        val text = buildString {
+            append(app.getString(R.string.bm_title)).append("\r\n")
+            append(app.getString(R.string.bm_pdf_head, title, v.bulletinNumber, v.bulletinPeriod, date)).append("\r\n\r\n")
+            append(head.joinToString(";")).append("\r\n")
+            rows.forEach { append(it.joinToString(";") { c -> c.replace(';', ',') }).append("\r\n") }
+            append("\r\n").append(bulletinTotals()).append("\r\n")
+        }
+        writeTo(target, app.getString(R.string.bm_export_csv)) { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
+    }
+
+    /** [text] cut with an ellipsis to fit [width] points in [paint]. */
+    private fun fit(text: String, paint: android.graphics.Paint, width: Float): String {
+        if (paint.measureText(text) <= width) return text
+        var n = text.length
+        while (n > 1 && paint.measureText(text, 0, n) + paint.measureText("…") > width) n--
+        return text.take(n).trimEnd() + "…"
+    }
+
+    /** A4 landscape table, 28 items per page, totals on the last page. */
+    fun exportBulletinPdf(target: Uri, title: String) {
+        val v = view ?: return
+        val app = getApplication<Application>()
+        val (head, rows) = bulletinRows()
+        val date = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date())
+        writeTo(target, app.getString(R.string.bm_export_pdf)) { out ->
+            val doc = android.graphics.pdf.PdfDocument()
+            val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
+            val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true }
+            val right = android.graphics.Paint(paint).apply { textAlign = android.graphics.Paint.Align.RIGHT }
+            val rightBold = android.graphics.Paint(bold).apply { textAlign = android.graphics.Paint.Align.RIGHT }
+            // Column right edges for numbers; description and unit left aligned.
+            val x = floatArrayOf(20f, 40f, 300f, 380f, 440f, 500f, 560f, 600f, 660f, 730f, 822f)
+            val chunks = rows.chunked(28).ifEmpty { listOf(emptyList()) }
+            chunks.forEachIndexed { pi, chunk ->
+                val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(842, 595, pi + 1).create())
+                val c = page.canvas
+                c.drawText(app.getString(R.string.bm_title), 20f, 32f, android.graphics.Paint(bold).apply { textSize = 13f })
+                c.drawText(app.getString(R.string.bm_pdf_head, title, v.bulletinNumber, v.bulletinPeriod, date), 20f, 48f, paint)
+                var y = 72f
+                head.forEachIndexed { k, h -> if (k <= 2) c.drawText(h, x[k], y, bold) else c.drawText(h, x[k], y, rightBold) }
+                c.drawLine(20f, y + 4f, 822f, y + 4f, paint)
+                y += 16f
+                for (row in chunk) {
+                    row.forEachIndexed { k, cell ->
+                        if (k <= 2) c.drawText(if (k == 1) fit(cell, paint, x[2] - x[1] - 8f) else cell, x[k], y, paint) else c.drawText(cell, x[k], y, right)
+                    }
+                    y += 15f
+                }
+                if (pi == chunks.lastIndex) { c.drawLine(20f, y - 8f, 822f, y - 8f, paint); c.drawText(bulletinTotals(), 20f, y + 6f, bold) }
+                c.drawText(app.getString(R.string.asbuilt_page, pi + 1, chunks.size), 760f, 580f, paint)
+                doc.finishPage(page)
+            }
+            doc.writeTo(out)
+            doc.close()
+        }
+    }
+
     // ---- Stockpile / volume to an elevation ----
 
     var volume by mutableStateOf<com.appdwg.core.VolumeResult?>(null)

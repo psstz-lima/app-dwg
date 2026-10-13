@@ -65,6 +65,51 @@
     <string name="vol_none">Sem sobreposição entre a superfície, a área e a base.</string>
     <string name="vol_running">Calculando volume</string>
 
+    <!-- Mass haul (DMT) and measurement bulletin -->
+    <string name="haul_title">Distribuição de massas (DMT)</string>
+    <string name="haul_summary">Transportado ao longo do eixo %1$s m³ · momento %2$s m³·km · DMT %3$s m</string>
+    <string name="haul_local">Compensação lateral (mesma seção) %1$s m³ · bota-fora %2$s m³ · empréstimo %3$s m³</string>
+    <string name="haul_bands">Volume por faixa de DMT</string>
+    <string name="haul_band_row">%1$s: %2$s m³ (DMT %3$s m)</string>
+    <string name="haul_waves">Ondas do Brückner (linha de equilíbrio no zero)</string>
+    <string name="haul_wave_row">%1$s a %2$s · %3$s m³ · DMT %4$s m · %5$s</string>
+    <string name="haul_forward">para frente</string>
+    <string name="haul_back">para trás</string>
+    <string name="haul_bulletin">Boletim de medição</string>
+
+    <string name="bm_tool">Boletim</string>
+    <string name="bm_title">Boletim de medição</string>
+    <string name="bm_number">Nº do boletim</string>
+    <string name="bm_period">Período</string>
+    <string name="bm_from_road">Itens do projeto de estrada</string>
+    <string name="bm_from_stages">Período pela comparação por etapas</string>
+    <string name="bm_stages_none">Faça antes, em Comparar, a comparação por etapas (terreno, levantamentos e projeto).</string>
+    <string name="bm_add">Adicionar item</string>
+    <string name="bm_close_period">Fechar período (acumula e zera)</string>
+    <string name="bm_desc">Descrição</string>
+    <string name="bm_unit">Unid.</string>
+    <string name="bm_contracted">Contratado</string>
+    <string name="bm_previous">Acum. anterior</string>
+    <string name="bm_this">Período</string>
+    <string name="bm_price">Preço unit.</string>
+    <string name="bm_accum">Acum. atual</string>
+    <string name="bm_percent">%</string>
+    <string name="bm_value">Valor período</string>
+    <string name="bm_value_acc">Valor acumulado</string>
+    <string name="bm_totals">Total do período R$ %1$s · acumulado R$ %2$s · contratado R$ %3$s (%4$s%%)</string>
+    <string name="bm_pdf">Boletim (PDF)</string>
+    <string name="bm_csv">Boletim (CSV)</string>
+    <string name="bm_export_pdf">boletim de medição (PDF)</string>
+    <string name="bm_export_csv">boletim de medição (CSV)</string>
+    <string name="bm_pdf_head">Obra: %1$s · Boletim nº %2$s · Período: %3$s · emitido em %4$s</string>
+    <string name="bm_item_cut">Escavação, carga e transporte de material, DMT %1$s</string>
+    <string name="bm_item_lateral">Escavação e compensação lateral (sem transporte)</string>
+    <string name="bm_item_fill">Compactação de aterros</string>
+    <string name="bm_item_spoil">Bota-fora de material excedente</string>
+    <string name="bm_item_borrow">Escavação em empréstimo</string>
+    <string name="bm_remove">Remover</string>
+    <string name="bm_empty">Sem itens. Use "Itens do projeto de estrada" ou adicione à mão.</string>
+
     <!-- As-built check -->
     <string name="asbuilt_tool">As-built</string>
     <string name="asbuilt_title">Conferência de as-built</string>
