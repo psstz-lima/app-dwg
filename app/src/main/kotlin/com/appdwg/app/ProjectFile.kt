@@ -64,7 +64,7 @@ class ViewState(project: LandXmlProject) {
 /** Coordinate systems as JSON, for the project file and the user's own systems. */
 object CrsJson {
     fun toJson(c: com.appdwg.core.Crs): JSONObject = JSONObject().apply {
-        put("id", c.id); put("name", c.name); c.epsg?.let { put("epsg", it) }; put("custom", c.custom); put("local", c.local)
+        put("id", c.id); put("name", c.name); c.epsg?.let { put("epsg", it) }; put("custom", c.custom); put("local", c.local); put("region", c.region)
         val d = c.datum; val e = d.ellipsoid; val h = d.toSirgas
         put("datum", JSONObject().put("id", d.id).put("name", d.name).put("wkt", d.wktName)
             .put("ellipsoid", JSONObject().put("name", e.name).put("a", e.a).put("invF", e.invF))
@@ -73,6 +73,8 @@ object CrsJson {
             com.appdwg.core.Projection.Geographic -> put("projection", JSONObject().put("type", "geographic"))
             is com.appdwg.core.Projection.TransverseMercator -> put("projection", JSONObject().put("type", "tm").put("lat0", p.lat0).put("lon0", p.lon0)
                 .put("k0", p.k0).put("fe", p.falseEasting).put("fn", p.falseNorthing))
+            is com.appdwg.core.Projection.LambertConic -> put("projection", JSONObject().put("type", "lcc").put("lat0", p.lat0).put("lon0", p.lon0)
+                .put("lat1", p.lat1).apply { p.lat2?.let { put("lat2", it) } }.put("k0", p.k0).put("fe", p.falseEasting).put("fn", p.falseNorthing))
         }
     }
 
@@ -85,9 +87,14 @@ object CrsJson {
             com.appdwg.core.Helmert(h.getDouble(0), h.getDouble(1), h.getDouble(2), h.getDouble(3), h.getDouble(4), h.getDouble(5), h.getDouble(6)),
             d.optString("wkt", d.getString("name")))
         val p = o.getJSONObject("projection")
-        val proj = if (p.getString("type") == "geographic") com.appdwg.core.Projection.Geographic
-        else com.appdwg.core.Projection.TransverseMercator(p.getDouble("lat0"), p.getDouble("lon0"), p.getDouble("k0"), p.getDouble("fe"), p.getDouble("fn"))
-        return com.appdwg.core.Crs(o.getString("id"), o.getString("name"), o.optString("epsg").ifEmpty { null }, datum, proj, o.optBoolean("custom"), o.optBoolean("local"))
+        val proj = when (p.getString("type")) {
+            "geographic" -> com.appdwg.core.Projection.Geographic
+            "lcc" -> com.appdwg.core.Projection.LambertConic(p.getDouble("lat0"), p.getDouble("lon0"), p.getDouble("lat1"),
+                if (p.has("lat2")) p.getDouble("lat2") else null, p.getDouble("k0"), p.getDouble("fe"), p.getDouble("fn"))
+            else -> com.appdwg.core.Projection.TransverseMercator(p.getDouble("lat0"), p.getDouble("lon0"), p.getDouble("k0"), p.getDouble("fe"), p.getDouble("fn"))
+        }
+        return com.appdwg.core.Crs(o.getString("id"), o.getString("name"), o.optString("epsg").ifEmpty { null }, datum, proj, o.optBoolean("custom"),
+            o.optBoolean("local"), o.optString("region"))
     }
 }
 

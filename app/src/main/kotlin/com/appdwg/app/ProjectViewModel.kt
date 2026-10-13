@@ -907,7 +907,45 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return com.appdwg.core.CrsCatalog.byEpsg(p?.coordinateSystem?.epsgCode) ?: com.appdwg.core.CrsCatalog.byEpsg("31983")!!
     }
 
-    fun chooseCrs(c: com.appdwg.core.Crs) { view?.crs = c }
+    fun chooseCrs(c: com.appdwg.core.Crs) {
+        view?.crs = c
+        recentCrs = (listOf(c.id) + recentCrs.filter { it != c.id }).take(6)
+        crsPrefs.edit().putString("recent", recentCrs.joinToString(",")).apply()
+    }
+
+    /** Ids of the systems chosen lately, newest first. */
+    var recentCrs by mutableStateOf(crsPrefs.getString("recent", "")!!.split(',').filter { it.isNotBlank() })
+        private set
+
+    var crsOnlineMessage by mutableStateOf<String?>(null)
+        private set
+
+    /** Reads a system from epsg.io by its code and keeps it in "Meus sistemas". */
+    fun fetchCrs(code: String) {
+        val app = getApplication<Application>()
+        crsOnlineMessage = null
+        viewModelScope.launch {
+            crsOnlineMessage = try {
+                val c = withContext(Dispatchers.IO) {
+                    fun get(url: String) = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).run {
+                        connectTimeout = 10_000; readTimeout = 10_000; setRequestProperty("User-Agent", "Gromatic")
+                        if (responseCode != 200) error("HTTP $responseCode")
+                        inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                    }
+                    val proj4 = get("https://epsg.io/$code.proj4")
+                    val name = runCatching { Regex("\"([^\"]+)\"").find(get("https://epsg.io/$code.wkt"))?.groupValues?.get(1) }.getOrNull() ?: "EPSG $code"
+                    com.appdwg.core.Proj4.parse(code, name, proj4)
+                }
+                saveCustomCrs(c)
+                app.getString(R.string.crs_online_saved, c.name)
+            } catch (e: com.appdwg.core.Proj4.Unsupported) {
+                app.getString(R.string.crs_online_unsupported, e.message ?: "")
+            } catch (e: Throwable) {
+                android.util.Log.w("Gromatic", "epsg.io", e)
+                app.getString(R.string.crs_online_failed, e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
 
     override fun onCleared() { gnss.disconnect() }
 

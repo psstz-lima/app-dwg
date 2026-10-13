@@ -204,6 +204,9 @@
     <string name="crs_projection">Projeção</string>
     <string name="crs_geographic">Geográficas (lat/long)</string>
     <string name="crs_tm">Transversa de Mercator</string>
+    <string name="crs_lcc">Lambert cônica conforme</string>
+    <string name="crs_lat1">1º paralelo padrão (°)</string>
+    <string name="crs_lat2">2º paralelo padrão (°, vazio = 1SP)</string>
     <string name="crs_lat0">Latitude de origem (°)</string>
     <string name="crs_lon0">Meridiano central (°)</string>
     <string name="crs_k0">Fator de escala k</string>
@@ -211,6 +214,14 @@
     <string name="crs_fn">Falso N (m)</string>
     <string name="crs_save">Salvar e usar</string>
     <string name="crs_cancel">Cancelar</string>
+    <string name="crs_recent">Usados recentemente</string>
+    <string name="crs_online">Buscar online (epsg.io)</string>
+    <string name="crs_online_code">Código EPSG</string>
+    <string name="crs_online_go">Buscar e salvar</string>
+    <string name="crs_online_saved">%1$s salvo em Meus sistemas (funciona sem internet).</string>
+    <string name="crs_online_unsupported">Não dá para usar este sistema: %1$s.</string>
+    <string name="crs_online_failed">Não foi possível buscar: %1$s. Verifique a internet e o código.</string>
+    <string name="crs_online_hint">Para sistemas fora do catálogo. Precisa de internet só nesta hora.</string>
     <string name="crs_ibge_note">Datums SAD 69, SAD 69 (96) e Córrego Alegre com os parâmetros oficiais do IBGE (R.PR 1/2005) para SIRGAS 2000.</string>
     <string name="crs_change_note">Trocar o sistema não move o desenho: muda como o GPS, o mapa de fundo e os arquivos GIS se relacionam com ele.</string>
 
@@ -253,4 +264,8 @@
     <string name="asbuilt_status_outside">Fora do projeto</string>
     <string name="asbuilt_export_csv">relatório de as-built (CSV)</string>
     <string name="asbuilt_export_pdf">relatório de as-built (PDF)</string>
+    <plurals name="crs_count">
+        <item quantity="one">%1$d sistema</item>
+        <item quantity="other">%1$d sistemas</item>
+    </plurals>
 </resources>

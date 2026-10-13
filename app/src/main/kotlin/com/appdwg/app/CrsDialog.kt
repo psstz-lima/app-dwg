@@ -92,9 +92,40 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
                 Text(stringResource(R.string.crs_local_hint), style = MaterialTheme.typography.bodySmall)
 
                 HorizontalDivider()
+                // Recently used first, then the catalogue grouped by country: the user's own region open, the others folded.
+                val recent = vm.recentCrs.mapNotNull { id -> CrsCatalog.byId(id) ?: vm.customCrs.firstOrNull { it.id == id } }.filter { it.id != current.id }
+                if (recent.isNotEmpty() && query.isBlank()) {
+                    Text(stringResource(R.string.crs_recent), style = MaterialTheme.typography.labelLarge)
+                    for (c in recent) CrsRow(c, false, Modifier.fillMaxWidth()) { use(c) }
+                    HorizontalDivider()
+                }
                 Text(stringResource(R.string.crs_catalog), style = MaterialTheme.typography.labelLarge)
-                Text(stringResource(R.string.crs_ibge_note), style = MaterialTheme.typography.bodySmall)
-                for (c in CrsCatalog.search(query).take(80)) CrsRow(c, c.id == current.id, Modifier.fillMaxWidth()) { use(c) }
+                val country = com.appdwg.core.Display.locale.country.ifBlank { "BR" }
+                val found = CrsCatalog.search(query)
+                for (region in CrsCatalog.regionOrder(country)) {
+                    val items = found.filter { it.region == region }
+                    if (items.isEmpty()) continue
+                    val own = region == CrsCatalog.regionOf(country) || region == current.region
+                    var openGroup by remember(region) { mutableStateOf(own) }
+                    val shown = openGroup || query.isNotBlank()
+                    Row(Modifier.fillMaxWidth().clickable { openGroup = !openGroup }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text((if (shown) "▾ " else "▸ ") + region, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(androidx.compose.ui.res.pluralStringResource(R.plurals.crs_count, items.size, items.size), style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (region == CrsCatalog.BRAZIL && shown) Text(stringResource(R.string.crs_ibge_note), style = MaterialTheme.typography.bodySmall)
+                    if (shown) for (c in items) CrsRow(c, c.id == current.id, Modifier.fillMaxWidth().padding(start = 12.dp)) { use(c) }
+                }
+
+                HorizontalDivider()
+                Text(stringResource(R.string.crs_online), style = MaterialTheme.typography.labelLarge)
+                Text(stringResource(R.string.crs_online_hint), style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    var code by remember { mutableStateOf("") }
+                    OutlinedTextField(code, { code = it.filter { ch -> ch.isDigit() } }, label = { Text(stringResource(R.string.crs_online_code)) }, singleLine = true,
+                        modifier = Modifier.width(180.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    OutlinedButton(enabled = code.length in 4..6, onClick = { vm.fetchCrs(code) }) { Text(stringResource(R.string.crs_online_go)) }
+                }
+                vm.crsOnlineMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
     )
@@ -123,8 +154,13 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
     var invF by remember { mutableStateOf(f(d0.ellipsoid.invF, 9)) }
     val hp = remember { mutableStateOf(listOf(h0.dx, h0.dy, h0.dz, h0.rx, h0.ry, h0.rz, h0.ds).map { f(it, 6) }) }
     val tm0 = start.projection as? Projection.TransverseMercator
-    var geographic by remember { mutableStateOf(tm0 == null) }
+    val lc0 = start.projection as? Projection.LambertConic
+    // 0 geographic, 1 Transverse Mercator, 2 Lambert conic.
+    var kind by remember { mutableStateOf(when { tm0 != null -> 1; lc0 != null -> 2; else -> 0 }) }
+    val geographic = kind == 0
     val tp = remember { mutableStateOf(listOf(tm0?.lat0 ?: 0.0, tm0?.lon0 ?: -45.0, tm0?.k0 ?: 0.9996, tm0?.falseEasting ?: 500_000.0, tm0?.falseNorthing ?: 10_000_000.0).map { f(it, 9) }) }
+    val lp = remember { mutableStateOf(listOf(lc0?.lat0 ?: 0.0, lc0?.lon0 ?: 0.0, lc0?.lat1 ?: 0.0).map { f(it, 9) } + listOf(lc0?.lat2?.let { f(it, 9) } ?: "") +
+        listOf(lc0?.k0 ?: 1.0, lc0?.falseEasting ?: 0.0, lc0?.falseNorthing ?: 0.0).map { f(it, 9) }) }
     fun n(s: String) = StationFormat.number(s)
     val datum: Datum? = Datum.all.firstOrNull { it.id == datumId } ?: run {
         val aa = n(a); val ff = n(invF); val h = hp.value.map { n(it) }
@@ -132,8 +168,13 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
         else Datum("custom_" + name.hashCode(), name, Ellipsoid(ell.name, aa, ff), Helmert(h[0]!!, h[1]!!, h[2]!!, h[3]!!, h[4]!!, h[5]!!, h[6]!!))
     }
     val t = tp.value.map { n(it) }
-    val projection: Projection? = if (geographic) Projection.Geographic else if (t.any { it == null }) null
-        else Projection.TransverseMercator(t[0]!!, t[1]!!, t[2]!!, t[3]!!, t[4]!!)
+    val l = lp.value.map { n(it) }
+    val projection: Projection? = when (kind) {
+        0 -> Projection.Geographic
+        1 -> if (t.any { it == null }) null else Projection.TransverseMercator(t[0]!!, t[1]!!, t[2]!!, t[3]!!, t[4]!!)
+        else -> if (listOf(0, 1, 2, 4, 5, 6).any { l[it] == null }) null
+            else Projection.LambertConic(l[0]!!, l[1]!!, l[2]!!, l[3], l[4]!!, l[5]!!, l[6]!!)
+    }
     val ok = name.isNotBlank() && datum != null && projection != null
     AlertDialog(
         onDismissRequest = onCancel,
@@ -172,10 +213,17 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
                 }
                 Text(stringResource(R.string.crs_projection), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(geographic, { geographic = true }, { Text(stringResource(R.string.crs_geographic)) })
-                    FilterChip(!geographic, { geographic = false }, { Text(stringResource(R.string.crs_tm)) })
+                    FilterChip(kind == 0, { kind = 0 }, { Text(stringResource(R.string.crs_geographic)) })
+                    FilterChip(kind == 1, { kind = 1 }, { Text(stringResource(R.string.crs_tm)) })
+                    FilterChip(kind == 2, { kind = 2 }, { Text(stringResource(R.string.crs_lcc)) })
                 }
-                if (!geographic) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (kind == 2) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf(R.string.crs_lat0, R.string.crs_lon0, R.string.crs_lat1, R.string.crs_lat2, R.string.crs_k0, R.string.crs_fe, R.string.crs_fn).forEachIndexed { i, lab ->
+                        OutlinedTextField(lp.value[i], { v -> lp.value = lp.value.toMutableList().also { it[i] = v } }, label = { Text(stringResource(lab)) },
+                            singleLine = true, modifier = Modifier.width(180.dp), isError = i != 3 && n(lp.value[i]) == null)
+                    }
+                }
+                if (kind == 1) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(R.string.crs_lat0, R.string.crs_lon0, R.string.crs_k0, R.string.crs_fe, R.string.crs_fn).forEachIndexed { i, l ->
                         OutlinedTextField(tp.value[i], { v -> tp.value = tp.value.toMutableList().also { it[i] = v } }, label = { Text(stringResource(l)) },
                             singleLine = true, modifier = Modifier.width(180.dp), isError = n(tp.value[i]) == null)
