@@ -64,6 +64,13 @@ const val BASIN_COLOR = 0xFF00897B.toInt()
 const val STREAM_COLOR = 0xFF1565C0.toInt()
 const val OUTLET_COLOR = 0xFFFF6D00.toInt()
 
+/** What the analyses and suggestions draw over the plan: basin, outlets and suggested routes. */
+fun designGuides(vm: ProjectViewModel): Pair<List<Guide>, List<GuideMark>> {
+    val (lines, marks) = basinGuides(vm)
+    val routes = vm.routeSuggestions.mapIndexed { i, r -> Guide(r.alignment.vertices, ROUTE_COLORS[i % ROUTE_COLORS.size], width = 4f, dashed = true) }
+    return (lines + routes) to marks
+}
+
 /** Basin outline, main stream and outlets to draw over the plan. */
 fun basinGuides(vm: ProjectViewModel): Pair<List<Guide>, List<GuideMark>> {
     val b = vm.basin

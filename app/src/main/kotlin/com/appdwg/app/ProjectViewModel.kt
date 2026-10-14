@@ -1514,7 +1514,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         if (rp.alignmentIndex >= 0) return project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }.getOrNull(rp.alignmentIndex)
         if (rp.pis.size < 2) return null
         return AlignmentBuilder.fromPis(tr("Eixo"), rp.pis.mapIndexed { i, p ->
-            if (i == 0 || i == rp.pis.size - 1) Pi(p) else Pi(p, rp.radius, rp.spiral)
+            if (i == 0 || i == rp.pis.size - 1) Pi(p) else Pi(p, rp.radii.getOrNull(i)?.takeIf { it > 0 } ?: rp.radius, rp.spirals.getOrNull(i) ?: rp.spiral)
         })
     }
 
@@ -1569,6 +1569,40 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
         }
     }
+
+    /** Routes the app suggests between the first and last PI of the road. */
+    var routeSuggestions by mutableStateOf<List<com.appdwg.core.RouteSuggestion>>(emptyList())
+        private set
+
+    /**
+     * Suggests routes from the first to the last PI of [rp] on the terrain, keeping off buildings
+     * and water bodies downloaded from OpenStreetMap, each with its least-earthwork grade.
+     */
+    fun suggestRoute(rp: RoadParams, maxGrade: Double) {
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val terrain = project.surfaces.firstOrNull { it.name == rp.terrain }
+            ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) && !it.name.startsWith(PLATFORM_LABEL) }
+            ?: run { roadMessage = tr("Abra ou adicione uma superfície de terreno."); return }
+        if (rp.pis.size < 2) { roadMessage = tr("Marque na planta o ponto de saída e o de chegada."); return }
+        val avoid = project.polylines.filter { it.closed && it.layer in setOf("OSM_CONSTRUCOES", "OSM_HIDROGRAFIA") && it.xs.size >= 3 }
+            .map { l -> List(l.xs.size) { Point2(l.xs[it], l.ys[it]) } }
+        roadMessage = null
+        viewModelScope.launch {
+            try {
+                routeSuggestions = tracked(tr("Estudando o traçado")) {
+                    withContext(Dispatchers.Default) {
+                        com.appdwg.core.RouteDesign.suggest(rp.pis.first(), rp.pis.last(), terrain, Template(rp.left, rp.right, rp.cut, rp.fill, rp.pavement),
+                            com.appdwg.core.RouteDesign.RouteRules(maxGrade, rp.speed, rp.emax, rp.spiral, avoid, rp.kValue)) { !isActive }
+                    }
+                }
+                if (routeSuggestions.isEmpty()) roadMessage = tr("Nenhum caminho pelo terreno entre a saída e a chegada.")
+            } catch (e: Exception) {
+                roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    fun clearRouteSuggestions() { routeSuggestions = emptyList() }
 
     /** Grades the app suggests for the road's axis. */
     var gradeSuggestions by mutableStateOf<List<com.appdwg.core.GradeSuggestion>>(emptyList())

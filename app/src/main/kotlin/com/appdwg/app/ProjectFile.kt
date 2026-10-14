@@ -437,6 +437,9 @@ data class RoadParams(
     val regions: List<RoadRegion> = emptyList(),
     val speed: Double = 60.0,
     val emax: Double = 8.0,
+    /** Radius and spiral of each PI (by index, the ends unused) from a suggested route; empty uses [radius] and [spiral]. */
+    val radii: List<Double> = emptyList(),
+    val spirals: List<Double> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("alignmentIndex", alignmentIndex)
@@ -450,6 +453,7 @@ data class RoadParams(
         terrain?.let { put("terrain", it) }
         put("regions", JSONArray(regions.map { it.toJson() }))
         put("speed", speed); put("emax", emax)
+        put("radii", JSONArray(radii)); put("spirals", JSONArray(spirals))
     }
 
     companion object {
@@ -478,6 +482,8 @@ data class RoadParams(
                 o.optString("terrain").ifEmpty { null },
                 o.optJSONArray("regions")?.let { a -> List(a.length()) { RoadRegion.fromJson(a.getJSONObject(it)) } }.orEmpty(),
                 o.optDouble("speed", 60.0), o.optDouble("emax", 8.0),
+                o.optJSONArray("radii")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty(),
+                o.optJSONArray("spirals")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty(),
             )
         }
     }

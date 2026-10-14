@@ -116,10 +116,36 @@ fun RoadDialog(
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedButton(onClick = { v.roadParams = rp; onDrawAxis() }) { Text(tr("Desenhar PIs na planta")) }
                                 OutlinedButton(enabled = vm.userPoints.size >= 2, onClick = {
-                                    rp = rp.copy(pis = vm.userPoints.map { com.appdwg.core.Point2(it.x, it.y) })
+                                    rp = rp.copy(pis = vm.userPoints.map { com.appdwg.core.Point2(it.x, it.y) }, radii = emptyList(), spirals = emptyList())
                                 }) { Text(tr("Usar pontos _POINTS")) }
-                                numField(rp.radius, tr("Raio ({0})", StationFormat.lengthUnit)) { rp = rp.copy(radius = it) }
-                                numField(rp.spiral, tr("Espiral Ls ({0}, 0 = sem)", StationFormat.lengthUnit), 190) { rp = rp.copy(spiral = it) }
+                                numField(rp.radius, tr("Raio ({0})", StationFormat.lengthUnit)) { rp = rp.copy(radius = it, radii = emptyList(), spirals = emptyList()) }
+                                numField(rp.spiral, tr("Espiral Ls ({0}, 0 = sem)", StationFormat.lengthUnit), 190) { rp = rp.copy(spiral = it, radii = emptyList(), spirals = emptyList()) }
+                            }
+                            HorizontalDivider()
+                            Text(tr("Traçado automático"), style = MaterialTheme.typography.labelLarge)
+                            Text(tr("Marque só a saída e a chegada (o primeiro e o último PI). O app procura caminhos pelo terreno dentro da rampa máxima, com raio mínimo pela velocidade ({0} km/h, e máx. {1} %), desviando de construções e água do OSM baixado.",
+                                f(rp.speed, 0), f(rp.emax, 1)), style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                numField(autoMaxGrade, tr("Rampa máxima %")) { autoMaxGrade = it }
+                                numField(rp.speed, tr("Velocidade (km/h)")) { if (it > 0) rp = rp.copy(speed = it) }
+                                OutlinedButton(enabled = rp.pis.size >= 2 && vm.tasks.isEmpty() && autoMaxGrade > 0, onClick = {
+                                    v.roadParams = rp; vm.suggestRoute(rp, autoMaxGrade)
+                                }) { Text(tr("Sugerir traçado")) }
+                            }
+                            vm.routeSuggestions.forEachIndexed { i, r ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("${i + 1}. " + routeTitle(r.kind), style = MaterialTheme.typography.bodyMedium, color = androidx.compose.ui.graphics.Color(ROUTE_COLORS[i % ROUTE_COLORS.size]))
+                                        Text(tr("{0} · {1} curvas · rampa máx. {2} % · corte ≈ {3} · aterro ≈ {4}", StationFormat.length(r.length, 0), r.pis.size - 2,
+                                            f(r.grade?.maxGrade ?: 0.0, 2), StationFormat.volume(r.grade?.cut ?: 0.0), StationFormat.volume(r.grade?.fill ?: 0.0)),
+                                            style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    TextButton(onClick = {
+                                        rp = rp.copy(alignmentIndex = -1, pis = r.pis.map { it.position }, radii = r.pis.map { it.radius }, spirals = r.pis.map { it.spiral },
+                                            pvis = r.grade?.pvis.orEmpty())
+                                        vm.clearRouteSuggestions()
+                                    }) { Text(tr("Usar")) }
+                                }
                             }
                         } else Text(tr("Usa o alinhamento do arquivo, com estaqueamento de 20 m."), style = MaterialTheme.typography.bodySmall)
                         val names = project.surfaces.map { it.name }.filter { !it.startsWith(ROAD_LABEL) }
@@ -378,3 +404,12 @@ private fun HaulSummary(r: CorridorResult, swell: Double, onBulletin: () -> Unit
 /** Transport moment: m³·km, or yd³·mi in imperial. */
 private fun haulMoment(m3m: Double) = if (com.appdwg.core.Display.imperial)
     StationFormat.grouped(m3m / StationFormat.CUBIC_YARD / 1609.344, 1) + " yd³·mi" else StationFormat.grouped(m3m / 1000, 1) + " m³·km"
+
+/** Colours of the suggested routes on the plan, in the order listed. */
+val ROUTE_COLORS = intArrayOf(0xFFE53935.toInt(), 0xFF8E24AA.toInt(), 0xFF43A047.toInt())
+
+private fun routeTitle(k: com.appdwg.core.RouteSuggestion.Kind) = when (k) {
+    com.appdwg.core.RouteSuggestion.Kind.SHORTEST -> tr("Mais curto")
+    com.appdwg.core.RouteSuggestion.Kind.BALANCED -> tr("Equilibrado")
+    com.appdwg.core.RouteSuggestion.Kind.GENTLEST -> tr("Mais suave (menos terraplenagem)")
+}
