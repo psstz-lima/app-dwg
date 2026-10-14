@@ -119,6 +119,8 @@ fun PlanView(
     layerColor: (String) -> Int?,
     /** Pictures loaded for the drawing's images, by file path. */
     rasters: Map<String, ImageBitmap>,
+    /** Very large pictures of the drawing's images, drawn tile by tile, by file path. */
+    tiledRasters: Map<String, TiledPicture> = emptyMap(),
     /** Picture laid over the surfaces, or null. */
     drape: Drape?,
     onTap: (Point2) -> Unit,
@@ -449,7 +451,7 @@ fun PlanView(
         }
 
         for (img in project.images) {
-            if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], colors) { toScreen(it, cam) }
+            if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], tiledRasters[img.file], colors) { toScreen(it, cam) }
         }
         // The picture laid over the surfaces covers only the terrain: it is drawn in the same layer
         // with SrcAtop, so it shows where the terrain images have pixels and nowhere else.
@@ -640,7 +642,7 @@ private fun DrawScope.drawBasemap(tiles: List<BasemapTile>, opacity: Float, toSc
     canvas.restore()
 }
 
-private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: PlanColors, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, tiles: TiledPicture?, colors: PlanColors, toScreen: (Point2) -> Offset) {
     val outline = android.graphics.Path()
     val b = img.boundary
     for (i in b.xs.indices) {
@@ -664,6 +666,12 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: P
         canvas.save()
         canvas.clipPath(outline)
         canvas.drawBitmap(bitmap.asAndroidBitmap(), matrix, Paint(Paint.FILTER_BITMAP_FLAG))
+        if (tiles != null) drawRasterTiles(img, tiles, canvas, toScreen)
+        canvas.restore()
+    } else if (tiles != null) {
+        canvas.save()
+        canvas.clipPath(outline)
+        drawRasterTiles(img, tiles, canvas, toScreen)
         canvas.restore()
     } else {
         val paint = Paint().apply {
@@ -677,6 +685,43 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: P
         val first = toScreen(Point2(b.xs[0], b.ys[0]))
         val label = Paint().apply { isAntiAlias = true; textSize = 12.sp.toPx(); color = paint.color }
         canvas.drawText(tr("Imagem: {0}", img.fileName), first.x + 8f, first.y - 8f, label)
+    }
+}
+
+/**
+ * The tiles of a very large drawing image that are on screen, sharper than its overview. The tiles
+ * live in the image's own pixels (x right, y up from the lower-left corner); the image may be
+ * rotated, so the screen is mapped back into those pixels to find them.
+ */
+private fun DrawScope.drawRasterTiles(img: PlanImage, tiles: TiledPicture, canvas: android.graphics.Canvas, toScreen: (Point2) -> Offset) {
+    tiles.version
+    // Image pixel (x, y up) to screen: affine, from the corner and one pixel along each side.
+    val o = toScreen(Point2(img.originX, img.originY))
+    val u = toScreen(Point2(img.originX + img.pixelU.x, img.originY + img.pixelU.y)) - o
+    val v = toScreen(Point2(img.originX + img.pixelV.x, img.originY + img.pixelV.y)) - o
+    val det = u.x * v.y - u.y * v.x
+    if (det == 0f) return
+    fun toPixel(sx: Float, sy: Float): Point2 {
+        val dx = sx - o.x; val dy = sy - o.y
+        return Point2(((dx * v.y - dy * v.x) / det).toDouble(), ((u.x * dy - u.y * dx) / det).toDouble())
+    }
+    val corners = listOf(toPixel(0f, 0f), toPixel(size.width, 0f), toPixel(0f, size.height), toPixel(size.width, size.height))
+    val view = Bounds(corners.minOf { it.x }, corners.minOf { it.y }, corners.maxOf { it.x }, corners.maxOf { it.y })
+    // Image pixels per screen pixel.
+    val perScreen = 1.0 / kotlin.math.hypot(u.x.toDouble(), u.y.toDouble())
+    fun screen(x: Double, y: Double) = Offset(o.x + u.x * x.toFloat() + v.x * y.toFloat(), o.y + u.y * x.toFloat() + v.y * y.toFloat())
+    val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    val matrix = android.graphics.Matrix()
+    for (p in tiles.visible(view, perScreen)) {
+        val tl = screen(p.plan.minX, p.plan.maxY); val tr = screen(p.plan.maxX, p.plan.maxY); val bl = screen(p.plan.minX, p.plan.minY)
+        val s = p.src
+        matrix.setPolyToPoly(floatArrayOf(s.left.toFloat(), s.top.toFloat(), s.right.toFloat(), s.top.toFloat(), s.left.toFloat(), s.bottom.toFloat()), 0,
+            floatArrayOf(tl.x, tl.y, tr.x, tr.y, bl.x, bl.y), 0, 3)
+        canvas.save()
+        canvas.concat(matrix)
+        canvas.clipRect(s)
+        canvas.drawBitmap(p.image.asAndroidBitmap(), 0f, 0f, paint)
+        canvas.restore()
     }
 }
 

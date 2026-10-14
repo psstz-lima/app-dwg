@@ -137,6 +137,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Raster files loaded for DXF images, by the path the drawing stores. */
     var rasters by mutableStateOf<Map<String, ImageBitmap>>(emptyMap())
         private set
+    /** Very large pictures of the drawing's images, drawn in tiles (placed in the image's own pixels), by file path. */
+    var tiledRasters by mutableStateOf<Map<String, TiledPicture>>(emptyMap())
+        private set
 
     /** Files loading in the background (images, xrefs), shown with their progress. */
     var tasks by mutableStateOf<List<LoadTask>>(emptyList())
@@ -848,8 +851,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         rasterError = null
         viewModelScope.launch {
             try {
+                if ((state as? ProjectState.Loaded)?.project?.images?.firstOrNull { it.file == file }?.let { tiledRaster(it, uri) } == true) { prefs.edit().putString(file, uri.toString()).apply(); return@launch }
                 val bitmap = tracked(tr("Imagem {0}", displayName(uri))) { t -> withContext(Dispatchers.IO) { decodeRaster(uri, t) } }
                 if (bitmap != null) {
+                    tiledRasters[file]?.close()
+                    tiledRasters = tiledRasters - file
                     rasters = rasters + (file to bitmap)
                     prefs.edit().putString(file, uri.toString()).apply()
                 } else {
@@ -868,12 +874,66 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         for (image in project.images) {
             val uri = prefs.getString(image.file, null)?.let(Uri::parse) ?: continue
             viewModelScope.launch {
+                if (runCatching { tiledRaster(image, uri) }.getOrDefault(false)) return@launch
                 val bitmap = tracked(tr("Imagem {0}", image.fileName)) { t ->
                     withContext(Dispatchers.IO) { runCatching { decodeRaster(uri, t) }.getOrNull() }
                 }
                 if (bitmap != null) rasters = rasters + (image.file to bitmap)
             }
         }
+    }
+
+    /**
+     * Opens a TIFF larger than [TILED_FROM] pixels for the drawing's image [img] as a [TiledPicture]
+     * laid in the image's own pixels (x right, y up), so a rotated image is drawn tile by tile like a
+     * drape. Its overview stands in [rasters]; the pyramid is built once in the background. False
+     * when the picture is not such a TIFF.
+     */
+    private suspend fun tiledRaster(img: com.appdwg.core.PlanImage, uri: Uri): Boolean {
+        val file = img.file
+        val app = getApplication<Application>()
+        val name = displayName(uri)
+        val t0 = System.nanoTime()
+        val tiles = withContext(Dispatchers.IO) {
+            val head = ByteArray(4).also { b -> input(uri)?.use { it.read(b) } }
+            val text = String(head, Charsets.ISO_8859_1)
+            if (!(text.startsWith("II*") || text.startsWith("II+") || text.startsWith("MM\u0000*") || text.startsWith("MM\u0000+"))) return@withContext null
+            val key = openCache.keyOf(uri, fileSize(uri)) { input(uri) } ?: return@withContext null
+            val fd = cloudCopies[uri]?.takeIf { it.exists() }?.let { android.os.ParcelFileDescriptor.open(it, android.os.ParcelFileDescriptor.MODE_READ_ONLY) }
+                ?: app.contentResolver.openFileDescriptor(uri, "r") ?: return@withContext null
+            val tp = runCatching {
+                TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, Bounds(0.0, 0.0, img.widthPx.toDouble(), img.heightPx.toDouble()))
+            }.getOrNull()
+            when {
+                tp == null -> { fd.close(); null }
+                maxOf(tp.width, tp.height) <= TILED_FROM -> { tp.close(); null }
+                else -> tp
+            }
+        } ?: return false
+        tiledRasters[file]?.close()
+        tiledRasters = tiledRasters + (file to tiles)
+        val ready = tiles.ready
+        android.util.Log.i("Gromatic", "imagem do desenho $name (em blocos): ${(System.nanoTime() - t0) / 1_000_000} ms, ${tiles.width}x${tiles.height}, pirâmide ${if (ready) "pronta" else "a fazer"}")
+        if (ready) {
+            withContext(Dispatchers.IO) { tiles.overview() }?.let { rasters = rasters + (file to it.asImageBitmap()) }
+            return true
+        }
+        // The close-up tiles show at once; the reduced copies for zooming out are made once, here.
+        viewModelScope.launch {
+            val t1 = System.nanoTime()
+            tracked(tr("Preparando {0} para o zoom", name)) { task ->
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                    val watcher = viewModelScope.launch { while (true) { task.step(tr("Reduções da imagem (feito uma vez)"), tiles.built); kotlinx.coroutines.delay(500) } }
+                    tiles.buildPyramid { ov ->
+                        watcher.cancel()
+                        if (tiledRasters[file] === tiles && ov != null) rasters = rasters + (file to ov.asImageBitmap())
+                        android.util.Log.i("Gromatic", "pirâmide $name: ${(System.nanoTime() - t1) / 1_000_000} ms")
+                        if (cont.isActive) cont.resumeWith(Result.success(Unit))
+                    }
+                }
+            }
+        }
+        return true
     }
 
     /**
@@ -2567,6 +2627,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     ProjectState.Failed(name, tr("Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?"))
                 } else {
                     rasters = emptyMap()
+                    tiledRasters.values.forEach { it.close() }
+                    tiledRasters = emptyMap()
                     drape = null
                     drapeMessage = null
                     sourceUri = uri

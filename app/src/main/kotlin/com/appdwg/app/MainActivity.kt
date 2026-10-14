@@ -821,6 +821,7 @@ private fun ProjectScreen(
                     hiddenLayers = hidden,
                     layerColor = layerColor,
                     rasters = rasters,
+                    tiledRasters = vm.tiledRasters.filterKeys { it !in vm.unloaded },
                     drape = drape,
                     onTap = {
                         // Tapping the same snapped point twice would add a zero-length leg.
