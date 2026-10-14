@@ -248,9 +248,10 @@ object Corridor {
         for (p in profile.pvis) { stations += p.station - p.curveLength / 2; stations += p.station + p.curveLength / 2; stations += p.station }
         val stas = stations.filter { it >= alignment.startStation - 1e-6 && it <= alignment.endStation + 1e-6 && profile.elevationAt(it) != null }
 
-        var unresolved = 0
         val sorted = regions.sortedBy { it.from }
-        val sections = stas.mapNotNull { sta ->
+        // Each station is independent: computed on all cores, kept in station order.
+        val built = Parallel.map(stas.size) { k ->
+            val sta = stas[k]
             val ri = sorted.indexOfLast { sta >= it.from - 1e-6 }.coerceAtLeast(0)
             val region = sorted[ri]
             var tpl = region.template
@@ -268,8 +269,10 @@ object Corridor {
                 region.rightTarget?.let { line -> reach(c, right, line)?.let { w -> tpl = tpl.copy(right = tpl.right.copy(laneWidth = w)) } }
             }
             val se = interpolateSe(superelevation, sta)
-            section(alignment, profile, terrain, tpl, sta, se)?.also { if (it.second) unresolved++ }?.first
+            section(alignment, profile, terrain, tpl, sta, se)
         }
+        val unresolved = built.count { it?.second == true }
+        val sections = built.mapNotNull { it?.first }
         require(sections.size >= 2) { tr("o eixo não tem greide em pelo menos duas seções") }
 
         val top = surface(name, sections) { it.top }
