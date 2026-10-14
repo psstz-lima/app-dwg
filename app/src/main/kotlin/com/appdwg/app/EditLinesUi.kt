@@ -56,7 +56,7 @@ enum class LineOp(private val labelPt: String) {
 enum class MoveBy(private val labelPt: String) { DELTA("ΔX / ΔY"), POLAR("Distância + azimute"), POINTS("Ponto a ponto"); val label: String get() = tr(labelPt) }
 
 /** What the plan is picking for the line editor. */
-enum class EditPick { SELECT, WINDOW, FROM_TO, CENTER, AXIS }
+enum class EditPick { SELECT, WINDOW, FROM_TO, CENTER, AXIS, DRAW }
 
 /** Line editor settings and picks, alive while the editor is open. */
 class EditState {
@@ -165,7 +165,24 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, on
                 EditPick.CENTER -> tr("Toque o centro da rotação.")
                 EditPick.AXIS -> tr("Toque dois pontos do eixo de espelhamento ({0}/2).", e.picked.size)
                 EditPick.SELECT -> tr("{0} linha(s) selecionada(s). Toque linhas para marcar ou desmarcar.", e.selected.size)
+                EditPick.DRAW -> tr("Nova linha: toque os vértices ({0}). O toque encaixa em pontos e vértices.", e.picked.size)
             }, style = MaterialTheme.typography.bodyMedium)
+            if (e.pick == EditPick.DRAW) {
+                fun create(closed: Boolean) {
+                    val p = e.picked
+                    vm.editLines(emptyList(), listOf(Polyline(e.layer.ifBlank { "_EDICAO" }, DoubleArray(p.size) { p[it].x }, DoubleArray(p.size) { p[it].y }, closed, e.color)), false)
+                    e.picked = emptyList()
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { e.picked = e.picked.dropLast(1) }, enabled = e.picked.isNotEmpty()) { Text(tr("Desfazer ponto")) }
+                    TextButton(onClick = { create(false) }, enabled = e.picked.size >= 2) { Text(tr("Criar linha")) }
+                    TextButton(onClick = { create(true) }, enabled = e.picked.size >= 3) { Text(tr("Criar polígono")) }
+                    TextButton(onClick = { vm.undoLines() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
+                    TextButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT }) { Text(tr("Selecionar linhas")) }
+                    TextButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT; onDone() }) { Text(tr("Concluir")) }
+                }
+                return@Column
+            }
             one?.let { l ->
                 val i = LineOps.info(l)
                 Text(tr("Camada {0} · {1} vértices · 2D {2}", l.layer, i.vertices, StationFormat.length(i.length2d, 3)) +
@@ -175,6 +192,7 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, on
                     style = MaterialTheme.typography.bodySmall)
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { e.pick = EditPick.DRAW; e.picked = emptyList(); e.selected = emptyList() }) { Text(tr("Nova linha")) }
                 TextButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }) { Text(tr("Janela")) }
                 TextButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty()) { Text(tr("Limpar seleção")) }
                 TextButton(onClick = onOperation, enabled = e.selected.isNotEmpty()) { Text(tr("Operação…")) }

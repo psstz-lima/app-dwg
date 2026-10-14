@@ -720,9 +720,10 @@ private fun ProjectScreen(
     fun allTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, tr("Medir"), measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, tr("Pontos"), addingPoints) { showPoints = true })
-        if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) add(RailTool(GIcon.LINES, tr("Linhas"), editing) {
+        add(RailTool(GIcon.LINES, tr("Linhas"), editing) {
             editing = !editing; measuring = false; showSection = false; showProfile = false; show3d = false
-            edit.pick = EditPick.SELECT
+            // Without lines to pick, the editor starts drawing a new one.
+            edit.pick = if (project.polylines.isEmpty()) EditPick.DRAW else EditPick.SELECT; edit.picked = emptyList()
         })
         if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) add(RailTool(GIcon.LAYERS, tr("Camadas")) { showLayers = true })
         if (project.surfaces.isNotEmpty()) {
@@ -878,6 +879,7 @@ private fun ProjectScreen(
                                 edit.picked = edit.picked + it
                                 if (edit.picked.size >= 2) { edit.pick = EditPick.SELECT; showLineOp = true }
                             }
+                            editing && edit.pick == EditPick.DRAW -> if (it != edit.picked.lastOrNull()) edit.picked = edit.picked + it
                             editing && edit.pick == EditPick.CENTER -> { edit.picked = listOf(it); edit.pick = EditPick.SELECT; showLineOp = true }
                             genPick == GenPick.AREA_DRAW -> if (it != gen.drawnArea.lastOrNull()) gen.drawnArea = gen.drawnArea + it
                             drawingPlatform -> if (it != platformOutline.lastOrNull()) platformOutline = platformOutline + it
@@ -898,10 +900,10 @@ private fun ProjectScreen(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
-                    measure = if (measuring) measurePoints else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
+                    measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
                     snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
-                        (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS)),
+                        (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS, EditPick.DRAW)),
                     selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||
                         (editing && edit.pick == EditPick.SELECT),
                     selectedLines = if (editing) edit.selected else emptyList(),
@@ -1163,7 +1165,9 @@ private fun ProjectScreen(
             if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
             if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.fillMaxWidth())
             if (measuring) MeasureCard(measurement, onUndo = { measurePoints = measurePoints.dropLast(1) }, onClear = { measurePoints = emptyList() },
-                onDone = { measuring = false }, modifier = Modifier.fillMaxWidth())
+                onDone = { measuring = false }, modifier = Modifier.fillMaxWidth(),
+                saved = v.savedMeasures.size, onSave = { v.savedMeasures = v.savedMeasures + listOf(measurePoints); measurePoints = emptyList() },
+                onClearSaved = { v.savedMeasures = emptyList() })
             selectedPoint?.let { pt ->
                 val q = remember(project, pt, frozenLayers) { PointQuery.at(project, Point2(pt.x, pt.y), frozenLayers.toSet()) }
                 PointCard(pt, q.alignment?.takeIf { !it.stationOffset.outside }, q.terrainElevation,
@@ -1552,7 +1556,7 @@ private fun ProjectScreen(
         )
     }
 
-    editingNote?.let { (n, isNew) -> key(n.id) { NoteDialog(vm, n, isNew, onDismiss = { editingNote = null }) } }
+    editingNote?.let { (n, isNew) -> key(n.id) { NoteDialog(vm, n, isNew, onDismiss = { editingNote = null }, onSaveAndNew = { editingNote = null; addingNote = true }) } }
 
     if (showGps) {
         GpsDialog(vm.gnss, crs, { showGps = false; showCrs = true }, gpsFollow, { gpsFollow = it },
@@ -1758,7 +1762,10 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
 
 /** Results of the measurement being taken, with undo, clear and done. */
 @Composable
-private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier) {
+private fun MeasureCard(
+    m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier,
+    saved: Int = 0, onSave: () -> Unit = {}, onClearSaved: () -> Unit = {},
+) {
     // Taps on the card must not reach the plan underneath and add a point.
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(12.dp)) {
@@ -1788,11 +1795,14 @@ private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit
                 m.area?.let { Line(tr("Área"), Measure.area(it)) }
                 m.perimeter?.let { Line(tr("Perímetro"), StationFormat.length(it, 3)) }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            if (saved > 0) Text(tr("{0} medição(ões) salva(s) na planta (M1, M2…).", saved), style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
                 if (m != null) {
                     TextButton(onClick = onUndo) { Text(tr("Desfazer")) }
                     TextButton(onClick = onClear) { Text(tr("Limpar")) }
+                    if (m.legs.isNotEmpty()) TextButton(onClick = onSave) { Text(tr("Salvar e nova")) }
                 }
+                if (saved > 0) TextButton(onClick = onClearSaved) { Text(tr("Apagar salvas")) }
                 TextButton(onClick = onDone) { Text(tr("Concluir")) }
             }
         }

@@ -1152,3 +1152,12 @@ Fechar projeto	Close project
 normal	normal
 alta	high
 máxima	highest
+Nova linha: toque os vértices ({0}). O toque encaixa em pontos e vértices.	New line: tap the vertices ({0}). Taps snap to points and vertices.
+Desfazer ponto	Undo point
+Criar linha	Create line
+Criar polígono	Create polygon
+Selecionar linhas	Select lines
+Nova linha	New line
+{0} medição(ões) salva(s) na planta (M1, M2…).	{0} measurement(s) kept on the plan (M1, M2…).
+Salvar e nova	Save and new
+Apagar salvas	Delete kept

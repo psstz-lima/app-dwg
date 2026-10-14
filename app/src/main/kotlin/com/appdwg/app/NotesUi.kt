@@ -48,7 +48,7 @@ fun thumbnail(file: File, maxSide: Int = 800): ImageBitmap? {
 
 /** Creates or edits a field note: text, elevation and a photo from the camera or the gallery. */
 @Composable
-fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismiss: () -> Unit) {
+fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismiss: () -> Unit, onSaveAndNew: (() -> Unit)? = null) {
     val context = LocalContext.current
     var text by remember { mutableStateOf(initial.text) }
     var z by remember { mutableStateOf(if (initial.z.isNaN()) "" else StationFormat.lengthValue(initial.z)) }
@@ -70,6 +70,10 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
         },
         dismissButton = {
             Row {
+                if (isNew && onSaveAndNew != null) TextButton(onClick = {
+                    vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
+                    onSaveAndNew()
+                }) { Text(tr("Salvar e nova")) }
                 if (!isNew) TextButton(onClick = { vm.deleteNote(initial); onDismiss() }) { Text(tr("Apagar")) }
                 TextButton(onClick = onDismiss) { Text(tr("Cancelar")) }
             }

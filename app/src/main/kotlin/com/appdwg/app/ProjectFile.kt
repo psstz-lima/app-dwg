@@ -24,6 +24,8 @@ class ViewState(project: LandXmlProject) {
     var colorOverrides by mutableStateOf<Map<String, Int>>(emptyMap())
     var measuring by mutableStateOf(false)
     var measurePoints by mutableStateOf<List<Point2>>(emptyList())
+    /** Measurements kept with "Salvar e nova", drawn on the plan numbered M1, M2… */
+    var savedMeasures by mutableStateOf<List<List<Point2>>>(emptyList())
     var showSection by mutableStateOf(false)
     var sectionAlignment by mutableStateOf(0)
     var sectionStation by mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0)
@@ -289,6 +291,7 @@ class ProjectDoc(
             put("colors", JSONObject(v.colorOverrides as Map<*, *>))
             put("measuring", v.measuring)
             put("measure", JSONArray(v.measurePoints.map { JSONArray().put(it.x).put(it.y) }))
+            put("measures", JSONArray(v.savedMeasures.map { m -> JSONArray(m.map { JSONArray().put(it.x).put(it.y) }) }))
             put("showSection", v.showSection)
             put("sectionAlignment", v.sectionAlignment)
             put("sectionStation", v.sectionStation)
@@ -340,6 +343,9 @@ class ProjectDoc(
             v.measuring = o.optBoolean("measuring")
             o.optJSONArray("measure")?.let { a ->
                 v.measurePoints = List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } }
+            }
+            o.optJSONArray("measures")?.let { all ->
+                v.savedMeasures = List(all.length()) { k -> all.getJSONArray(k).let { a -> List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } } } }
             }
             v.showSection = o.optBoolean("showSection")
             v.sectionAlignment = o.optInt("sectionAlignment")
