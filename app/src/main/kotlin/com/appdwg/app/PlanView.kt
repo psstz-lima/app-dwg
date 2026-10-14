@@ -68,6 +68,14 @@ private const val DETAIL_DELAY_MS = 250L
 private const val DETAIL_MARGIN = 1.3
 private const val DETAIL_MAX_PX = 3072
 
+/** Above this much to draw (vertices, ~20 per text) the drawing is cached as a picture between gestures. */
+private const val HEAVY_SCENE = 150_000
+/** The cached picture covers the screen and this much more, so short pans need no redraw. */
+private const val CACHE_MARGIN = 1.3
+
+/** The drawing's vector layer as drawn for [cam], valid while [key] (data and styles) is the same. */
+private class VectorCache(val bitmap: ImageBitmap, val cam: Camera, val key: Any)
+
 /** Pixels per metre from which the triangle mesh is drawn over the terrain. */
 private const val MESH_MIN_SCALE = 1.5
 
@@ -299,6 +307,80 @@ fun PlanView(
         (-(world.y - origin.y - cam.centerY) * cam.scale + size.height / 2.0).toFloat(),
     )
 
+    /** Where a plan point falls in a drawing area of this scope's size, seen through [cam]. */
+    // [this.size]: the composable's own `size` (the screen) would win over the receiver's here.
+    fun DrawScope.ts(world: Point2, cam: Camera) = Offset(
+        ((world.x - origin.x - cam.centerX) * cam.scale + this.size.width / 2.0).toFloat(),
+        (-(world.y - origin.y - cam.centerY) * cam.scale + this.size.height / 2.0).toFloat(),
+    )
+
+    /**
+     * The drawing's lines, hatches, mesh, contours, alignments and texts: everything that only
+     * changes with the data, not with each frame. Drawn straight on screen, or into the cache.
+     */
+    fun DrawScope.drawVectors(cam: Camera) {
+        val s = cam.scale.toFloat()
+        withTransform({
+            translate(this.size.width / 2f, this.size.height / 2f)
+            scale(s, -s, pivot = Offset.Zero)
+            translate(-cam.centerX.toFloat(), -cam.centerY.toFloat())
+        }) {
+            // The triangle mesh only helps once zoomed in; from afar it hides the shaded terrain.
+            if (cam.scale >= MESH_MIN_SCALE) for ((name, path) in scene.meshes) {
+                if (name !in hiddenLayers && styles[name]?.triangles != false) drawPath(path, colors.mesh, style = Stroke(width = 1f / s))
+            }
+            for ((i, sf) in project.surfaces.filter { it.name in bordered }.withIndex()) {
+                if (sf.name !in hiddenLayers) borders.getOrNull(i)?.let { drawPath(it, colors.contourMajor, style = Stroke(width = 2.5f / s)) }
+            }
+            // 3D models seen from above: their projection filled, a little see-through.
+            for ((layer, color, path) in scene.models) {
+                if (layer in hiddenLayers) continue
+                drawPath(path, Color(0xFF000000.toInt() or color).copy(alpha = 0.55f))
+                drawPath(path, Color(0xFF000000.toInt() or color).copy(alpha = 0.9f), style = Stroke(width = 0.6f / s))
+            }
+            fun Style.paint() = (if (byLayer) layerColor(layer) else color)?.let { Color(it) } ?: colors.drawing
+            for ((key, path) in scene.hatches) {
+                if (key.layer in hiddenLayers) continue
+                drawPath(path, key.paint().copy(alpha = 0.45f))
+            }
+            for ((key, path) in scene.drawing) {
+                if (key.layer in hiddenLayers) continue
+                drawPath(path, key.paint(), style = Stroke(width = 1.5f / s))
+            }
+            contours?.let { c ->
+                drawPath(c.minor, colors.contour.copy(alpha = 0.8f), style = Stroke(width = 1f / s))
+                drawPath(c.major, colors.contourMajor, style = Stroke(width = 2f / s))
+            }
+            for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
+        }
+        contours?.let { c -> drawContourLabels(c, cam, colors) { ts(it, cam) } }
+
+        drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { ts(it, cam) }
+    }
+
+    // Large drawings are drawn once into a picture after each gesture (off the main thread) and
+    // that picture is moved and scaled while panning and zooming, so frames stay fast.
+    val dens = androidx.compose.ui.platform.LocalDensity.current
+    val heavy = scene.weight + project.texts.size * 20 > HEAVY_SCENE
+    val layerColors = scene.layers.associateWith(layerColor)
+    val vectorKey = listOf(scene, hiddenLayers, styles, colors, contours, layerColors, project.texts)
+    var vectorCache by remember(project) { mutableStateOf<VectorCache?>(null) }
+    LaunchedEffect(frame, size, vectorKey, heavy) {
+        if (!heavy) { vectorCache = null; return@LaunchedEffect }
+        val cam = camera ?: return@LaunchedEffect
+        if (size.width <= 0) return@LaunchedEffect
+        delay(DETAIL_DELAY_MS)
+        val snap = Camera(cam.centerX, cam.centerY, cam.scale)
+        val w = (size.width * CACHE_MARGIN).toInt().coerceAtMost(4096)
+        val h = (size.height * CACHE_MARGIN).toInt().coerceAtMost(4096)
+        vectorCache = withContext(Dispatchers.Default) {
+            val bmp = ImageBitmap(w, h)
+            androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(dens, androidx.compose.ui.unit.LayoutDirection.Ltr,
+                androidx.compose.ui.graphics.Canvas(bmp), androidx.compose.ui.geometry.Size(w.toFloat(), h.toFloat())) { drawVectors(snap) }
+            VectorCache(bmp, snap, vectorKey)
+        }
+    }
+
     Canvas(
         modifier = modifier
             .clipToBounds()
@@ -380,42 +462,16 @@ fun PlanView(
         }
         if (overlay != null) drawTerrain(overlay, alpha = 0.9f) { toScreen(it, cam) }
 
-        withTransform({
-            translate(size.width / 2f, size.height / 2f)
-            scale(s, -s, pivot = Offset.Zero)
-            translate(-cam.centerX.toFloat(), -cam.centerY.toFloat())
-        }) {
-            // The triangle mesh only helps once zoomed in; from afar it hides the shaded terrain.
-            if (cam.scale >= MESH_MIN_SCALE) for ((name, path) in scene.meshes) {
-                if (name !in hiddenLayers && styles[name]?.triangles != false) drawPath(path, colors.mesh, style = Stroke(width = 1f / s))
-            }
-            for ((i, sf) in project.surfaces.filter { it.name in bordered }.withIndex()) {
-                if (sf.name !in hiddenLayers) borders.getOrNull(i)?.let { drawPath(it, colors.contourMajor, style = Stroke(width = 2.5f / s)) }
-            }
-            // 3D models seen from above: their projection filled, a little see-through.
-            for ((layer, color, path) in scene.models) {
-                if (layer in hiddenLayers) continue
-                drawPath(path, Color(0xFF000000.toInt() or color).copy(alpha = 0.55f))
-                drawPath(path, Color(0xFF000000.toInt() or color).copy(alpha = 0.9f), style = Stroke(width = 0.6f / s))
-            }
-            fun Style.paint() = (if (byLayer) layerColor(layer) else color)?.let { Color(it) } ?: colors.drawing
-            for ((key, path) in scene.hatches) {
-                if (key.layer in hiddenLayers) continue
-                drawPath(path, key.paint().copy(alpha = 0.45f))
-            }
-            for ((key, path) in scene.drawing) {
-                if (key.layer in hiddenLayers) continue
-                drawPath(path, key.paint(), style = Stroke(width = 1.5f / s))
-            }
-            contours?.let { c ->
-                drawPath(c.minor, colors.contour.copy(alpha = 0.8f), style = Stroke(width = 1f / s))
-                drawPath(c.major, colors.contourMajor, style = Stroke(width = 2f / s))
-            }
-            for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
-        }
-        contours?.let { c -> drawContourLabels(c, cam, colors) { toScreen(it, cam) } }
-
-        drawTexts(project.texts, hiddenLayers, layerColor, cam, colors) { toScreen(it, cam) }
+        val cache = vectorCache?.takeIf { heavy && it.key == vectorKey }
+        if (cache != null) {
+            // The cached picture, placed by the camera it was drawn with.
+            val k = cam.scale / cache.cam.scale
+            val w = cache.bitmap.width; val h = cache.bitmap.height
+            val ox = (-w / 2.0 / cache.cam.scale + cache.cam.centerX - cam.centerX) * cam.scale + size.width / 2.0
+            val oy = size.height / 2.0 - (cache.cam.centerY - cam.centerY) * cam.scale - k * h / 2.0
+            drawImage(cache.bitmap, dstOffset = IntOffset(ox.roundToInt(), oy.roundToInt()),
+                dstSize = IntSize((w * k).roundToInt().coerceAtLeast(1), (h * k).roundToInt().coerceAtLeast(1)))
+        } else drawVectors(cam)
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors, pointLabels) { toScreen(it, cam) }
         if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels) { toScreen(it, cam) }
@@ -650,6 +706,10 @@ private class Scene(
     val alignments: List<Path>,
     /** Per model element: layer, colour and the plan path of its triangles. */
     val models: List<Triple<String, Int, Path>> = emptyList(),
+    /** Vertices to draw, to tell a light drawing from a heavy one. */
+    val weight: Int = 0,
+    /** CAD layers used, for keying the cached picture on their colours. */
+    val layers: Set<String> = emptySet(),
 ) {
     companion object {
         fun build(project: LandXmlProject, origin: Point2): Scene {
@@ -703,7 +763,10 @@ private class Scene(
                 }
                 Triple(m.layer, m.color, path)
             }
-            return Scene(mesh, drawing, hatches, alignments, models)
+            val weight = project.polylines.sumOf { it.xs.size } + project.hatches.sumOf { h -> h.loops.sumOf { it.xs.size } } +
+                (if (mesh.isEmpty()) 0 else project.surfaces.sumOf { it.triangleCount * 3 }) + project.models.sumOf { it.triangles.size }
+            val layers = (project.polylines.map { it.layer } + project.hatches.map { it.layer } + project.texts.map { it.layer }).toSet()
+            return Scene(mesh, drawing, hatches, alignments, models, weight, layers)
         }
     }
 }
@@ -1017,3 +1080,4 @@ private fun DrawScope.drawContourLabels(c: ContourPaths, cam: Camera, colors: Pl
         lastX = sp.x; lastY = sp.y
     }
 }
+
