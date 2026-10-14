@@ -143,6 +143,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     var showRecent by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showAppearance by remember { mutableStateOf(false) }
+    var showNewProject by remember { mutableStateOf(false) }
     var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
     val saver = rememberLauncherForActivityResult(CreateDocumentAt("application/octet-stream", ::start)) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
@@ -217,6 +218,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         },
     ) { padding ->
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
+        if (showNewProject) NewProjectDialog(onCreate = { lat, lon -> showNewProject = false; viewModel.newProject(lat, lon) }, onDismiss = { showNewProject = false })
         if (showAppearance) AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
             onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false },
             units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
@@ -265,7 +267,8 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                 Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).zIndex(1f)) { Text(msg, Modifier.padding(12.dp)) }
             }
             when (state) {
-                ProjectState.Empty -> EmptyState(openFile, if (hasDrive) openFromDrive else null)
+                ProjectState.Empty -> EmptyState(openFile, if (hasDrive) openFromDrive else null,
+                    onNewProject = { if (viewModel.pro.isPro) showNewProject = true else viewModel.proRequested = true })
                 is ProjectState.Loading -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     LoadProgress(state.task)
                 }
@@ -308,7 +311,7 @@ private fun FreeHint(modifier: Modifier, onPro: () -> Unit) {
 }
 
 @Composable
-private fun EmptyState(openFile: () -> Unit, openDrive: (() -> Unit)?) {
+private fun EmptyState(openFile: () -> Unit, openDrive: (() -> Unit)?, onNewProject: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -325,8 +328,55 @@ private fun EmptyState(openFile: () -> Unit, openDrive: (() -> Unit)?) {
             Button(onClick = openFile) { Text(tr("Abrir arquivo")) }
             openDrive?.let { androidx.compose.material3.OutlinedButton(onClick = it) { Text(tr("☁ Abrir do Google Drive")) } }
         }
+        Spacer(Modifier.height(24.dp))
+        Text(tr("Sem arquivo? Comece pelo mapa e baixe terreno e OpenStreetMap da área."), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.material3.OutlinedButton(onClick = onNewProject) { Text(tr("Novo projeto pelo mapa")) }
     }
 }
+
+/**
+ * Where a new project starts: a latitude and longitude, the device's last known position when the
+ * app may read it. The project's system is the UTM zone there.
+ */
+@Composable
+private fun NewProjectDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val last = remember {
+        runCatching {
+            val ok = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!ok) null else {
+                val lm = context.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+                @Suppress("MissingPermission")
+                lm.getProviders(true).mapNotNull { lm.getLastKnownLocation(it) }.maxByOrNull { it.time }
+            }
+        }.getOrNull()
+    }
+    var text by remember { mutableStateOf(last?.let { String.format(java.util.Locale.ROOT, "%.6f, %.6f", it.latitude, it.longitude) } ?: "") }
+    // "lat, long" with decimal points; with decimal commas, a space or ";" between them.
+    val separators = if ('.' in text) Regex("[,;\\s]+") else Regex("[;\\s]+")
+    val parts = text.trim().split(separators).filter { it.isNotEmpty() }.map { it.replace(',', '.').toDoubleOrNull() }
+    val parsed = parts.takeIf { it.size == 2 && it[0] != null && it[1] != null && it[0]!! in -84.0..84.0 && it[1]!! in -180.0..180.0 }?.let { it[0]!! to it[1]!! }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("Novo projeto pelo mapa")) },
+        confirmButton = { TextButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Criar")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancelar")) } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedTextField(text, { text = it }, label = { Text(tr("Latitude, longitude do centro")) },
+                    placeholder = { Text("-19.920, -43.940") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Text(if (last != null) tr("Preenchido com a última posição do aparelho.") else tr("Digite em graus decimais, como aparece no Google Maps."),
+                    style = MaterialTheme.typography.bodySmall)
+                Text(tr("O sistema de coordenadas será o UTM do local (dá para trocar depois) e o mapa de fundo fica ligado."), style = MaterialTheme.typography.bodySmall)
+            }
+        },
+    )
+}
+
 
 @Composable
 private fun Message(text: String, openFile: () -> Unit, locate: (() -> Unit)? = null) {
@@ -397,6 +447,8 @@ private fun ProjectScreen(
     // Export: dialog, chosen kind waiting for the save picker, and the screen picture for PNG/PDF.
     var showExport by remember(fileName) { mutableStateOf(false) }
     var showGoTo by remember(fileName) { mutableStateOf(false) }
+    var showArea by remember(fileName) { mutableStateOf(false) }
+    LaunchedEffect(vm.areaRequested) { if (vm.areaRequested) { vm.areaRequested = false; showArea = true } }
     var showCalc by remember(fileName) { mutableStateOf(false) }
     var showBasemap by remember { mutableStateOf(false) }
     // GNSS: dialog, following the position, the project's UTM zone and the position in project coordinates.
@@ -676,6 +728,7 @@ private fun ProjectScreen(
         add(RailTool(GIcon.CALIBRATE, calibLabel, v.calibrationOn) { showCalibration = true })
         add(RailTool(GIcon.CALC, tr("Cálculos")) { showCalc = true })
         add(RailTool(GIcon.MAP, tr("Mapa"), vm.basemap.enabled) { showBasemap = true })
+        add(RailTool(GIcon.DOWNLOAD, tr("Baixar dados")) { showArea = true })
         add(RailTool(GIcon.GOTO, tr("Ir para")) { showGoTo = true })
         add(RailTool(GIcon.EXPORT, tr("Exportar")) { showExport = true })
         if (vm.hasReferences) add(RailTool(GIcon.REFS, tr("Referências")) { showReferences = true })
@@ -882,6 +935,7 @@ private fun ProjectScreen(
                     zoom = planZoom,
                     pointLabels = v.pointLabels,
                     surfaceStyle = { v.styleOf(it) },
+                    fallbackBounds = v.area,
                     marks = vm.asBuilt?.let { r -> r.rows.map { Point2(it.point.x, it.point.y) to asBuiltColor(r.status(it)) } }.orEmpty(),
                 )
 
@@ -1427,6 +1481,12 @@ private fun ProjectScreen(
     if (showCalc) CalcDialog(vm, project, onDismiss = { showCalc = false })
     if (showBasemap) BasemapDialog(vm.basemap, crs, { showBasemap = false; showCrs = true }, project.bounds, viewport, onDismiss = { showBasemap = false })
     if (showCrs) CrsDialog(vm, crs, onDismiss = { showCrs = false })
+
+    if (showArea) {
+        AreaDialog(vm, viewport, v.measurePoints, onDrawArea = {
+            showArea = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
+        }, onDismiss = { showArea = false })
+    }
 
     if (showGoTo) {
         GoToDialog(project.copy(points = vm.userPoints), onGo = { p ->

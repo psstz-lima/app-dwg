@@ -183,8 +183,10 @@ fun PlanView(
     arrows: List<Pair<Point2, Double>> = emptyList(),
     /** Display style of each surface (mesh, border, contours, elevations). */
     surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
+    /** Area to show while the project has nothing in it yet. */
+    fallbackBounds: Bounds? = null,
 ) {
-    val bounds = project.bounds ?: return
+    val bounds = project.bounds ?: fallbackBounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
     // so the view stays where it was.
     val origin = remember(viewKey) { bounds.center }

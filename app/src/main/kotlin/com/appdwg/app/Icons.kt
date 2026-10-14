@@ -44,6 +44,7 @@ enum class GIcon(val path: String) {
     EXIT_FULLSCREEN("M20 10h-6V4 M14 10l6-6 M4 14h6v6 M10 14l-6 6"),
     PLUS("M12 5v14 M5 12h14"),
     MINUS("M5 12h14"),
+    DOWNLOAD("M12 3v12 M7 10l5 5 5-5 M5 20h14"),
     LOCK("M6 11h12v10H6z M8.5 11V7.5a3.5 3.5 0 0 1 7 0V11"),
     ;
 

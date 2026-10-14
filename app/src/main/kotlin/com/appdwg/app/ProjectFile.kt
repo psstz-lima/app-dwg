@@ -61,6 +61,8 @@ class ViewState(project: LandXmlProject) {
     var coordDigits by mutableStateOf(3)
     /** Coordinate system of the project; null = from the drawing's EPSG, else SIRGAS 2000 / UTM 23S. */
     var crs by mutableStateOf<com.appdwg.core.Crs?>(null)
+    /** Area shown while the project has nothing of its own yet (a new project from the map). */
+    var area by mutableStateOf<com.appdwg.core.Bounds?>(null)
     /** How each surface is drawn, by name; surfaces not listed use the default style. */
     var surfaceStyles by mutableStateOf<Map<String, SurfaceStyle>>(emptyMap())
 
@@ -315,6 +317,7 @@ class ProjectDoc(
             put("pointLabels", v.pointLabels)
             put("coordDigits", v.coordDigits)
             v.crs?.let { put("crs", CrsJson.toJson(it)) }
+            v.area?.let { a -> put("area", JSONArray(listOf(a.minX, a.minY, a.maxX, a.maxY))) }
             put("surfaceStyles", JSONObject().apply { v.surfaceStyles.forEach { (k, st) -> put(k, st.toJson()) } })
         }
 
@@ -364,6 +367,7 @@ class ProjectDoc(
             v.pointLabels = o.optBoolean("pointLabels", true)
             v.coordDigits = o.optInt("coordDigits", 3).coerceIn(0, 6)
             v.crs = o.optJSONObject("crs")?.let { runCatching { CrsJson.fromJson(it) }.getOrNull() }
+            o.optJSONArray("area")?.takeIf { it.length() == 4 }?.let { a -> v.area = com.appdwg.core.Bounds(a.getDouble(0), a.getDouble(1), a.getDouble(2), a.getDouble(3)) }
             o.optJSONObject("surfaceStyles")?.let { ss -> v.surfaceStyles = ss.keys().asSequence().associateWith { SurfaceStyle.fromJson(ss.getJSONObject(it)) } }
         }
     }

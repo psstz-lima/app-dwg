@@ -204,8 +204,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** The open, or the file being opened, so a download can be cancelled. */
     private var openJob: kotlinx.coroutines.Job? = null
 
-    private suspend fun <T> tracked(label: String, block: suspend (LoadTask) -> T): T {
-        val task = LoadTask(label)
+    private suspend fun <T> tracked(label: String, onCancel: (() -> Unit)? = null, block: suspend (LoadTask) -> T): T {
+        val task = LoadTask(label, onCancel)
         tasks = tasks + task
         try {
             return block(task)
@@ -956,6 +956,153 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         return Unit
+    }
+
+    // ---- Area data: terrain (Copernicus DEM) and OpenStreetMap ----
+
+    /**
+     * Starts an empty project around ([lat], [lon]): its coordinate system is the UTM zone there
+     * (SIRGAS 2000 in South America, WGS 84 elsewhere), the background map is on, and the area
+     * download opens, to bring in terrain and OpenStreetMap data.
+     */
+    fun newProject(lat: Double, lon: Double) {
+        val zone = com.appdwg.core.Gis.utmZoneOf(lon)
+        val crs = if (lon in -92.0..-25.0 && lat in -60.0..15.0) com.appdwg.core.CrsCatalog.utmFor(lon, lat < 0)
+            else com.appdwg.core.CrsCatalog.byEpsg(((if (lat < 0) 32700 else 32600) + zone).toString()) ?: com.appdwg.core.CrsCatalog.utmFor(lon, lat < 0)
+        val app = getApplication<Application>()
+        val dir = java.io.File(app.filesDir, "projetos").apply { mkdirs() }
+        val stamp = java.text.SimpleDateFormat("yyyy-MM-dd-HHmm", java.util.Locale.ROOT).format(java.util.Date())
+        val file = java.io.File(dir, "novo-projeto-$stamp.xml")
+        file.writer(Charsets.UTF_8).use { w -> com.appdwg.core.LandXmlWriter.write(emptyList(), emptyList(), emptyList(), w, crs.epsg) }
+        val uri = Uri.fromFile(file)
+        projectMessage = null
+        viewModelScope.launch {
+            if (!openNow(uri, allowEmpty = true)) return@launch
+            remember(uri)
+            projectUri = null
+            val c = crs.fromWgs84(lat, lon)
+            view?.let { v -> v.crs = crs; v.area = Bounds(c.x - 1000, c.y - 1000, c.x + 1000, c.y + 1000) }
+            basemap.enable(true)
+            savedJson = currentDoc()?.toJson()?.toString()
+            areaRequested = true
+        }
+    }
+
+    /** Set to open the area download (a new project from the map starts there). */
+    var areaRequested by mutableStateOf(false)
+
+    /** Result or error of the last area download. */
+    var areaMessage by mutableStateOf<String?>(null)
+        private set
+    private var areaJob: Job? = null
+
+    /**
+     * Downloads data for the plan rectangle [area] (project coordinates): the terrain as a surface
+     * (TIN within [tolerance] m, optionally also the grid as a GeoTIFF) and OpenStreetMap [osm]
+     * kinds as layered lines. Each result is saved in the app's storage and added to the project as
+     * a file, like any other, so it is kept, styled and exported as usual.
+     */
+    fun downloadArea(area: Bounds, dem: Boolean, tolerance: Double, keepTiff: Boolean, osm: Set<com.appdwg.core.Overpass.Kind>) {
+        val crs = crs()
+        if (crs.local) { areaMessage = tr("Escolha um sistema de coordenadas projetado (UTM, LTM…): o sistema local não tem latitude e longitude."); return }
+        // The rectangle in latitude and longitude, from its corners.
+        val corners = listOf(area.minX to area.minY, area.minX to area.maxY, area.maxX to area.minY, area.maxX to area.maxY).map { (x, y) -> crs.toWgs84(x, y) }
+        val south = corners.minOf { it.first }; val north = corners.maxOf { it.first }
+        val west = corners.minOf { it.second }; val east = corners.maxOf { it.second }
+        if ((north - south) * (east - west) > 0.25) { areaMessage = tr("Área grande demais (máximo de cerca de 50 × 50 km). Aproxime a planta ou desenhe uma área menor."); return }
+        areaMessage = null
+        areaJob?.cancel()
+        areaJob = viewModelScope.launch {
+            val app = getApplication<Application>()
+            val dir = java.io.File(app.filesDir, "area").apply { mkdirs() }
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(java.util.Date())
+            val added = ArrayList<Uri>()
+            val notes = ArrayList<String>()
+            val job = coroutineContext[Job]!!
+            try {
+                if (dem) tracked(tr("Baixando terreno (Copernicus)"), onCancel = { job.cancel() }) { task ->
+                    run {
+                        withContext(Dispatchers.IO) {
+                            val inputs = ArrayList<HttpRandomInput>()
+                            val grid = com.appdwg.core.CopernicusDem.grid(south, west, north, east, 2400, { name ->
+                                HttpRandomInput.open(com.appdwg.core.CopernicusDem.url(name)) { !job.isActive }?.also { inputs += it }
+                            }, { !job.isActive }) { i, n -> task.step(tr("Lendo tile {0} de {1}", i + 1, n), i.toFloat() / n) }
+                            if (grid.values.all { it.isNaN() }) error(tr("sem dados de terreno nesta área (mar ou fora da cobertura)"))
+                            task.step(tr("Montando a superfície (tolerância {0})", StationFormat.length(tolerance)))
+                            val name = "TERRENO COPERNICUS"
+                            val surface = com.appdwg.core.GridSurface.build(name, grid, tolerance, { lat, lon -> crs.fromWgs84(lat, lon) })
+                                ?: error(tr("sem dados de terreno nesta área (mar ou fora da cobertura)"))
+                            val f = java.io.File(dir, "terreno-copernicus-$stamp.xml")
+                            f.writer(Charsets.UTF_8).use { w -> com.appdwg.core.LandXmlWriter.write(listOf(surface), emptyList(), emptyList(), w, crs.epsg) }
+                            added += Uri.fromFile(f)
+                            if (keepTiff) {
+                                val tif = java.io.File(dir, "terreno-copernicus-$stamp.tif")
+                                tif.outputStream().buffered().use { com.appdwg.core.GeoTiffWriter.writeFloat(grid, it) }
+                                notes += tr("Grade salva como GeoTIFF: {0}", tif.name)
+                            }
+                            notes += tr("Terreno: {0} pontos ({1} triângulos), de {2} MB baixados. Copernicus GLO-30 é um modelo de superfície (DSM) de 30 m: inclui prédios e árvores; use para estudo preliminar.",
+                                surface.vertexCount, surface.triangleCount, StationFormat.decimal(inputs.sumOf { it.received } / 1048576.0, 1))
+                        }
+                    }
+                }
+                if (osm.isNotEmpty()) tracked(tr("Baixando OpenStreetMap"), onCancel = { job.cancel() }) { task ->
+                    run {
+                        withContext(Dispatchers.IO) {
+                            val blocks = com.appdwg.core.Overpass.blocks(south, west, north, east)
+                            if (blocks.size > 60) error(tr("Área grande demais para o OpenStreetMap ({0} blocos). Desenhe uma área menor.", blocks.size))
+                            val answers = blocks.mapIndexed { i, b ->
+                                task.step(tr("Bloco {0} de {1}", i + 1, blocks.size), i.toFloat() / blocks.size)
+                                overpass(com.appdwg.core.Overpass.query(b[0], b[1], b[2], b[3], osm)) { !job.isActive }
+                            }
+                            val (json, count) = com.appdwg.core.Overpass.toGeoJson(answers)
+                            if (count == 0) { notes += tr("OpenStreetMap: nada desses tipos nesta área."); return@withContext }
+                            val f = java.io.File(dir, "osm-$stamp.geojson")
+                            f.writeText(json)
+                            added += Uri.fromFile(f)
+                            notes += tr("OpenStreetMap: {0} linhas.", count)
+                        }
+                    }
+                }
+                if (added.isNotEmpty()) for (u in added) addFileNow(u)
+                notes += listOfNotNull(
+                    if (dem) com.appdwg.core.CopernicusDem.ATTRIBUTION + ". " + com.appdwg.core.CopernicusDem.DISCLAIMER + "." else null,
+                    if (osm.isNotEmpty()) com.appdwg.core.Overpass.ATTRIBUTION else null,
+                )
+                areaMessage = notes.joinToString("\n")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                areaMessage = tr("Download cancelado.")
+            } catch (e: java.io.IOException) {
+                areaMessage = tr("Sem conexão com o servidor: {0}. Confira a internet e tente de novo.", e.message ?: e.javaClass.simpleName)
+            } catch (e: OutOfMemoryError) {
+                areaMessage = tr("Memória insuficiente: use uma área menor ou uma tolerância maior.")
+            } catch (e: Exception) {
+                areaMessage = tr("Não foi possível baixar: {0}", e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
+    fun cancelAreaDownload() { areaJob?.cancel() }
+
+    /** One Overpass request, retried a few times when the server is busy (429/504). */
+    private fun overpass(query: String, cancelled: () -> Boolean): String {
+        var wait = 2000L
+        repeat(4) { attempt ->
+            if (cancelled()) throw kotlinx.coroutines.CancellationException()
+            val c = (java.net.URL(com.appdwg.core.Overpass.ENDPOINT).openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"; doOutput = true; connectTimeout = 20_000; readTimeout = 120_000
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+            }
+            try {
+                c.outputStream.use { it.write(("data=" + java.net.URLEncoder.encode(query, "UTF-8")).toByteArray()) }
+                when (c.responseCode) {
+                    200 -> return c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                    429, 502, 503, 504 -> if (attempt < 3) { Thread.sleep(wait); wait *= 2 } else throw java.io.IOException(tr("servidor do OpenStreetMap ocupado; tente mais tarde"))
+                    else -> throw java.io.IOException(tr("resposta {0} do servidor", c.responseCode))
+                }
+            } finally { c.disconnect() }
+        }
+        throw java.io.IOException(tr("servidor do OpenStreetMap ocupado; tente mais tarde"))
     }
 
     // ---- Field notes with photos ----
@@ -2205,7 +2352,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             tr("Projeto {0} aberto, mas não foi possível abrir: {1}.", name, problems.joinToString(", "))
     }
 
-    private suspend fun openNow(uri: Uri): Boolean {
+    private suspend fun openNow(uri: Uri, allowEmpty: Boolean = false): Boolean {
         val name = displayName(uri)
         val task = LoadTask(tr("Abrindo {0}", name))
         state = ProjectState.Loading(name, task)
@@ -2233,7 +2380,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     key?.let { k -> viewModelScope.launch(Dispatchers.IO) { openCache.save(k, p, images) } }
                     p to images
                 }
-                if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
+                if (!allowEmpty && project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
                     project.polylines.isEmpty()
                 ) {
                     ProjectState.Failed(name, tr("Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?"))

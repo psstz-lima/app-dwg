@@ -45,4 +45,18 @@ class AreaDataTest {
         assertEquals(0xFFE8743B.toInt(), p.polylines.first { it.layer == "OSM_RUAS_PRINCIPAIS" }.color)
         assertTrue("(-19.91" in Overpass.query(-19.91, -43.91, -19.89, -43.89, setOf(Overpass.Kind.ROADS)).replace(",", "("))
     }
+
+    @Test
+    fun gridWrittenAsGeoTiffReadsBack() {
+        val g = GeoGrid(-19.0, -44.0, 0.01, 0.01, 4, 5, FloatArray(20) { 800f + it })
+        val out = java.io.ByteArrayOutputStream(); GeoTiffWriter.writeFloat(g, out)
+        val bytes = out.toByteArray()
+        val r = TiffReader(object : RandomInput {
+            override val size = bytes.size.toLong()
+            override fun read(position: Long, buffer: ByteArray, offset: Int, length: Int) = System.arraycopy(bytes, position.toInt(), buffer, offset, length)
+        })
+        assertEquals(g.values.toList(), r.readFloats(0, 0, 0, 5, 4).toList())
+        val e = assertNotNull(r.extent())
+        assertEquals(-44.005, e.minX, 1e-9); assertEquals(-18.995, e.maxY, 1e-9)
+    }
 }

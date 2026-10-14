@@ -223,3 +223,34 @@ object Overpass {
         return sb.toString() to count
     }
 }
+
+/** Writes an elevation grid as a GeoTIFF of 32-bit floats in latitude/longitude (EPSG:4326). */
+object GeoTiffWriter {
+    fun writeFloat(g: GeoGrid, out: java.io.OutputStream) {
+        val entries = 13
+        val ifd = 8
+        val ifdSize = 2 + entries * 12 + 4
+        var p = ifd + ifdSize
+        val bitsPos = p; p += 0
+        val scalePos = p; p += 24
+        val tiePos = p; p += 48
+        val keys = shortArrayOf(1, 1, 0, 3, 1024, 0, 1, 2, 1025, 0, 1, 1, 2048, 0, 1, 4326)
+        val keysPos = p; p += keys.size * 2
+        val dataPos = p
+        val b = java.nio.ByteBuffer.allocate(dataPos + g.values.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put('I'.code.toByte()).put('I'.code.toByte()).putShort(42).putInt(ifd)
+        b.putShort(entries.toShort())
+        fun e(tag: Int, type: Int, count: Int, value: Int) { b.putShort(tag.toShort()).putShort(type.toShort()).putInt(count).putInt(value) }
+        e(256, 4, 1, g.cols); e(257, 4, 1, g.rows); e(258, 3, 1, 32); e(259, 3, 1, 1); e(262, 3, 1, 1)
+        e(273, 4, 1, dataPos); e(277, 3, 1, 1); e(278, 4, 1, g.rows); e(279, 4, 1, g.values.size * 4); e(339, 3, 1, 3)
+        e(33550, 12, 3, scalePos); e(33922, 12, 6, tiePos); e(34735, 3, keys.size, keysPos)
+        b.putInt(0)
+        check(bitsPos == b.position())
+        b.putDouble(g.dLon).putDouble(g.dLat).putDouble(0.0)
+        // Samples are pixel centres: the picture's corner is half a pixel beyond the first one.
+        b.putDouble(0.0).putDouble(0.0).putDouble(0.0).putDouble(g.west - g.dLon / 2).putDouble(g.north + g.dLat / 2).putDouble(0.0)
+        keys.forEach { b.putShort(it) }
+        g.values.forEach { b.putFloat(it) }
+        out.write(b.array())
+    }
+}

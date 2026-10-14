@@ -52,6 +52,15 @@ são distribuídas sem alteração, dentro do app, em `app/src/main/res/font/`.
 Os mapas não são distribuídos com o app: são baixados desses serviços quando o usuário liga o mapa
 de fundo, e seguem os termos de uso de cada um.
 
+## Dados baixados da área (Pro)
+
+- **Copernicus DEM GLO-30** (AWS Open Data, `copernicus-dem-30m`): produced using Copernicus WorldDEM-30
+  © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the
+  European Union and ESA; all rights reserved. The organisations in charge of the Copernicus programme by
+  law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30.
+- **OpenStreetMap** via Overpass API: © colaboradores do OpenStreetMap, dados sob a licença ODbL
+  (<https://www.openstreetmap.org/copyright>).
+
 ## Dados de referência
 
 - Parâmetros de transformação entre SAD69, SAD69(96), Córrego Alegre e SIRGAS 2000: IBGE.

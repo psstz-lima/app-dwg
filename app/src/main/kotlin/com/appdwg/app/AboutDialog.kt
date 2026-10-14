@@ -50,6 +50,10 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 Text(tr("OpenStreetMap: © colaboradores do OpenStreetMap, dados sob a licença ODbL (openstreetmap.org/copyright)."))
                 Text(tr("Os mapas são de terceiros e seguem os termos de uso de cada serviço."), style = MaterialTheme.typography.bodySmall)
 
+                Text(tr("Dados baixados da área"), style = MaterialTheme.typography.titleSmall)
+                Text(com.appdwg.core.CopernicusDem.ATTRIBUTION + ". " + com.appdwg.core.CopernicusDem.DISCLAIMER + ".", style = MaterialTheme.typography.bodySmall)
+                Text(tr("OpenStreetMap: © colaboradores do OpenStreetMap, dados sob a licença ODbL, via Overpass API."), style = MaterialTheme.typography.bodySmall)
+
                 Text(tr("Componentes de terceiros"), style = MaterialTheme.typography.titleSmall)
                 for ((name, licence) in listOf(
                     tr("Kotlin e kotlinx.coroutines (JetBrains)") to "Apache 2.0",

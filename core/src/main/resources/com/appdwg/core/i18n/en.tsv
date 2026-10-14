@@ -973,3 +973,48 @@ Mostrar painel	Show panel
 Recolher	Collapse
 Propriedades	Properties
 resposta {0} do servidor	server answered {0}
+Escolha um sistema de coordenadas projetado (UTM, LTM…): o sistema local não tem latitude e longitude.	Choose a projected coordinate system (UTM, LTM…): a local system has no latitude and longitude.
+Área grande demais (máximo de cerca de 50 × 50 km). Aproxime a planta ou desenhe uma área menor.	Area too large (about 50 × 50 km at most). Zoom in or draw a smaller area.
+Baixando terreno (Copernicus)	Downloading terrain (Copernicus)
+Lendo tile {0} de {1}	Reading tile {0} of {1}
+sem dados de terreno nesta área (mar ou fora da cobertura)	no terrain data in this area (sea or outside the coverage)
+Montando a superfície (tolerância {0})	Building the surface (tolerance {0})
+Grade salva como GeoTIFF: {0}	Grid saved as GeoTIFF: {0}
+Terreno: {0} pontos ({1} triângulos), de {2} MB baixados. Copernicus GLO-30 é um modelo de superfície (DSM) de 30 m: inclui prédios e árvores; use para estudo preliminar.	Terrain: {0} points ({1} triangles), from {2} MB downloaded. Copernicus GLO-30 is a 30 m surface model (DSM): it includes buildings and trees; use it for preliminary studies.
+Baixando OpenStreetMap	Downloading OpenStreetMap
+Área grande demais para o OpenStreetMap ({0} blocos). Desenhe uma área menor.	Area too large for OpenStreetMap ({0} blocks). Draw a smaller area.
+Bloco {0} de {1}	Block {0} of {1}
+OpenStreetMap: nada desses tipos nesta área.	OpenStreetMap: nothing of these kinds in this area.
+OpenStreetMap: {0} linhas.	OpenStreetMap: {0} lines.
+Sem conexão com o servidor: {0}. Confira a internet e tente de novo.	No connection to the server: {0}. Check the internet and try again.
+Memória insuficiente: use uma área menor ou uma tolerância maior.	Not enough memory: use a smaller area or a larger tolerance.
+Não foi possível baixar: {0}	Could not download: {0}
+servidor do OpenStreetMap ocupado; tente mais tarde	OpenStreetMap server busy; try again later
+Sem arquivo? Comece pelo mapa e baixe terreno e OpenStreetMap da área.	No file? Start from the map and download terrain and OpenStreetMap for the area.
+Novo projeto pelo mapa	New project from the map
+Latitude, longitude do centro	Latitude, longitude of the centre
+Preenchido com a última posição do aparelho.	Filled with the device's last position.
+Digite em graus decimais, como aparece no Google Maps.	Type decimal degrees, as Google Maps shows them.
+O sistema de coordenadas será o UTM do local (dá para trocar depois) e o mapa de fundo fica ligado.	The coordinate system will be the local UTM zone (you can change it later) and the background map is turned on.
+Baixar dados	Get data
+Baixar dados da área	Download area data
+Baixar	Download
+A planta visível na tela	The plan on screen
+Retângulo em volta da medição ({0} pontos)	Rectangle around the measurement ({0} points)
+Retângulo em volta da medição (desenhe com Medir)	Rectangle around the measurement (draw it with Measure)
+Marcar a área com Medir…	Mark the area with Measure…
+{0} × {1}	{0} × {1}
+Terreno: Copernicus GLO-30 (30 m)	Terrain: Copernicus GLO-30 (30 m)
+Tolerância vertical da superfície ({0})	Surface vertical tolerance ({0})
+Guardar também a grade (GeoTIFF)	Also keep the grid (GeoTIFF)
+Modelo de superfície (DSM): inclui prédios e árvores. Bom para estudo preliminar, não substitui levantamento.	Surface model (DSM): it includes buildings and trees. Good for preliminary studies; it does not replace a survey.
+Ruas e caminhos	Roads and paths
+Construções	Buildings
+Hidrografia	Water
+Ferrovias	Railways
+Limites administrativos	Administrative boundaries
+Cada tipo vai para uma camada; dá para exportar em DXF, GeoJSON ou Shapefile.	Each kind goes on its own layer; you can export it as DXF, GeoJSON or Shapefile.
+Precisa de internet. Os dados entram no projeto como arquivos e ficam salvos nele.	Needs internet. The data comes into the project as files and is saved with it.
+Fontes: {0}. {1}.	Sources: {0}. {1}.
+Dados baixados da área	Downloaded area data
+OpenStreetMap: © colaboradores do OpenStreetMap, dados sob a licença ODbL, via Overpass API.	OpenStreetMap: © OpenStreetMap contributors, data under the ODbL licence, via the Overpass API.
