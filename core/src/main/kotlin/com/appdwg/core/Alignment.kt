@@ -102,7 +102,7 @@ class Alignment(
 
     val endStation get() = if (stations.isEmpty()) startStation else stations.last()
     val length get() = endStation - startStation
-    val bounds get() = Bounds.of(vertices.asSequence())
+    val bounds: Bounds? by lazy { Bounds.of(vertices.asSequence()) }
 
     /** Plan position at [station], clamped to the alignment's extent. */
     fun pointAt(station: Double): Point2? {

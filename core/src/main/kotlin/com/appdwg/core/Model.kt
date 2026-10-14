@@ -48,7 +48,14 @@ class Polyline(
     /** Elevations of the points, for 3D lines; null for flat 2D drawing. */
     val zs: DoubleArray? = null,
 ) {
-    val bounds: Bounds? get() = Bounds.of(xs.indices.asSequence().map { Point2(xs[it], ys[it]) })
+    /** Extent of the points, worked out once (the plan asks for it on every frame). */
+    val bounds: Bounds? by lazy {
+        if (xs.isEmpty()) null else {
+            var x0 = xs[0]; var x1 = xs[0]; var y0 = ys[0]; var y1 = ys[0]
+            for (i in 1 until xs.size) { val x = xs[i]; val y = ys[i]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+            Bounds(x0, y0, x1, y1)
+        }
+    }
 }
 
 /**
@@ -141,8 +148,8 @@ data class LandXmlProject(
             .distinct().sortedBy { it.lowercase() }
     }
 
-    val bounds: Bounds?
-        get() {
+    /** Extent of everything in the project, worked out once: the plan reads it on every frame. */
+    val bounds: Bounds? by lazy {
             var b: Bounds? = null
             surfaces.forEach { s -> s.bounds?.let { b = it.union(b) } }
             alignments.forEach { a -> a.bounds?.let { b = it.union(b) } }
@@ -153,6 +160,6 @@ data class LandXmlProject(
             Bounds.of(cgPoints.asSequence().map { Point2(it.position.x, it.position.y) })?.let { b = it.union(b) }
             Bounds.of(points.asSequence().map { Point2(it.x, it.y) })?.let { b = it.union(b) }
             for (m in models) Bounds.of((0 until m.positions.size / 3).asSequence().map { Point2(m.positions[3 * it], m.positions[3 * it + 1]) })?.let { b = it.union(b) }
-            return b
-        }
+            b
+    }
 }
