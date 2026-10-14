@@ -1027,7 +1027,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * (SIRGAS 2000 in South America, WGS 84 elsewhere), the background map is on, and the area
      * download opens, to bring in terrain and OpenStreetMap data.
      */
-    fun newProject(lat: Double, lon: Double) {
+    fun newProject(lat: Double, lon: Double, halfWidth: Double = 1000.0, halfHeight: Double = 1000.0) {
         val zone = com.appdwg.core.Gis.utmZoneOf(lon)
         val crs = if (lon in -92.0..-25.0 && lat in -60.0..15.0) com.appdwg.core.CrsCatalog.utmFor(lon, lat < 0)
             else com.appdwg.core.CrsCatalog.byEpsg(((if (lat < 0) 32700 else 32600) + zone).toString()) ?: com.appdwg.core.CrsCatalog.utmFor(lon, lat < 0)
@@ -1041,7 +1041,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             if (!openNow(uri, allowEmpty = true)) return@launch
             val c = crs.fromWgs84(lat, lon)
-            view?.let { v -> v.crs = crs; v.area = Bounds(c.x - 1000, c.y - 1000, c.x + 1000, c.y + 1000) }
+            view?.let { v -> v.crs = crs; v.area = Bounds(c.x - halfWidth, c.y - halfHeight, c.x + halfWidth, c.y + halfHeight) }
             basemap.enable(true)
             // Kept as a project file in the app from the start, so what is downloaded stays with it.
             saveProject(Uri.fromFile(java.io.File(dir, "novo-projeto-$stamp.gromatic"))) { projectMessage = null }

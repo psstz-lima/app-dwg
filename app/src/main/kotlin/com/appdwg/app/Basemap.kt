@@ -107,8 +107,7 @@ class BasemapStore(context: Context) {
     private fun file(s: BasemapSource, t: TileId) = File(root, "${s.id}/${t.z}/${t.x}/${t.y}")
 
     /** Picture of [t] if loaded; otherwise starts loading it from disk (or the network when [fetch]). */
-    private fun bitmap(t: TileId, fetch: Boolean): Bitmap? {
-        val s = source
+    private fun bitmap(t: TileId, fetch: Boolean, s: BasemapSource = source): Bitmap? {
         val k = key(s, t)
         memory.get(k)?.let { return it }
         synchronized(loading) {
@@ -215,6 +214,27 @@ class BasemapStore(context: Context) {
             if (!covered && t.z > 3) bitmap(t.parent.parent, fetch = true)
         }
         return out
+    }
+
+    /**
+     * OpenStreetMap tile [t] for the place picker, or until it arrives the part of a coarser one at
+     * hand (picture and the part of it to draw); null when none is loaded yet.
+     */
+    fun pickerTile(t: TileId): Pair<Bitmap, android.graphics.Rect>? {
+        val s = BASEMAP_SOURCES.first { it.id == "osm" }
+        bitmap(t, fetch = true, s = s)?.let { return it to android.graphics.Rect(0, 0, it.width, it.height) }
+        var p = t
+        for (up in 1..8) {
+            if (p.z <= 0) break
+            p = p.parent
+            val b = bitmap(p, fetch = up == 2, s = s) ?: continue
+            val n = 1 shl up
+            val cw = b.width / n; val ch = b.height / n
+            if (cw <= 0 || ch <= 0) return null
+            val ox = (t.x - (p.x shl up)) * cw; val oy = (t.y - (p.y shl up)) * ch
+            return b to android.graphics.Rect(ox, oy, ox + cw, oy + ch)
+        }
+        return null
     }
 
     // --- Area download ---------------------------------------------------------------------

@@ -41,8 +41,9 @@ import com.appdwg.core.tr
  * around the points of a measurement.
  */
 @Composable
-fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, onDrawArea: () -> Unit, onDismiss: () -> Unit) {
-    var useMeasure by rememberSaveable { mutableStateOf(measure.size >= 2) }
+fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, onDrawArea: () -> Unit, onDismiss: () -> Unit, chosen: Bounds? = null) {
+    // 0: the area chosen on the map for a new project, 1: the plan on screen, 2: around a measurement.
+    var pick by rememberSaveable { mutableStateOf(if (measure.size >= 2) 2 else if (chosen != null) 0 else 1) }
     var dem by rememberSaveable { mutableStateOf(true) }
     var tolerance by rememberSaveable { mutableStateOf(StationFormat.lengthValue(0.5, 1)) }
     var keepTiff by rememberSaveable { mutableStateOf(false) }
@@ -50,8 +51,11 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
     var image by rememberSaveable { mutableStateOf(true) }
     var sceneId by rememberSaveable { mutableStateOf<String?>(null) }
     val hasTerrain = dem || vm.hasSurfaces
-    val area = if (useMeasure && measure.size >= 2)
-        Bounds(measure.minOf { it.x }, measure.minOf { it.y }, measure.maxOf { it.x }, measure.maxOf { it.y }) else viewport
+    val area = when {
+        pick == 2 && measure.size >= 2 -> Bounds(measure.minOf { it.x }, measure.minOf { it.y }, measure.maxOf { it.x }, measure.maxOf { it.y })
+        pick == 0 && chosen != null -> chosen
+        else -> viewport
+    }
     val busy = vm.tasks.isNotEmpty()
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -66,9 +70,10 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(tr("Área"), fontWeight = FontWeight.Bold)
-                Choice(tr("A planta visível na tela"), !useMeasure) { useMeasure = false }
+                if (chosen != null) Choice(tr("A área escolhida no mapa"), pick == 0) { pick = 0 }
+                Choice(tr("A planta visível na tela"), pick == 1) { pick = 1 }
                 Choice(if (measure.size >= 2) tr("Retângulo em volta da medição ({0} pontos)", measure.size) else tr("Retângulo em volta da medição (desenhe com Medir)"),
-                    useMeasure, enabled = measure.size >= 2) { useMeasure = true }
+                    pick == 2, enabled = measure.size >= 2) { pick = 2 }
                 TextButton(onClick = onDrawArea) { Text(tr("Marcar a área com Medir…")) }
                 area?.let { Text(tr("{0} × {1}", StationFormat.length(it.width, 0), StationFormat.length(it.height, 0)), style = MaterialTheme.typography.bodySmall) }
                 HorizontalDivider()

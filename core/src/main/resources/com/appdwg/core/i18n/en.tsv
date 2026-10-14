@@ -1040,3 +1040,17 @@ A mais recente com poucas nuvens	The newest with few clouds
 Imagens: Copernicus Sentinel data (ESA).	Images: Copernicus Sentinel data (ESA).
 {0} · tile {1} · {2}% de nuvens na área	{0} · tile {1} · {2}% cloud over the area
 {0} · tile {1} · {2}% de nuvens na cena	{0} · tile {1} · {2}% cloud in the scene
+Buscando sua posição…	Finding your position…
+Sem sinal de localização. Ligue a localização do aparelho, vá para um lugar aberto e tente de novo.	No location signal. Turn on the device's location, move to an open place and try again.
+Sem permissão de localização. Mova o mapa até o local ou digite as coordenadas.	No location permission. Move the map to the place or type the coordinates.
+Escolha o local do projeto	Choose the project's place
+Arraste e use a pinça para enquadrar a área. O quadro é a área do projeto.	Drag and pinch to frame the area. The frame is the project's area.
+Mapa: © colaboradores do OpenStreetMap	Map: © OpenStreetMap contributors
+Área: {0} × {1}	Area: {0} × {1}
+Aproxime mais: a área passa de 30 km.	Zoom in: the area is over 30 km.
+Minha localização (GPS)	My location (GPS)
+Digitar coordenadas…	Type coordinates…
+Usar este local	Use this place
+Digitar coordenadas	Type coordinates
+Ir para o ponto	Go to the point
+A área escolhida no mapa	The area chosen on the map

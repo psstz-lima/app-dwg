@@ -218,7 +218,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         },
     ) { padding ->
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
-        if (showNewProject) NewProjectDialog(onCreate = { lat, lon -> showNewProject = false; viewModel.newProject(lat, lon) }, onDismiss = { showNewProject = false })
+        if (showNewProject) PlacePicker(viewModel.basemap, onPick = { lat, lon, hw, hh -> showNewProject = false; viewModel.newProject(lat, lon, hw, hh) }, onDismiss = { showNewProject = false })
         if (showAppearance) AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
             onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false },
             units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
@@ -336,11 +336,11 @@ private fun EmptyState(openFile: () -> Unit, openDrive: (() -> Unit)?, onNewProj
 }
 
 /**
- * Where a new project starts: a latitude and longitude, the device's last known position when the
- * app may read it. The project's system is the UTM zone there.
+ * Coordinates typed in for the place picker: a latitude and longitude, filled with the device's
+ * last known position when the app may read it.
  */
 @Composable
-private fun NewProjectDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -> Unit) {
+fun CoordinatesDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val last = remember {
         runCatching {
@@ -362,8 +362,8 @@ private fun NewProjectDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -
     val parsed = parts.takeIf { it.size == 2 && it[0] != null && it[1] != null && it[0]!! in -84.0..84.0 && it[1]!! in -180.0..180.0 }?.let { it[0]!! to it[1]!! }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tr("Novo projeto pelo mapa")) },
-        confirmButton = { TextButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Criar")) } },
+        title = { Text(tr("Digitar coordenadas")) },
+        confirmButton = { TextButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Ir para o ponto")) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancelar")) } },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1486,7 +1486,7 @@ private fun ProjectScreen(
     if (showArea) {
         AreaDialog(vm, viewport, v.measurePoints, onDrawArea = {
             showArea = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
-        }, onDismiss = { showArea = false })
+        }, onDismiss = { showArea = false }, chosen = v.area)
     }
 
     if (showGoTo) {
