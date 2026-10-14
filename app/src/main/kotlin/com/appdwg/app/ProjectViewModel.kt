@@ -192,6 +192,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         cloudCopies[uri] = file
     }
 
+    /** Processed copies of large files, so they reopen fast. */
+    private val openCache = OpenCache(app)
+
     /** The open, or the file being opened, so a download can be cancelled. */
     private var openJob: kotlinx.coroutines.Job? = null
 
@@ -2145,6 +2148,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             state = try {
                 val (project, terrain) = withContext(Dispatchers.IO) {
                     val t0 = System.nanoTime()
+                    // A large file opened before comes back from the device's cache, already processed.
+                    val key = openCache.keyOf(uri, fileSize(uri)) { input(uri) }
+                    key?.let { k -> openCache.load(k) }?.let { cached ->
+                        android.util.Log.i("Gromatic", "abrir $name: cache ${(System.nanoTime() - t0) / 1_000_000} ms")
+                        return@withContext cached
+                    }
                     val p = read(uri, task)
                     val t1 = System.nanoTime()
                     // Builds each surface's lookup index now, so the first tap on the plan is instant.
@@ -2155,6 +2164,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     val images = p.surfaces.mapNotNull { TerrainImage.of(it) }
                     android.util.Log.i("Gromatic", "abrir $name: leitura ${(t1 - t0) / 1_000_000} ms, índice ${(t2 - t1) / 1_000_000} ms, " +
                         "imagem ${(System.nanoTime() - t2) / 1_000_000} ms")
+                    // Saved in the background: the drawing shows without waiting for it.
+                    key?.let { k -> viewModelScope.launch(Dispatchers.IO) { openCache.save(k, p, images) } }
                     p to images
                 }
                 if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&

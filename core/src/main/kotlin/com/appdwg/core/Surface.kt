@@ -23,7 +23,19 @@ class Surface(
     val minElevation get() = zs.minOrNull()
     val maxElevation get() = zs.maxOrNull()
 
-    private val grid: TriangleGrid? by lazy { bounds?.let { TriangleGrid(this, it) } }
+    /** Lookup index given from a cache, used instead of building one. */
+    @Volatile private var cachedGrid: TriangleGrid? = null
+    private val builtGrid: TriangleGrid? by lazy { bounds?.let { TriangleGrid(this, it) } }
+    private val grid: TriangleGrid? get() = cachedGrid ?: builtGrid
+
+    /** The lookup index as plain arrays (cells per side, cell starts, triangle list), for caching. */
+    fun indexArrays(): Triple<Int, IntArray, IntArray>? = grid?.let { Triple(it.side, it.cellStart, it.items) }
+
+    /** Uses an index saved by [indexArrays] for these same points and triangles. */
+    fun useIndex(side: Int, cellStart: IntArray, items: IntArray) {
+        val b = bounds ?: return
+        cachedGrid = TriangleGrid(this, b, side, cellStart, items)
+    }
 
     /** Interpolated elevation at [p], or null when the point is outside the surface. */
     fun elevationAt(p: Point2): Double? {
@@ -160,42 +172,46 @@ class ElevationGrid(val bounds: Bounds, val cols: Int, val rows: Int, val values
  * Uniform grid over the surface so a point lookup only tests nearby triangles. Cell contents are
  * stored in one flat array (compressed rows) so million-triangle terrains stay small in memory.
  */
-private class TriangleGrid(private val s: Surface, private val b: Bounds) {
-    private val cols: Int
-    private val rows: Int
-    private val cellW: Double
-    private val cellH: Double
-    private val cellStart: IntArray
-    private val items: IntArray
+private class TriangleGrid(private val s: Surface, private val b: Bounds, val side: Int, val cellStart: IntArray, val items: IntArray) {
+    private val cols = side
+    private val rows = side
+    private val cellW = max(b.width / cols, 1e-9)
+    private val cellH = max(b.height / rows, 1e-9)
 
-    init {
-        // Roughly two triangles per cell keeps lookups short without a huge index.
-        val n = max(1, s.triangleCount)
-        val side = max(1, sqrt(n / 2.0).toInt())
-        cols = side
-        rows = side
-        cellW = max(b.width / cols, 1e-9)
-        cellH = max(b.height / rows, 1e-9)
+    /** Builds the index: roughly two triangles per cell keeps lookups short without a huge index. */
+    constructor(s: Surface, b: Bounds) : this(s, b, max(1, sqrt(max(1, s.triangleCount) / 2.0).toInt()))
 
-        val counts = IntArray(cols * rows + 1)
-        forEachCell { cell, _ -> counts[cell + 1]++ }
-        for (i in 1 until counts.size) counts[i] += counts[i - 1]
-        cellStart = counts
-        items = IntArray(counts.last())
-        val fill = counts.copyOf(cols * rows)
-        forEachCell { cell, t -> items[fill[cell]++] = t }
-    }
+    private constructor(s: Surface, b: Bounds, side: Int) : this(s, b, side, build(s, b, side))
 
-    private inline fun forEachCell(action: (cell: Int, triangle: Int) -> Unit) {
-        for (t in 0 until s.triangleCount) {
-            var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
-            var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
-            for (k in 0..2) {
-                val i = s.triangles[3 * t + k]
-                minX = min(minX, s.xs[i]); maxX = max(maxX, s.xs[i])
-                minY = min(minY, s.ys[i]); maxY = max(maxY, s.ys[i])
+    private constructor(s: Surface, b: Bounds, side: Int, built: Pair<IntArray, IntArray>) : this(s, b, side, built.first, built.second)
+
+    companion object {
+        /** Calls [action] for each cell each triangle's bounding box touches. */
+        private inline fun forEachCell(s: Surface, b: Bounds, side: Int, cellW: Double, cellH: Double, action: (cell: Int, triangle: Int) -> Unit) {
+            for (t in 0 until s.triangleCount) {
+                var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
+                var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
+                for (k in 0..2) {
+                    val i = s.triangles[3 * t + k]
+                    minX = min(minX, s.xs[i]); maxX = max(maxX, s.xs[i])
+                    minY = min(minY, s.ys[i]); maxY = max(maxY, s.ys[i])
+                }
+                val c0 = floor((minX - b.minX) / cellW).toInt().coerceIn(0, side - 1); val c1 = floor((maxX - b.minX) / cellW).toInt().coerceIn(0, side - 1)
+                val r0 = floor((minY - b.minY) / cellH).toInt().coerceIn(0, side - 1); val r1 = floor((maxY - b.minY) / cellH).toInt().coerceIn(0, side - 1)
+                for (cy in r0..r1) for (cx in c0..c1) action(cy * side + cx, t)
             }
-            for (cy in row(minY)..row(maxY)) for (cx in col(minX)..col(maxX)) action(cy * cols + cx, t)
+        }
+
+        private fun build(s: Surface, b: Bounds, side: Int): Pair<IntArray, IntArray> {
+            val cellW = max(b.width / side, 1e-9)
+            val cellH = max(b.height / side, 1e-9)
+            val counts = IntArray(side * side + 1)
+            forEachCell(s, b, side, cellW, cellH) { cell, _ -> counts[cell + 1]++ }
+            for (i in 1 until counts.size) counts[i] += counts[i - 1]
+            val items = IntArray(counts.last())
+            val fill = counts.copyOf(side * side)
+            forEachCell(s, b, side, cellW, cellH) { cell, t -> items[fill[cell]++] = t }
+            return counts to items
         }
     }
 
