@@ -40,13 +40,17 @@ object ProjectAdvisor {
                 out += Advice(Advice.Kind.GRADE, tr("Sugerir o greide de {0}", a.name), tr("O eixo não tem greide e passa sobre {0}.", surface.name), alignment = i)
         }
         if (p.alignments.isEmpty()) {
-            // An exploded drawing keeps the axis as a line on its own layer.
-            val axis = p.polylines.withIndex().filter { (_, l) -> !l.closed && l.xs.size >= 2 && AXIS.containsMatchIn(l.layer) && onTerrain(l.xs, l.ys) }
-                .maxByOrNull { (_, l) -> length(l) }
+            // An exploded drawing keeps the axis as a line on its own layer, often next to its
+            // offsets: of the long lines there, the middle one in length is the axis.
+            val lines = p.polylines.withIndex().filter { (_, l) -> !l.closed && l.xs.size >= 2 && AXIS.containsMatchIn(l.layer) && onTerrain(l.xs, l.ys) }
+            val longest = lines.maxOfOrNull { length(it.value) } ?: 0.0
+            val long = lines.filter { length(it.value) >= 0.5 * longest }.sortedBy { length(it.value) }
+            val axis = long.getOrNull(long.size / 2).takeIf { long.size != 2 } ?: long.lastOrNull()
             if (axis != null) out += Advice(Advice.Kind.AXIS_FROM_LINE, tr("Usar a linha da camada {0} como eixo", axis.value.layer),
                 tr("O desenho tem a linha do eixo, mas não o alinhamento; o app ajusta PIs e curvas a ela."), line = axis.index)
         }
-        val pad = p.polylines.withIndex().filter { (_, l) -> l.closed && l.xs.size >= 3 && PLATFORM.containsMatchIn(l.layer) && onTerrain(l.xs, l.ys) }
+        // A platform outline: closed, or ending close to where it starts.
+        val pad = p.polylines.withIndex().filter { (_, l) -> l.xs.size >= 3 && PLATFORM.containsMatchIn(l.layer) && onTerrain(l.xs, l.ys) && looksClosed(l) && kotlin.math.abs(area(l)) >= 200 }
             .maxByOrNull { (_, l) -> kotlin.math.abs(area(l)) }
         if (pad != null) out += Advice(Advice.Kind.PLATFORM_FROM_OUTLINE, tr("Estudar o platô da camada {0}", pad.value.layer),
             tr("Há um contorno fechado de {0}; o app sugere as formas da plataforma.", StationFormat.area(kotlin.math.abs(area(pad.value)), 0)), line = pad.index)
@@ -59,6 +63,12 @@ object ProjectAdvisor {
             out += Advice(Advice.Kind.COMPARE, tr("Comparar {0} com {1}", terrainSurfaces[0].name, terrainSurfaces[1].name), tr("Corte e aterro entre as duas superfícies."))
         out += Advice(Advice.Kind.SLOPES, tr("Mapa de declividades"), tr("Classes de relevo de {0}.", surface.name))
         return out
+    }
+
+    private fun looksClosed(l: Polyline): Boolean {
+        if (l.closed) return true
+        val gap = kotlin.math.hypot(l.xs.last() - l.xs.first(), l.ys.last() - l.ys.first())
+        return gap <= 0.15 * length(l)
     }
 
     private fun length(l: Polyline): Double {
@@ -79,25 +89,45 @@ object ProjectAdvisor {
      * the one whose curve passes where the line does (external distance E = R (sec Δ/2 − 1)).
      * A line without straight runs gets curves fitted with the minimum radius for [speed] km/h.
      */
-    fun pisFromLine(l: Polyline, speed: Double = 60.0, emax: Double = 8.0, minTangent: Double = 30.0): List<Pi> {
+    fun pisFromLine(l: Polyline, speed: Double = 60.0, emax: Double = 8.0, minTangent: Double = 20.0): List<Pi> {
         val pts = ArrayList<Point2>()
         for (i in l.xs.indices) { val p = Point2(l.xs[i], l.ys[i]); if (pts.isEmpty() || pts.last() != p) pts += p }
         if (pts.size < 2) return emptyList()
-        // Runs of collinear chords.
+        // Runs of chords that stay on one straight line (within 1 cm), as long as they go: arcs drawn
+        // as chords leave that line within a few metres, tangents stay on it.
         class Run(val a: Int, val b: Int) { val len get() = kotlin.math.hypot(pts[b].x - pts[a].x, pts[b].y - pts[a].y) }
-        fun heading(i: Int) = kotlin.math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x)
+        fun straight(a: Int, b: Int): Boolean {
+            val dx = pts[b].x - pts[a].x; val dy = pts[b].y - pts[a].y
+            val len = kotlin.math.hypot(dx, dy).takeIf { it > 0 } ?: return false
+            for (i in a + 1 until b) if (kotlin.math.abs((pts[i].x - pts[a].x) * dy - (pts[i].y - pts[a].y) * dx) / len > 0.01) return false
+            return true
+        }
+        // A chord between two equal bends of one hand is part of an arc drawn with long chords,
+        // not a tangent (a tangent between two curves is much longer than their chords).
+        val chords = pts.size - 1
+        fun chordLen(j: Int) = kotlin.math.hypot(pts[j + 1].x - pts[j].x, pts[j + 1].y - pts[j].y)
+        fun turn(v: Int): Double {
+            if (v <= 0 || v >= pts.size - 1) return 0.0
+            var t = kotlin.math.atan2(pts[v + 1].y - pts[v].y, pts[v + 1].x - pts[v].x) - kotlin.math.atan2(pts[v].y - pts[v - 1].y, pts[v].x - pts[v - 1].x)
+            while (t > Math.PI) t -= 2 * Math.PI
+            while (t < -Math.PI) t += 2 * Math.PI
+            return t
+        }
+        val arcChord = BooleanArray(chords) { j ->
+            val t0 = turn(j); val t1 = turn(j + 1)
+            val near = maxOf(if (j > 0) chordLen(j - 1) else 0.0, if (j + 1 < chords) chordLen(j + 1) else 0.0)
+            kotlin.math.abs(t0) > Math.toRadians(0.05) && kotlin.math.abs(t1) > Math.toRadians(0.05) && t0 * t1 > 0 &&
+                kotlin.math.abs(t1 / t0) in 0.4..2.5 && chordLen(j) <= 2 * near
+        }
         val runs = ArrayList<Run>()
         var a = 0
-        for (i in 1 until pts.size - 1) {
-            var d = kotlin.math.abs(heading(i) - heading(i - 1)); if (d > Math.PI) d = 2 * Math.PI - d
-            if (d > Math.toRadians(0.2)) { runs += Run(a, i); a = i }
+        while (a < chords) {
+            var b = a + 1
+            if (!arcChord[a]) while (b < chords && !arcChord[b] && straight(a, b + 1)) b++
+            if (!arcChord[a]) runs += Run(a, b)
+            a = b
         }
-        runs += Run(a, pts.size - 1)
-        val tangents = runs.filterIndexed { k, r -> r.len >= minTangent || k == 0 || k == runs.size - 1 }
-        if (tangents.size < 2) {
-            val fitted = RouteDesign.fitPis(pts, RouteDesign.minRadius(speed, emax), 0.0, 1.0)
-            return fitted ?: listOf(Pi(pts.first()), Pi(pts.last()))
-        }
+        val tangents = runs.filter { r -> r.len >= minTangent || r.a == 0 || r.b == pts.size - 1 }
         fun dist(p: Point2, from: Int, to: Int): Double {
             var best = Double.MAX_VALUE
             for (i in from until to) {
