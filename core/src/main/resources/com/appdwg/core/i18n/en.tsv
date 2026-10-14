@@ -1096,3 +1096,11 @@ Plana, corte igual ao aterro	Flat, cut equal to fill
 Inclinada {0} % como o terreno, corte igual ao aterro	Sloped {0} % like the ground, cut equal to fill
 Inclinada {0} % como o terreno, menor movimento de terra	Sloped {0} % like the ground, least earthwork
 Plana, menor movimento de terra	Flat, least earthwork
+Estudando o greide	Studying the grade
+O eixo está fora do terreno.	The alignment is outside the terrain.
+Rampa máxima %	Maximum grade %
+Espaçamento dos PVIs ({0})	PVI spacing ({0})
+Sugerir greide	Suggest grade
+Corte igual ao aterro	Cut equal to fill
+Menor movimento de terra	Least earthwork
+{0} PVIs · rampa máx. {1} % · corte ≈ {2} · aterro ≈ {3}	{0} PVIs · max. grade {1} % · cut ≈ {2} · fill ≈ {3}

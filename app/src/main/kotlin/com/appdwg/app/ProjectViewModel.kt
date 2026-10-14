@@ -1570,6 +1570,33 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Grades the app suggests for the road's axis. */
+    var gradeSuggestions by mutableStateOf<List<com.appdwg.core.GradeSuggestion>>(emptyList())
+        private set
+
+    /** Suggests grades for the axis of [rp]: least earthwork and cut balanced with fill. */
+    fun suggestGrade(rp: RoadParams, maxGrade: Double, spacing: Double) {
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val terrain = project.surfaces.firstOrNull { it.name == rp.terrain }
+            ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) && !it.name.startsWith(PLATFORM_LABEL) }
+            ?: run { roadMessage = tr("Abra ou adicione uma superfície de terreno."); return }
+        val axis = roadAxis(rp, project) ?: run { roadMessage = tr("Desenhe o eixo com 2 PIs ou mais."); return }
+        roadMessage = null
+        viewModelScope.launch {
+            try {
+                gradeSuggestions = tracked(tr("Estudando o greide")) {
+                    withContext(Dispatchers.Default) {
+                        com.appdwg.core.GradeDesign.suggest(axis, terrain, Template(rp.left, rp.right, rp.cut, rp.fill, rp.pavement),
+                            com.appdwg.core.GradeDesign.GradeRules(maxGrade, spacing, rp.kValue, swell = rp.swell)) { !isActive }
+                    }
+                }
+                if (gradeSuggestions.isEmpty()) roadMessage = tr("O eixo está fora do terreno.")
+            } catch (e: Exception) {
+                roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
     fun removeRoad() {
         road = null
         view?.roadBuilt = false

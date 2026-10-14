@@ -75,6 +75,8 @@ fun RoadDialog(
     val v = vm.view ?: return
     var rp by remember { mutableStateOf(v.roadParams) }
     var tab by remember { mutableStateOf(if (vm.road != null) RoadTab.RESULT else RoadTab.AXIS) }
+    var autoMaxGrade by remember { mutableStateOf(8.0) }
+    var autoSpacing by remember { mutableStateOf(100.0) }
     val text = KeyboardOptions(keyboardType = KeyboardType.Text)
     @Composable
     fun numField(value: Double, label: String, width: Int = 150, onChange: (Double) -> Unit) {
@@ -146,6 +148,24 @@ fun RoadDialog(
                                 rp = rp.copy(pvis = stas.map { s -> Profile.Pvi(s, a.pointAt(s)?.let { terrain?.elevationAt(it) } ?: 0.0) })
                             }) { Text(tr("Gerar PVIs no terreno (a cada 100 m)")) }
                             if (axis?.profile != null) OutlinedButton(onClick = { rp = rp.copy(pvis = axis.profile!!.pvis) }) { Text(tr("Copiar greide do arquivo")) }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            numField(autoMaxGrade, tr("Rampa máxima %")) { autoMaxGrade = it }
+                            numField(autoSpacing, tr("Espaçamento dos PVIs ({0})", StationFormat.lengthUnit)) { autoSpacing = it }
+                            OutlinedButton(enabled = axis != null && vm.tasks.isEmpty() && autoMaxGrade > 0 && autoSpacing >= 20, onClick = {
+                                vm.suggestGrade(rp, autoMaxGrade, autoSpacing)
+                            }) { Text(tr("Sugerir greide")) }
+                        }
+                        vm.gradeSuggestions.forEach { g ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(if (g.kind == com.appdwg.core.GradeSuggestion.Kind.BALANCED) tr("Corte igual ao aterro") else tr("Menor movimento de terra"),
+                                        style = MaterialTheme.typography.bodyMedium)
+                                    Text(tr("{0} PVIs · rampa máx. {1} % · corte ≈ {2} · aterro ≈ {3}", g.pvis.size, f(g.maxGrade, 2),
+                                        StationFormat.volume(g.cut), StationFormat.volume(g.fill)), style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = { rp = rp.copy(pvis = g.pvis) }) { Text(tr("Usar")) }
+                            }
                         }
                         rp.pvis.forEachIndexed { i, p ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
