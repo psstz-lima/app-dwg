@@ -1842,10 +1842,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * Suggests outlets for the project: where streams of at least [minArea] m² cross the alignments
      * and the road, where water leaves the platform outline, and where it leaves the terrain.
      */
-    fun suggestOutlets(surface: Surface, project: LandXmlProject, minArea: Double) {
+    fun suggestOutlets(surface: Surface, project: LandXmlProject, minArea: Double, extraLines: List<List<Point2>> = emptyList()) {
         viewModelScope.launch {
             val f = basinFlow(surface) ?: return@launch
-            val lines = project.alignments.map { a -> a.vertices } + listOfNotNull(road?.alignment?.vertices)
+            val lines = project.alignments.map { a -> a.vertices } + listOfNotNull(road?.alignment?.vertices) + extraLines
             val area = view?.platformOutline?.takeIf { it.size >= 3 }
             outlets = withContext(Dispatchers.Default) {
                 val crossings = lines.flatMap { com.appdwg.core.Hydrology.crossings(f, it, minArea) }

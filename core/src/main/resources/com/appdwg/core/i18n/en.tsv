@@ -1116,3 +1116,27 @@ Sugerir traçado	Suggest route
 Mais curto	Shortest
 Equilibrado	Balanced
 Mais suave (menos terraplenagem)	Gentlest (less earthwork)
+Calcular o corredor de {0}	Compute the corridor of {0}
+O eixo tem greide e passa sobre {0}.	The alignment has a grade and runs over {0}.
+Sugerir o greide de {0}	Suggest the grade of {0}
+O eixo não tem greide e passa sobre {0}.	The alignment has no grade and runs over {0}.
+Usar a linha da camada {0} como eixo	Use the line on layer {0} as the alignment
+O desenho tem a linha do eixo, mas não o alinhamento; o app ajusta PIs e curvas a ela.	The drawing has the axis line but not the alignment; the app fits PIs and curves to it.
+Estudar o platô da camada {0}	Study the platform on layer {0}
+Há um contorno fechado de {0}; o app sugere as formas da plataforma.	There is a closed outline of {0}; the app suggests platform shapes.
+Achar os bueiros do eixo	Find the alignment's culverts
+Onde os talvegues do terreno cruzam o eixo, com a bacia de cada um.	Where the terrain's streams cross the alignment, with the basin of each.
+Traçar uma estrada	Lay out a road
+Marque a saída e a chegada; o app sugere o traçado e o greide.	Mark the start and the end; the app suggests the route and the grade.
+Bacias e pontos de lançamento	Basins and outlets
+Escoamento de {0}, com a vazão de pico de cada bacia.	Runoff of {0}, with the peak flow of each basin.
+Comparar {0} com {1}	Compare {0} with {1}
+Corte e aterro entre as duas superfícies.	Cut and fill between the two surfaces.
+Mapa de declividades	Slope map
+Classes de relevo de {0}.	Relief classes of {0}.
+Sugestões para este projeto	Suggestions for this project
+O app leu o que os arquivos têm e sugere o que dá para fazer com eles.	The app read what the files hold and suggests what can be done with them.
+Fazer	Do it
+Sugestões	Suggestions
+Sugestão: {0}	Suggestion: {0}
+Ver sugestões	See suggestions

@@ -71,10 +71,12 @@ fun RoadDialog(
     /** Asks the plan for a line to be the edge target of region [index] on the left (−1) or right (1). */
     onPickTarget: (index: Int, side: Int) -> Unit,
     onDismiss: () -> Unit,
+    /** Opens on the grade tab (the app suggests a grade). */
+    startOnGrade: Boolean = false,
 ) {
     val v = vm.view ?: return
     var rp by remember { mutableStateOf(v.roadParams) }
-    var tab by remember { mutableStateOf(if (vm.road != null) RoadTab.RESULT else RoadTab.AXIS) }
+    var tab by remember { mutableStateOf(if (startOnGrade) RoadTab.GRADE else if (vm.road != null) RoadTab.RESULT else RoadTab.AXIS) }
     var autoMaxGrade by remember { mutableStateOf(8.0) }
     var autoSpacing by remember { mutableStateOf(100.0) }
     val text = KeyboardOptions(keyboardType = KeyboardType.Text)

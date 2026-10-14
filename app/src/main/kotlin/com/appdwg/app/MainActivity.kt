@@ -490,6 +490,13 @@ private fun ProjectScreen(
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
     var showBasin by remember(fileName) { mutableStateOf(false) }
+    var showAdvice by remember(fileName) { mutableStateOf(false) }
+    var adviceCard by remember(fileName) { mutableStateOf(true) }
+    var roadOnGrade by remember(fileName) { mutableStateOf(false) }
+    // What the opened files hold, read once per project: the design tools that fit it.
+    val advice = remember(project) {
+        com.appdwg.core.ProjectAdvisor.advise(project, project.surfaces.filter { !it.name.startsWith(PLATFORM_LABEL) && !it.name.startsWith(ROAD_LABEL) })
+    }
     var showSurfaceEdit by remember(fileName) { mutableStateOf(false) }
     var showSheets by remember(fileName) { mutableStateOf(false) }
     var sheetParams by remember { mutableStateOf<SheetParams?>(null) }
@@ -721,6 +728,7 @@ private fun ProjectScreen(
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel) { showSurfaceEdit = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
+        if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões")) { showAdvice = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet) { showBasin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
@@ -1127,6 +1135,13 @@ private fun ProjectScreen(
                     NarrowCards()
                 }
 
+            if (adviceCard && advice.isNotEmpty()) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
+                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { showAdvice = true }) { Text(tr("Ver sugestões")) }
+                    TextButton(onClick = { adviceCard = false }) { Text(tr("Fechar")) }
+                }
+            }
             if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
         }
         // The side panel folds away to give the plan the whole width; a tab brings it back.
@@ -1343,6 +1358,51 @@ private fun ProjectScreen(
 
     if (showAnalysis) AnalysisDialog(vm, project, onDismiss = { showAnalysis = false })
 
+    if (showAdvice) AdviceDialog(advice, onDo = { a ->
+        showAdvice = false; adviceCard = false
+        val terrainName = project.surfaces.firstOrNull { !it.name.startsWith(PLATFORM_LABEL) && !it.name.startsWith(ROAD_LABEL) }?.name
+        val terrainSurface = project.surfaces.firstOrNull { it.name == terrainName }
+        val axes = project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }
+        fun linePoints(i: Int) = project.polylines.getOrNull(i)?.let { l -> List(l.xs.size) { k -> Point2(l.xs[k], l.ys[k]) } }.orEmpty()
+        when (a.kind) {
+            com.appdwg.core.Advice.Kind.CORRIDOR, com.appdwg.core.Advice.Kind.GRADE -> {
+                v.roadParams = v.roadParams.copy(alignmentIndex = axes.indexOf(project.alignments[a.alignment]), terrain = terrainName)
+                roadOnGrade = a.kind == com.appdwg.core.Advice.Kind.GRADE
+                showRoad = true
+            }
+            com.appdwg.core.Advice.Kind.AXIS_FROM_LINE -> project.polylines.getOrNull(a.line)?.let { l ->
+                val rp = v.roadParams
+                val pis = com.appdwg.core.ProjectAdvisor.pisFromLine(l, rp.speed, rp.emax)
+                v.roadParams = rp.copy(alignmentIndex = -1, pis = pis.map { it.position }, radii = pis.map { it.radius }, spirals = pis.map { 0.0 }, terrain = terrainName)
+                roadOnGrade = true
+                showRoad = true
+            }
+            com.appdwg.core.Advice.Kind.PLATFORM_FROM_OUTLINE -> {
+                platformOutline = linePoints(a.line)
+                v.platformTerrain = terrainName
+                showPlatform = true
+            }
+            com.appdwg.core.Advice.Kind.CULVERTS -> {
+                vm.analysisSurface = terrainName
+                val extra = advice.filter { it.kind == com.appdwg.core.Advice.Kind.AXIS_FROM_LINE }.map { linePoints(it.line) }
+                terrainSurface?.let { vm.suggestOutlets(it, project, v.basinParams.minArea, extra) }
+                showBasin = true
+            }
+            com.appdwg.core.Advice.Kind.BASINS -> { vm.analysisSurface = terrainName; showBasin = true }
+            com.appdwg.core.Advice.Kind.ROUTE -> {
+                measuring = false; showSection = false; showProfile = false; show3d = false
+                v.roadParams = v.roadParams.copy(alignmentIndex = -1, pis = emptyList(), radii = emptyList(), spirals = emptyList(), terrain = terrainName)
+                drawingRoad = true
+            }
+            com.appdwg.core.Advice.Kind.COMPARE -> {
+                val names = project.surfaces.filter { !it.name.startsWith(PLATFORM_LABEL) && !it.name.startsWith(ROAD_LABEL) }.map { it.name }
+                v.compareBase = names.getOrNull(0); v.compareOther = names.getOrNull(1)
+                showCompare = true
+            }
+            com.appdwg.core.Advice.Kind.SLOPES -> terrainSurface?.let { vm.analysisSurface = it.name; vm.analysisMode = 1; vm.runAnalysis(it) }
+        }
+    }, onDismiss = { showAdvice = false; adviceCard = false })
+
     if (showBasin) BasinDialog(vm, project, onPick = {
         showBasin = false; v.pickingOutlet = true; measuring = false; show3d = false; tapped = null
     }, onDismiss = { showBasin = false })
@@ -1444,7 +1504,7 @@ private fun ProjectScreen(
             onServiceNotePdf = { notePdfSaver.launch("$baseName-nota-de-servico.pdf") },
             onBulletin = { showRoad = false; showBulletin = true },
             onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
-            onDismiss = { showRoad = false })
+            onDismiss = { showRoad = false; roadOnGrade = false }, startOnGrade = roadOnGrade)
     }
 
     if (showPlatform) {
