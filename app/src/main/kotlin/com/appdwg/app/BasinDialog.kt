@@ -67,12 +67,15 @@ data class BasinParams(
 const val BASIN_COLOR = 0xFF00897B.toInt()
 const val STREAM_COLOR = 0xFF1565C0.toInt()
 const val OUTLET_COLOR = 0xFFFF6D00.toInt()
+/** Colour of the road axis while it is laid out, curves included. */
+const val AXIS_COLOR = 0xFFD81B60.toInt()
 
 /** What the analyses and suggestions draw over the plan: basin, outlets and suggested routes. */
 fun designGuides(vm: ProjectViewModel): Pair<List<Guide>, List<GuideMark>> {
     val (lines, marks) = basinGuides(vm)
     val routes = vm.routeSuggestions.mapIndexed { i, r -> Guide(r.alignment.vertices, ROUTE_COLORS[i % ROUTE_COLORS.size], width = 4f, dashed = true) }
-    return (lines + routes) to marks
+    val axis = vm.view?.roadParams?.let { vm.axisPreview(it) }.orEmpty()
+    return (lines + routes + listOfNotNull(axis.takeIf { it.size >= 2 }?.let { Guide(it, AXIS_COLOR, width = 4f) })) to marks
 }
 
 /** Basin outline, main stream and outlets to draw over the plan. */

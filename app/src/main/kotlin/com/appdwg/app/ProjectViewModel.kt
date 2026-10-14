@@ -8,6 +8,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -230,6 +231,31 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Files of the picture over the surfaces, for saving the project. */
     var drapeUris: List<Uri> = emptyList()
         private set
+
+    /**
+     * [d] cut to the surfaces (plus a small margin) for the 3D view, at the detail of [quality]
+     * (0 normal, 1 high, 2 highest): a large picture is read from its tiles at the finest level
+     * that fits, a decoded one is cropped. [d] itself when nothing better can be made.
+     */
+    suspend fun drapeFor3d(d: Drape, quality: Int): Drape = withContext(Dispatchers.IO) {
+        val project = (state as? ProjectState.Loaded)?.project ?: return@withContext d
+        val area = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) } ?: return@withContext d
+        val m = maxOf(area.width, area.height) * 0.02
+        val a = Bounds(area.minX - m, area.minY - m, area.maxX + m, area.maxY + m)
+        val (pixels, side) = when (quality) { 2 -> 40_000_000L to 8192; 1 -> 16_000_000L to 4096; else -> 4_000_000L to 2048 }
+        val cut = try {
+            d.tiles?.region(a, pixels, side) ?: run {
+                val src = d.image.asAndroidBitmap()
+                val px = d.bounds.width / src.width; val py = d.bounds.height / src.height
+                val x0 = ((a.minX - d.bounds.minX) / px).toInt().coerceIn(0, src.width); val x1 = kotlin.math.ceil((a.maxX - d.bounds.minX) / px).toInt().coerceIn(0, src.width)
+                val y0 = ((d.bounds.maxY - a.maxY) / py).toInt().coerceIn(0, src.height); val y1 = kotlin.math.ceil((d.bounds.maxY - a.minY) / py).toInt().coerceIn(0, src.height)
+                if (x1 <= x0 || y1 <= y0 || (x1 - x0 == src.width && y1 - y0 == src.height)) null
+                else Bitmap.createBitmap(src, x0, y0, x1 - x0, y1 - y0) to
+                    Bounds(d.bounds.minX + x0 * px, d.bounds.maxY - y1 * py, d.bounds.minX + x1 * px, d.bounds.maxY - y0 * py)
+            }
+        } catch (e: OutOfMemoryError) { null }
+        cut?.let { (bmp, b) -> Drape(d.name, b, bmp.asImageBitmap(), d.placement) } ?: d
+    }
 
     fun removeDrape() {
         drapeUris = emptyList()
@@ -1518,6 +1544,24 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun designRoad() { viewModelScope.launch { designRoadNow() } }
 
     /** Alignment the road settings describe, with the file's profile if any; null when not defined yet. */
+    private var previewKey: RoadParams? = null
+    private var previewAxis: List<Point2> = emptyList()
+
+    /**
+     * The axis drawn with PIs as the plan shows it while it is laid out: tangents with their curves
+     * and spirals from the current radius and Ls. Empty when the axis comes from the file, has
+     * fewer than 2 PIs, or the road was already built (it then shows its own axis).
+     */
+    fun axisPreview(rp: RoadParams): List<Point2> {
+        if (rp.alignmentIndex >= 0 || rp.pis.size < 2 || road != null) return emptyList()
+        if (rp != previewKey) {
+            val project = (state as? ProjectState.Loaded)?.project
+            previewAxis = project?.let { runCatching { roadAxis(rp, it)?.vertices }.getOrNull() }.orEmpty()
+            previewKey = rp
+        }
+        return previewAxis
+    }
+
     fun roadAxis(rp: RoadParams, project: LandXmlProject): Alignment? {
         if (rp.alignmentIndex >= 0) return project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }.getOrNull(rp.alignmentIndex)
         if (rp.pis.size < 2) return null

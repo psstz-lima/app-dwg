@@ -253,6 +253,41 @@ class TiledPicture private constructor(
         return bmp
     }
 
+    /**
+     * The part of the picture over [area] at the finest level with at most [maxPixels] pixels and
+     * [maxSide] across, and its plan extent; for the 3D view, which only needs the picture under
+     * the surfaces. Null when it does not touch [area], or when the level it needs is in the
+     * pyramid and that is not built yet.
+     */
+    fun region(area: Bounds, maxPixels: Long, maxSide: Int): Pair<Bitmap, Bounds>? {
+        val px = bounds.width / width; val py = bounds.height / height
+        val c0 = floor((area.minX - bounds.minX) / px).toInt().coerceIn(0, width)
+        val c1 = ceil((area.maxX - bounds.minX) / px).toInt().coerceIn(0, width)
+        val r0 = floor((bounds.maxY - area.maxY) / py).toInt().coerceIn(0, height)
+        val r1 = ceil((bounds.maxY - area.minY) / py).toInt().coerceIn(0, height)
+        if (c1 <= c0 || r1 <= r0) return null
+        var k = 0
+        fun w(k: Int) = ((c1 - 1) shr k) - (c0 shr k) + 1
+        fun h(k: Int) = ((r1 - 1) shr k) - (r0 shr k) + 1
+        while (k < topLevel && (w(k).toLong() * h(k) > maxPixels || max(w(k), h(k)) > maxSide)) k++
+        if (k > DIRECT && !ready) return null
+        val x0 = c0 shr k; val y0 = r0 shr k; val wk = w(k); val hk = h(k)
+        val bmp = Bitmap.createBitmap(wk, hk, config)
+        val canvas = Canvas(bmp)
+        for (ty in y0 / TILE..(y0 + hk - 1) / TILE) for (tx in x0 / TILE..(x0 + wk - 1) / TILE) {
+            val t = memory.get("$k/$tx/$ty") ?: runCatching {
+                if (k <= DIRECT) direct(k, tx, ty)
+                else File(dir, "$k-$tx-$ty.jpg").takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path, BitmapFactory.Options().apply { inPreferredConfig = config }) }
+            }.getOrNull() ?: continue
+            canvas.drawBitmap(t, (tx * TILE - x0).toFloat(), (ty * TILE - y0).toFloat(), null)
+        }
+        val plan = Bounds(
+            bounds.minX + (x0.toLong() shl k) * px, bounds.maxY - ((y0 + hk).toLong() shl k) * py,
+            bounds.minX + ((x0 + wk).toLong() shl k) * px, bounds.maxY - (y0.toLong() shl k) * py,
+        )
+        return bmp to plan
+    }
+
     fun close() {
         scope.cancel()
         memory.evictAll()

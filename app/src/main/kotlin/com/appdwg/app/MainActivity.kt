@@ -420,6 +420,9 @@ private fun ProjectScreen(
         }
     }
     val drape = vm.drape?.takeIf { vm.drapeVisible }
+    // In 3D the picture is cut to the surfaces, at the detail chosen.
+    var drape3d by remember { mutableStateOf<Drape?>(null) }
+    LaunchedEffect(drape, v.drapeQuality, v.show3d) { drape3d = if (v.show3d && drape != null) vm.drapeFor3d(drape, v.drapeQuality) else null }
     val ctx0 = androidx.compose.ui.platform.LocalContext.current
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
@@ -823,7 +826,7 @@ private fun ProjectScreen(
                         background = g.planBg,
                         foreground = g.text,
                         exaggeration = exaggeration.toFloat(),
-                        drape = drape,
+                        drape = drape3d ?: drape,
                         modifier = Modifier.fillMaxSize(),
                         surfaceStyle = { v.styleOf(it) },
                     )
@@ -989,6 +992,7 @@ private fun ProjectScreen(
                     })
                     // Vertical exaggeration helps read gentle terrain.
                     if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 })
+                    if (show3d && drape != null) GButton(tr("Imagem: {0}", listOf(tr("normal"), tr("alta"), tr("máxima"))[v.drapeQuality]), { v.drapeQuality = (v.drapeQuality + 1) % 3 })
                 }
                 if (showContours && !show3d) {
                     Card {
