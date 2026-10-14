@@ -458,6 +458,19 @@ fun PlanView(
         for (t in detail) if (t.name !in hiddenLayers && t.name in painted) drawTerrain(t, colorFilter = filterOf(t.name)) { toScreen(it, cam) }
         if (drape != null) {
             drawTerrain(TerrainImage(drape.name, drape.bounds, drape.image), BlendMode.SrcAtop) { toScreen(it, cam) }
+            // A very large picture: the tiles on screen, sharper than its overview, as they arrive.
+            drape.tiles?.let { tp ->
+                tp.version
+                val halfW = size.width / 2.0 / cam.scale; val halfH = size.height / 2.0 / cam.scale
+                val cx = cam.centerX + origin.x; val cy = cam.centerY + origin.y
+                for (p in tp.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale)) {
+                    val tl = toScreen(Point2(p.plan.minX, p.plan.maxY), cam); val br = toScreen(Point2(p.plan.maxX, p.plan.minY), cam)
+                    drawImage(p.image, srcOffset = IntOffset(p.src.left, p.src.top), srcSize = IntSize(p.src.width(), p.src.height()),
+                        dstOffset = IntOffset(tl.x.roundToInt(), tl.y.roundToInt()),
+                        dstSize = IntSize((br.x - tl.x).roundToInt().coerceAtLeast(1), (br.y - tl.y).roundToInt().coerceAtLeast(1)),
+                        blendMode = BlendMode.SrcAtop)
+                }
+            }
             drawContext.canvas.restore()
         }
         if (overlay != null) drawTerrain(overlay, alpha = 0.9f) { toScreen(it, cam) }

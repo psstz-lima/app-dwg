@@ -38,6 +38,8 @@ class TiffReader(
     private val input: RandomInput,
     /** Decodes one JPEG stream to pixels; null when JPEG is not available. */
     private val jpeg: ((ByteArray) -> Raster?)? = null,
+    /** Decodes one JPEG stream reduced by a power of two (cheap in JPEG); falls back to [jpeg]. */
+    private val jpegReduced: ((ByteArray, Int) -> Raster?)? = null,
 ) {
     private var onProgress: (Float) -> Unit = {}
     private var little = true
@@ -46,6 +48,111 @@ class TiffReader(
     /** [onProgress] gets the fraction of image blocks decoded so far. */
     fun read(maxSize: Int, onProgress: (Float) -> Unit = {}): Raster {
         this.onProgress = onProgress
+        val images = images()
+        val full = images.firstOrNull() ?: error(tr("TIFF sem imagem"))
+        // Overviews keep the aspect of the full image; masks (subfile type 4) are skipped.
+        val candidates = images.filter { it.subfileType and 4 == 0 && it.width > 0 && it.height > 0 }
+            .filter { abs(it.width.toDouble() / it.height - full.width.toDouble() / full.height) < 0.02 }
+            .sortedBy { it.width }
+        val chosen = candidates.firstOrNull { max(it.width, it.height) >= maxSize } ?: candidates.lastOrNull() ?: full
+        val raster = decode(chosen, maxSize)
+        return Raster(raster.width, raster.height, raster.pixels, geoExtent(full), full.width, full.height)
+    }
+
+    /** How the full-resolution picture is cut into blocks (tiles or strips), for reading it piece by piece. */
+    class Blocks internal constructor(
+        val width: Int,
+        val height: Int,
+        val blockWidth: Int,
+        val blockHeight: Int,
+        /** Plan extent from the GeoTIFF tags, or null. */
+        val extent: Bounds?,
+        internal val ifd: Any,
+    ) {
+        /** True when the blocks are JPEG, which has no transparency. */
+        val opaque get() = (ifd as Ifd).int(259, 1).toInt() == 7
+        val across get() = (width + blockWidth - 1) / blockWidth
+        val down get() = (height + blockHeight - 1) / blockHeight
+        val count get() = across * down
+    }
+
+    private var opened: Blocks? = null
+
+    /** The full-resolution picture's layout. */
+    fun blocks(): Blocks = opened ?: run {
+        val full = images().firstOrNull() ?: error(tr("TIFF sem imagem"))
+        val tiled = full.tags.containsKey(322)
+        val bw = if (tiled) full.int(322).toInt() else full.width
+        val bh = if (tiled) full.int(323).toInt() else min(full.height, full.int(278, full.height.toLong()).toInt().coerceAtLeast(1))
+        Blocks(full.width, full.height, bw, bh, geoExtent(full), full).also { opened = it }
+    }
+
+    /**
+     * Block [index] of the full-resolution picture (row by row from the top left), reduced by
+     * [reduce] (1, 2, 4, 8…): one pixel out of [reduce] along each side. Null when the block is empty.
+     */
+    fun readBlock(index: Int, reduce: Int = 1): Raster? {
+        val b = blocks()
+        val ifd = b.ifd as Ifd
+        val samples = ifd.int(277, 1).toInt()
+        val bits = ifd.tags[258]?.first()?.toInt() ?: 1
+        val compression = ifd.int(259, 1).toInt()
+        val photometric = ifd.int(262, if (samples >= 3) 2 else 1).toInt()
+        val predictor = ifd.int(317, 1).toInt()
+        require(bits == 8 || bits == 16) { tr("TIFF com {0} bits por amostra não é suportado", bits) }
+        require(compression in SUPPORTED) { tr("compressão TIFF {0} não é suportada", compression) }
+        val tiled = ifd.tags.containsKey(322)
+        val offsets = ifd.tags[if (tiled) 324 else 273] ?: error(tr("TIFF sem dados"))
+        val counts = ifd.tags[if (tiled) 325 else 279] ?: error(tr("TIFF sem dados"))
+        if (index !in offsets.indices) return null
+        val bx = (index % b.across) * b.blockWidth
+        val by = (index / b.across) * b.blockHeight
+        val cols = min(b.blockWidth, b.width - bx)
+        val rows = min(b.blockHeight, b.height - by)
+        if (cols <= 0 || rows <= 0) return null
+        val length = counts.getOrElse(index) { 0L }.toInt()
+        if (length <= 0) return null
+        val data = bytes(offsets[index], length)
+        val outW = (cols + reduce - 1) / reduce
+        val outH = (rows + reduce - 1) / reduce
+        if (compression == 7) {
+            val jpegTables = ifd.raw[347]?.let { (pos, len) -> bytes(pos, len.toInt()) }
+            val stream = if (jpegTables != null && jpegTables.size > 4) jpegTables.copyOfRange(0, jpegTables.size - 2) + data.copyOfRange(2, data.size) else data
+            val tile = jpegReduced?.invoke(stream, reduce) ?: (jpeg ?: error(tr("JPEG em TIFF não disponível"))).invoke(stream)?.let { reduceRaster(it, reduce) } ?: return null
+            // The decoder works on the whole block; edge blocks are cut to the picture.
+            val out = IntArray(outW * outH)
+            for (y in 0 until min(outH, tile.height)) System.arraycopy(tile.pixels, y * tile.width, out, y * outW, min(outW, tile.width))
+            return Raster(outW, outH, out)
+        }
+        val bytesPerSample = bits / 8
+        val pixelBytes = samples * bytesPerSample
+        val rowBytes = b.blockWidth * pixelBytes
+        val expected = rowBytes * (if (tiled) b.blockHeight else rows)
+        val pixels = when (compression) {
+            1 -> data
+            5 -> lzw(data, expected)
+            8, 32946 -> inflate(data, expected)
+            32773 -> packBits(data, expected)
+            else -> error(tr("compressão TIFF {0} não é suportada", compression))
+        }
+        if (predictor == 2) undoPredictor(pixels, rowBytes, samples, bytesPerSample, if (tiled) b.blockHeight else rows)
+        val colormap = ifd.tags[320]
+        val out = IntArray(outW * outH)
+        for (y in 0 until outH) for (x in 0 until outW) {
+            val p = (y * reduce) * rowBytes + (x * reduce) * pixelBytes
+            if (p + pixelBytes <= pixels.size) out[y * outW + x] = argb(pixels, p, samples, bytesPerSample, photometric, colormap)
+        }
+        return Raster(outW, outH, out)
+    }
+
+    private fun reduceRaster(r: Raster, k: Int): Raster {
+        if (k <= 1) return r
+        val w = (r.width + k - 1) / k; val h = (r.height + k - 1) / k
+        return Raster(w, h, IntArray(w * h) { i -> r.pixels[(i / w) * k * r.width + (i % w) * k] })
+    }
+
+    /** Reads the header and every image directory: the full picture first, then overviews. */
+    private fun images(): List<Ifd> {
         val head = bytes(0, 16)
         little = when {
             head[0] == 'I'.code.toByte() && head[1] == 'I'.code.toByte() -> true
@@ -65,14 +172,7 @@ class TiffReader(
             images += ifd.first
             next = ifd.second
         }
-        val full = images.firstOrNull() ?: error(tr("TIFF sem imagem"))
-        // Overviews keep the aspect of the full image; masks (subfile type 4) are skipped.
-        val candidates = images.filter { it.subfileType and 4 == 0 && it.width > 0 && it.height > 0 }
-            .filter { abs(it.width.toDouble() / it.height - full.width.toDouble() / full.height) < 0.02 }
-            .sortedBy { it.width }
-        val chosen = candidates.firstOrNull { max(it.width, it.height) >= maxSize } ?: candidates.lastOrNull() ?: full
-        val raster = decode(chosen, maxSize)
-        return Raster(raster.width, raster.height, raster.pixels, geoExtent(full), full.width, full.height)
+        return images
     }
 
     /**

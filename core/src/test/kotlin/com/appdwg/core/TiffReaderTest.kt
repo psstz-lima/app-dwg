@@ -100,4 +100,30 @@ class TiffReaderTest {
         }
         assertFailsWith<IllegalStateException> { TiffReader(notTiff).read(100) }
     }
+
+    /** Puts the picture back together from its blocks, each reduced by [reduce]. */
+    private fun mosaic(name: String, reduce: Int, jpegOk: Boolean = false): Raster {
+        val reader = TiffReader(input(name), jpeg)
+        val b = reader.blocks()
+        val w = (b.width + reduce - 1) / reduce; val h = (b.height + reduce - 1) / reduce
+        val out = IntArray(w * h)
+        for (i in 0 until b.count) {
+            val r = reader.readBlock(i, reduce) ?: continue
+            val ox = (i % b.across) * b.blockWidth / reduce; val oy = (i / b.across) * b.blockHeight / reduce
+            for (y in 0 until r.height) for (x in 0 until r.width) if (ox + x < w && oy + y < h) out[(oy + y) * w + ox + x] = r.pixels[y * r.width + x]
+        }
+        return Raster(w, h, out)
+    }
+
+    @Test
+    fun blocksOfTiles() = assertRgb(mosaic("bigtiff_tiled_overview.tif", 1))
+
+    @Test
+    fun blocksOfStrips() = assertRgb(mosaic("lzw_rgb.tif", 1))
+
+    @Test
+    fun reducedBlocks() = assertRgb(mosaic("bigtiff_tiled_overview.tif", 2), step = 2)
+
+    @Test
+    fun reducedJpegBlocks() = assertRgb(mosaic("jpeg_rgb.tif", 2), tolerance = 12, step = 2)
 }

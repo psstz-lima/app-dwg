@@ -110,7 +110,8 @@ const val EDITED_SUFFIX = " (editada)"
 private val IDENTITY = Placement(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, "0")
 
 /** Picture laid over the surfaces ("imagem sobre a superfície"), placed at [bounds] in plan. */
-class Drape(val name: String, val bounds: Bounds, val image: ImageBitmap, val placement: String)
+/** Picture over the surfaces; a very large one also comes in [tiles], drawn on top of [image] (its overview). */
+class Drape(val name: String, val bounds: Bounds, val image: ImageBitmap, val placement: String, val tiles: TiledPicture? = null)
 
 /** Decoded picture, with its plan extent when the file carries one and its size in the file. */
 private class Picture(val image: ImageBitmap, val extent: Bounds?, val sourceWidth: Int, val sourceHeight: Int)
@@ -120,6 +121,8 @@ private val WORLD_FILE_EXTENSIONS = setOf("jgw", "jpgw", "jpegw", "pgw", "pngw",
 
 /** Longest side of a loaded raster image; larger pictures are downsampled to save memory. */
 private const val MAX_RASTER = 4096
+/** TIFFs with a side longer than this are shown in tiles from a pyramid instead of whole. */
+private const val TILED_FROM = 8192
 
 class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -225,6 +228,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeDrape() {
         drapeUris = emptyList()
+        drape?.tiles?.close()
         drape = null
         drapeMessage = null
     }
@@ -254,6 +258,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun drapeNow(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>) {
         run {
             try {
+                // Very large TIFFs are shown in tiles, never decoded whole.
+                tiledDrape(project, uri, name, world, uris)?.let { return }
                 val t0 = System.nanoTime()
                 val pic = tracked(tr("Imagem {0}", name)) { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
                     ?: error(tr("formato de imagem não reconhecido"))
@@ -896,6 +902,60 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
+    }
+
+    /**
+     * Lays a TIFF larger than [TILED_FROM] pixels over the surfaces as a [TiledPicture]; null when the
+     * picture is not such a TIFF. Its pyramid is built in the background the first time.
+     */
+    private suspend fun tiledDrape(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>): Unit? {
+        val app = getApplication<Application>()
+        val head = withContext(Dispatchers.IO) { ByteArray(4).also { b -> input(uri)?.use { it.read(b) } } }
+        val text = String(head, Charsets.ISO_8859_1)
+        if (!(text.startsWith("II*") || text.startsWith("II+") || text.startsWith("MM\u0000*") || text.startsWith("MM\u0000+"))) return null
+        val t0 = System.nanoTime()
+        val opened = withContext(Dispatchers.IO) {
+            val size = fileSize(uri)
+            val key = openCache.keyOf(uri, size) { input(uri) } ?: return@withContext null
+            val fd = cloudCopies[uri]?.takeIf { it.exists() }?.let { android.os.ParcelFileDescriptor.open(it, android.os.ParcelFileDescriptor.MODE_READ_ONLY) }
+                ?: app.contentResolver.openFileDescriptor(uri, "r") ?: return@withContext null
+            val probe = runCatching { TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, null) }.getOrNull()
+            if (probe == null || maxOf(probe.width, probe.height) <= TILED_FROM) { probe?.close() ?: fd.close(); return@withContext null }
+            val worldText = world?.let { (w, _) -> app.contentResolver.openInputStream(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) } }
+            val placed = worldText?.let { WorldFile.extent(it, probe.width, probe.height) }
+            val tiles = if (placed != null) { probe.close(); TiledPicture.open(name, app.contentResolver.openFileDescriptor(uri, "r")!!, java.io.File(app.cacheDir, "pyramid"), key, placed) } else probe
+            Triple(tiles, if (placed != null) tr("posicionada pelo arquivo {0}", world?.second) else tr("posicionada pelo GeoTIFF"), tiles?.ready == true)
+        } ?: return null
+        val (tiles, placement, ready) = opened
+        tiles ?: return null
+        val area = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) } ?: project.bounds
+        drape?.tiles?.close()
+        val overview = if (ready) withContext(Dispatchers.IO) { tiles.overview() } else null
+        drape = Drape(name, tiles.bounds, (overview ?: Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)).asImageBitmap(), placement, tiles)
+        drapeUris = uris
+        drapeVisible = true
+        drapeMessage = if (area != null && !overlaps(tiles.bounds, area)) {
+            tr("A imagem foi {0}, mas não cai sobre a superfície. Confira se as duas estão no mesmo sistema de coordenadas.", placement)
+        } else tr("Imagem {0}.", placement)
+        android.util.Log.i("Gromatic", "imagem $name (em blocos): ${(System.nanoTime() - t0) / 1_000_000} ms, ${tiles.width}x${tiles.height}, pirâmide ${if (ready) "pronta" else "a fazer"}")
+        if (!ready) {
+            // The close-up levels show at once; the reduced copies for zooming out are made once, here.
+            viewModelScope.launch {
+                val t1 = System.nanoTime()
+                tracked(tr("Preparando {0} para o zoom", name)) { task ->
+                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                        val watcher = viewModelScope.launch { while (true) { task.step(tr("Reduções da imagem (feito uma vez)"), tiles.built); kotlinx.coroutines.delay(500) } }
+                        tiles.buildPyramid { ov ->
+                            watcher.cancel()
+                            if (drape?.tiles === tiles && ov != null) drape = Drape(name, tiles.bounds, ov.asImageBitmap(), placement, tiles)
+                            android.util.Log.i("Gromatic", "pirâmide $name: ${(System.nanoTime() - t1) / 1_000_000} ms")
+                            if (cont.isActive) cont.resumeWith(Result.success(Unit))
+                        }
+                    }
+                }
+            }
+        }
+        return Unit
     }
 
     // ---- Field notes with photos ----
@@ -2318,13 +2378,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
-                val raster = TiffReader(input) { bytes ->
+                val raster = TiffReader(input, jpeg = { bytes ->
                     BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { b ->
                         val px = IntArray(b.width * b.height)
                         b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
                         Raster(b.width, b.height, px).also { b.recycle() }
                     }
-                }.read(MAX_RASTER) { task.step(tr("Decodificando TIFF"), it) }
+                }).read(MAX_RASTER) { task.step(tr("Decodificando TIFF"), it) }
                 val bitmap = Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888)
                 Picture(bitmap.asImageBitmap(), raster.extent, raster.sourceWidth, raster.sourceHeight)
             }
