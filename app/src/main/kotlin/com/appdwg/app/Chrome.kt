@@ -53,6 +53,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -375,6 +377,25 @@ fun SidePanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
         verticalArrangement = Arrangement.spacedBy(12.dp),
         content = content,
     )
+}
+
+/** Thin tab beside the side panel: collapses it, or brings it back when it is collapsed. */
+@Composable
+fun PanelTab(open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    val label = if (open) tr("Recolher painel") else tr("Mostrar painel")
+    Box(
+        modifier.width(28.dp).fillMaxHeight().then(if (g.floating) Modifier.padding(bottom = 12.dp) else Modifier)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onToggle)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.width(22.dp).height(64.dp).clip(RoundedCornerShape(8.dp)).background(g.panel)
+                .border(maxOf(g.borderWidth, 1.dp), g.border, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) { Text(if (open) "›" else "‹", color = g.text, fontSize = 22.sp, fontWeight = FontWeight.Bold) }
+    }
 }
 
 private fun Modifier.drawLeftBorder(c: Color, w: Dp) = this.then(Modifier.drawBehind {

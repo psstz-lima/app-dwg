@@ -172,6 +172,12 @@ class ThemeStore(context: Context) {
         private set
 
     fun choose(c: ThemeChoice) { choice = c; prefs.edit().putString("theme", c.name).apply() }
+
+    /** Whether the properties panel (right side; the bottom card on phones) is open; kept between sessions. */
+    var panelOpen by mutableStateOf(prefs.getBoolean("panelOpen", true))
+        private set
+
+    fun togglePanel() { panelOpen = !panelOpen; prefs.edit().putBoolean("panelOpen", panelOpen).apply() }
 }
 
 private fun scheme(g: GTheme): ColorScheme {

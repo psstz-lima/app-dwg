@@ -725,7 +725,11 @@ private fun ProjectScreen(
                     }
                 }
             }
-            InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth())
+            // The properties card folds into a small button, so the plan stays clear on a phone.
+            if (vm.themes.panelOpen) Column(Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth()) {
+                TextButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
+                InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
+            } else GButton(tr("Propriedades") + " ▴", { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
         if (gpsPoint != null && !show3d) {
             GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp).widthIn(max = 420.dp))
@@ -1053,7 +1057,11 @@ private fun ProjectScreen(
 
             if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
         }
-        if (wide && !full) SidePanel {
+        // The side panel folds away to give the plan the whole width; a tab brings it back.
+        if (wide && !full) PanelTab(vm.themes.panelOpen, { vm.themes.togglePanel() })
+        if (wide && !full) androidx.compose.animation.AnimatedVisibility(vm.themes.panelOpen,
+            enter = androidx.compose.animation.expandHorizontally(androidx.compose.animation.core.tween(180)),
+            exit = androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(180))) { SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
             if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
             if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.fillMaxWidth())
@@ -1085,7 +1093,7 @@ private fun ProjectScreen(
             else if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
                 Text(tr("Toque na planta para ver estaca, afastamento e cotas."), style = MaterialTheme.typography.bodyMedium, color = g.muted)
             }
-        }
+        } }
     }
     // Footer: the tapped point, else the GPS position; station on the axis; plan scale; GPS fix.
     val shown = current ?: gpsInfo
