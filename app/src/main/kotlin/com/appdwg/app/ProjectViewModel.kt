@@ -2270,6 +2270,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 text.startsWith("AC10") -> error(tr("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML"))
                 text.startsWith("AutoCAD Binary DXF") -> error(tr("DXF binário. Salve o DXF no formato ASCII"))
+                // Pictures are laid over a drawing, not opened on their own.
+                text.startsWith("II*") || text.startsWith("II+") || text.startsWith("MM\u0000*") || text.startsWith("MM\u0000+") || text.startsWith("\u0089PNG") || (n >= 3 && head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte()) ->
+                    error(tr("é uma imagem. Abra primeiro um LandXML ou DXF e depois adicione a imagem pela ferramenta Imagem (ou Referências, no DXF)."))
                 DxfReader.looksLikeDxf(text) ->
                     return@use DxfReader(stream.reader(Charsets.UTF_8).buffered(1 shl 16)).read { task?.step(it) }
                 AeccPointCache.looksLikePointCache(head, size) ->

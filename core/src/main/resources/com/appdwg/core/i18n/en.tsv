@@ -733,6 +733,7 @@ Não foi possível ler o arquivo: {0}	Could not read the file: {0}
 o ZIP não tem arquivo .shp	the ZIP has no .shp file
 arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML	DWG file. In AutoCAD/Civil 3D, save as DXF (Save As > DXF) or export to LandXML
 DXF binário. Salve o DXF no formato ASCII	binary DXF. Save the DXF in ASCII format
+é uma imagem. Abra primeiro um LandXML ou DXF e depois adicione a imagem pela ferramenta Imagem (ou Referências, no DXF).	it is an image. First open a LandXML or DXF, then add the image with the Image tool (or References, for a DXF).
 fim inesperado do arquivo	unexpected end of file
 Decodificando TIFF	Decoding TIFF
 Salvar cópia do DXF	Save DXF copy
