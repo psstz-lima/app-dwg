@@ -134,7 +134,7 @@ fun PlatformDialog(
                 Text(tr("Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Alturas das bermas: uma altura para todas (ex.: 8) ") +
                     tr("ou a altura de cada berma, da plataforma para fora, separadas por ; (ex.: 6; 8; 10; a última se repete). 0 = sem bermas. ") +
                     tr("A inclinação interna da berma (%) cai para o pé do talude de cima, levando a água para a canaleta."), style = MaterialTheme.typography.bodySmall)
-                vm.tasks.forEach { LoadProgress(it) }
+                TaskProgress(vm)
                 vm.platformMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.platformVolumes?.let { d ->
                     HorizontalDivider()

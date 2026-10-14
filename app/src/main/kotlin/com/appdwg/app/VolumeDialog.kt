@@ -101,7 +101,7 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                             vm.computeVolume(s, polygon.takeIf { st.usePolygon && hasPolygon }, base)
                         },
                     ) { Text(stringResource(R.string.vol_compute)) }
-                    vm.tasks.forEach { LoadProgress(it) }
+                    TaskProgress(vm)
                 }
                 vm.volumeMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (r != null) {

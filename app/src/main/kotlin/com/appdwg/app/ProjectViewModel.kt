@@ -192,6 +192,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         cloudCopies[uri] = file
     }
 
+    /** Dialogs showing [tasks] right now; the card over the plan hides while there is one. */
+    var taskViewers by mutableStateOf(0)
+
     /** Processed copies of large files, so they reopen fast. */
     private val openCache = OpenCache(app)
 
@@ -251,8 +254,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun drapeNow(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>) {
         run {
             try {
+                val t0 = System.nanoTime()
                 val pic = tracked(tr("Imagem {0}", name)) { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
                     ?: error(tr("formato de imagem não reconhecido"))
+                android.util.Log.i("Gromatic", "imagem $name: ${(System.nanoTime() - t0) / 1_000_000} ms, ${pic.sourceWidth}x${pic.sourceHeight}")
                 val surfaces = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) }
                 val area = surfaces ?: project.bounds ?: error(tr("projeto sem área"))
                 val worldText = world?.let { (w, _) ->

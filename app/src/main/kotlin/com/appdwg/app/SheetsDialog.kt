@@ -98,7 +98,7 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
                     field(p.registration, R.string.sh_crea, 160) { p = p.copy(registration = it) }
                     field(p.drawing, R.string.sh_number, 160) { p = p.copy(drawing = it) }
                 }
-                vm.tasks.forEach { LoadProgress(it) }
+                TaskProgress(vm)
                 vm.exportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },

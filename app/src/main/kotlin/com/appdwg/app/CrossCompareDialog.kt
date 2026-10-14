@@ -70,7 +70,7 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(onClick = { vm.computeStages() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text(tr("Calcular etapas")) }
                 }
-                vm.tasks.forEach { LoadProgress(it) }
+                TaskProgress(vm)
                 vm.compareMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
                 val inMatrix = marked.filter { n -> vm.matrix.keys.any { it.first == n || it.second == n } }

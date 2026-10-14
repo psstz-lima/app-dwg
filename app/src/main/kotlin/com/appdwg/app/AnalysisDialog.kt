@@ -52,7 +52,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
                         }, { Text(stringResource(label)) })
                     }
                 }
-                vm.tasks.forEach { LoadProgress(it) }
+                TaskProgress(vm)
                 if (vm.analysisMode == 2 || vm.analysisMode == 3) {
                     Text(stringResource(R.string.ta_min_area), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

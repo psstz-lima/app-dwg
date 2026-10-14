@@ -1051,7 +1051,7 @@ private fun ProjectScreen(
                     NarrowCards()
                 }
 
-            BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
+            if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
         }
         if (wide && !full) SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
@@ -1524,7 +1524,7 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
                 }
                 if (vm.tasks.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
-                    vm.tasks.forEach { LoadProgress(it) }
+                    TaskProgress(vm)
                 }
             }
         },

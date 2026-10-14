@@ -117,7 +117,7 @@ fun ExportDialog(
                 ExportRow(GIcon.IMAGE, ExportKind.PDF.label, tr("A tela como está: planta, 3D ou seção aberta")) { onExport(ExportKind.PDF) }
                 ExportRow(GIcon.IMAGE, ExportKind.PNG.label, tr("A tela como está, em imagem")) { onExport(ExportKind.PNG) }
 
-                vm.tasks.forEach { LoadProgress(it, Modifier.padding(top = 8.dp)) }
+                TaskProgress(vm, Modifier.padding(top = 8.dp))
                 vm.exportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
             }
         },

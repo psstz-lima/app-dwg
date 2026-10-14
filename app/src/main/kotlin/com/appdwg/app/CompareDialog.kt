@@ -83,7 +83,7 @@ fun CompareDialog(
                         OutlinedButton(onClick = { vm.removeFile(label) }) { Text(tr("Remover")) }
                     }
                 }
-                vm.tasks.forEach { LoadProgress(it) }
+                TaskProgress(vm)
                 vm.compareMessage?.let {
                     Spacer(Modifier.height(4.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall)

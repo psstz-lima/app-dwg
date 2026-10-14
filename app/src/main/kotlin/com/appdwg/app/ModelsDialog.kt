@@ -63,7 +63,7 @@ fun ModelsDialog(
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(tr("OBJ (com .mtl), STL, PLY, glTF/GLB (com .bin) e IFC. Selecione junto os arquivos que o modelo usa. ") +
                     tr("FBX, DWG 3D e Revit: exporte em OBJ, glTF ou IFC."), style = MaterialTheme.typography.bodySmall)
-                vm.tasks.forEach { LoadProgress(it) }
+                TaskProgress(vm)
                 vm.modelMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.models.forEachIndexed { i, entry ->
                     HorizontalDivider()

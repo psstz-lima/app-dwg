@@ -242,7 +242,7 @@ fun RoadDialog(
                         }) { Text(tr("Adicionar região")) }
                     }
                     RoadTab.RESULT -> {
-                        vm.tasks.forEach { LoadProgress(it) }
+                        TaskProgress(vm)
                         vm.roadMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         vm.road?.let { r -> RoadResult(r, v.roadParams.swell, onServiceNote, onServiceNotePdf, onBulletin) } ?: if (vm.tasks.isEmpty()) Text(tr("Toque em Calcular.")) else Unit
                     }

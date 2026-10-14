@@ -97,6 +97,19 @@ fun LoadProgress(task: LoadTask, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The view model's running tasks inside a dialog. While a dialog shows them, the card over the
+ * plan ([BackgroundTasks]) stays hidden, so the same progress never shows twice.
+ */
+@Composable
+fun TaskProgress(vm: ProjectViewModel, modifier: Modifier = Modifier) {
+    androidx.compose.runtime.DisposableEffect(vm) {
+        vm.taskViewers++
+        onDispose { vm.taskViewers-- }
+    }
+    Column(modifier) { vm.tasks.forEach { LoadProgress(it) } }
+}
+
 /** Cards for the files still loading in the background (images, xrefs). */
 @Composable
 fun BackgroundTasks(tasks: List<LoadTask>, modifier: Modifier = Modifier) {
