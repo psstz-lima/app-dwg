@@ -1054,3 +1054,34 @@ Usar este local	Use this place
 Digitar coordenadas	Type coordinates
 Ir para o ponto	Go to the point
 A área escolhida no mapa	The area chosen on the map
+Lançamento	Outlet
+Bacia de contribuição	Drainage basin
+Superfície	Surface
+Tocar no ponto de lançamento	Tap the outlet
+Sugerir pontos de lançamento	Suggest outlets
+Talvegue mínimo para as sugestões	Smallest stream for the suggestions
+Pontos sugeridos (numerados na planta)	Suggested points (numbered on the plan)
+Delimitar	Delineate
+Vazão de pico (método racional)	Peak flow (rational method)
+Coef. de escoamento C	Runoff coefficient C
+Tempo de retorno (anos)	Return period (years)
+Chuva local (IDF): i = K·Tᵃ / (t + b)ᶜ, em mm/h com t em minutos	Local rainfall (IDF): i = K·Tᵃ / (t + b)ᶜ, in mm/h with t in minutes
+Informe a equação de chuvas da região (K, a, b, c) para calcular a vazão.	Enter the local rainfall equation (K, a, b, c) to compute the flow.
+t = {0} min · i = {1} mm/h · Q = {2} m³/s	t = {0} min · i = {1} mm/h · Q = {2} m³/s
+Bacia maior que 2 km²: o método racional tende a superestimar; prefira o hidrograma unitário (SCS).	Basin larger than 2 km²: the rational method tends to overestimate; prefer the unit hydrograph (SCS).
+Contorno e talvegue vão no DXF exportado (camadas _BACIA e _BACIA_TALVEGUE).	The outline and stream go into the exported DXF (layers _BACIA and _BACIA_TALVEGUE).
+Bacia	Basin
+Área {0} · Perímetro {1}	Area {0} · Perimeter {1}
+Talvegue principal {0} · desnível {1} · declividade {2} %	Main stream {0} · drop {1} · slope {2} %
+Cotas {0} a {1} · declividade média {2} %	Elevations {0} to {1} · mean slope {2} %
+Kc {0} · Kf {1} · tempo de concentração (Kirpich) {2} min	Kc {0} · Kf {1} · time of concentration (Kirpich) {2} min
+Talvegue cruza o eixo (bueiro)	Stream crosses the alignment (culvert)
+Saída de água da plataforma	Water leaves the platform
+Saída do terreno	Leaves the terrain
+Bacias	Basins
+Toque no ponto de lançamento; ele encaixa no talvegue mais próximo.	Tap the outlet; it snaps to the nearest stream.
+Escoamento da superfície	Surface runoff
+A superfície não tem área para analisar.	The surface has no area to analyse.
+Delimitando a bacia	Delineating the basin
+O ponto está fora da superfície.	The point is outside the surface.
+Nenhum talvegue com essa área cruza os eixos ou sai da área.	No stream that large crosses the alignments or leaves the area.

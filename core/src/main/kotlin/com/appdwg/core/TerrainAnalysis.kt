@@ -15,6 +15,19 @@ class FlowGrid(val grid: ElevationGrid, /** Index of the next cell downhill, or 
         return Point2(grid.bounds.minX + (c + 0.5) * grid.cellSize, grid.bounds.maxY - (r + 0.5) * grid.cellSize)
     }
 
+    /** Cells draining straight into each cell, as compressed lists: those of cell i are items[start[i] until start[i + 1]]. */
+    private val upstream: Pair<IntArray, IntArray> by lazy {
+        val start = IntArray(next.size + 1)
+        for (t in next) if (t >= 0) start[t + 1]++
+        for (i in 1 until start.size) start[i] += start[i - 1]
+        val items = IntArray(start.last())
+        val fill = start.copyOf(next.size)
+        for (i in next.indices) { val t = next[i]; if (t >= 0) items[fill[t]++] = i }
+        start to items
+    }
+
+    fun upstreamIndex(): Pair<IntArray, IntArray> = upstream
+
     /** Segments from each cell to the next where the contributing area is at least [minArea] m², with that area. */
     fun channels(minArea: Double): List<Triple<Point2, Point2, Double>> {
         val min = (minArea / cellArea).toInt().coerceAtLeast(2)
@@ -77,36 +90,8 @@ object TerrainAnalysis {
     }
 
     /**
-     * D8 flow: each cell drains to its steepest lower neighbour; the area through a cell is summed
-     * from the highest cells down. Flat areas and pits end a flow path.
+     * D8 flow: each cell drains to its steepest lower neighbour after pits are filled to their spill
+     * point, so streams run on to the edge of the terrain; the area through a cell is summed downstream.
      */
-    fun flow(g: ElevationGrid, cancelled: () -> Boolean = { false }): FlowGrid? {
-        val n = g.values.size
-        val next = IntArray(n) { -1 }
-        val d = g.cellSize
-        val diag = d * sqrt(2.0)
-        for (r in 0 until g.rows) {
-            if (cancelled()) return null
-            for (c in 0 until g.cols) {
-                val z = g[c, r]
-                if (z.isNaN()) continue
-                var best = 0.0; var to = -1
-                for (dr in -1..1) for (dc in -1..1) {
-                    if (dr == 0 && dc == 0) continue
-                    val cc = c + dc; val rr = r + dr
-                    if (cc !in 0 until g.cols || rr !in 0 until g.rows) continue
-                    val zz = g[cc, rr]
-                    if (zz.isNaN()) continue
-                    val drop = (z - zz) / (if (dr != 0 && dc != 0) diag else d)
-                    if (drop > best) { best = drop; to = rr * g.cols + cc }
-                }
-                next[r * g.cols + c] = to
-            }
-        }
-        // Highest first, so every cell has its whole upstream summed before it passes it on.
-        val order = (0 until n).filter { !g.values[it].isNaN() }.sortedByDescending { g.values[it] }
-        val count = IntArray(n) { if (g.values[it].isNaN()) 0 else 1 }
-        for (i in order) { val t = next[i]; if (t >= 0) count[t] += count[i] }
-        return FlowGrid(g, next, count)
-    }
+    fun flow(g: ElevationGrid, cancelled: () -> Boolean = { false }): FlowGrid? = Hydrology.flow(g, cancelled)
 }

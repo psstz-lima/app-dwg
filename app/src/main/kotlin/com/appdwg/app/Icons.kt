@@ -38,6 +38,7 @@ enum class GIcon(val path: String) {
     VOLUME("M4 18l8-12 8 12z M8 12h8"),
     BULLETIN("M6 3h9l3 3v15H6z M9 9h6 M9 13h6 M9 17h4"),
     SLOPE("M3 20h18 M3 20L19 6 M14 20a6 6 0 0 0-1.5-4"),
+    BASIN("M12 3c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11z M9 15a3 3 0 0 0 3 3"),
     EDIT_SURFACE("M3 21h18 M14 4l5 5-9 9H5v-5z"),
     FIT("M3 8V3h5 M16 3h5v5 M21 16v5h-5 M8 21H3v-5 M9 9h6v6H9z"),
     FULLSCREEN("M14 4h6v6 M20 4l-6 6 M10 20H4v-6 M4 20l6-6"),

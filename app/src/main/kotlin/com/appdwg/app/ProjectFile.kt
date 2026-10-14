@@ -45,6 +45,9 @@ class ViewState(project: LandXmlProject) {
     var roadParams by mutableStateOf(RoadParams())
     var roadBuilt by mutableStateOf(false)
     var drawingRoad by mutableStateOf(false)
+    // Drainage basin: rain and runoff settings, and the plan waiting for the outlet to be tapped.
+    var basinParams by mutableStateOf(BasinParams())
+    var pickingOutlet by mutableStateOf(false)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
     // Site calibration of the GNSS position to the local grid.

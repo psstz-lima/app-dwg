@@ -183,6 +183,9 @@ fun PlanView(
     pointLabels: Boolean = true,
     /** Downhill direction arrows: position and angle (radians, counterclockwise from east). */
     arrows: List<Pair<Point2, Double>> = emptyList(),
+    /** Lines and labelled marks of an analysis or a suggestion (basin, outlets, proposals). */
+    guides: List<Guide> = emptyList(),
+    guideMarks: List<GuideMark> = emptyList(),
     /** Display style of each surface (mesh, border, contours, elevations). */
     surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
     /** Area to show while the project has nothing in it yet. */
@@ -542,6 +545,28 @@ fun PlanView(
             // Edge red, daylight green, benches blue.
             val c = when (k) { 0 -> Color(0xFFD32F2F); 1 -> Color(0xFF2E7D32); else -> Color(0xFF1565C0) }
             drawPath(path, c, style = Stroke(width = if (k < 2) 3f else 2f))
+        }
+        for (gd in guides) {
+            if (gd.points.size < 2) continue
+            val path = Path()
+            gd.points.forEachIndexed { i, p -> val sp = toScreen(p, cam); if (i == 0) path.moveTo(sp.x, sp.y) else path.lineTo(sp.x, sp.y) }
+            if (gd.closed) path.close()
+            val c = Color(gd.color)
+            if (gd.fillAlpha > 0f) drawPath(path, c.copy(alpha = gd.fillAlpha))
+            drawPath(path, Color.Black.copy(alpha = 0.4f), style = Stroke(width = gd.width + 2f))
+            drawPath(path, c, style = Stroke(width = gd.width,
+                pathEffect = if (gd.dashed) androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 8f)) else null))
+        }
+        if (guideMarks.isNotEmpty()) {
+            val r = 7.sp.toPx()
+            val text = android.graphics.Paint().apply { isAntiAlias = true; textSize = 12.sp.toPx(); color = android.graphics.Color.WHITE; setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK) }
+            for (m in guideMarks) {
+                val sp = toScreen(m.at, cam)
+                if (sp.x < -r || sp.y < -r || sp.x > size.width + r || sp.y > size.height + r) continue
+                drawCircle(Color.Black.copy(alpha = 0.5f), radius = r + 2f, center = sp)
+                drawCircle(Color(m.color), radius = r, center = sp)
+                if (m.label.isNotEmpty()) drawContext.canvas.nativeCanvas.drawText(m.label, sp.x + r + 4f, sp.y + r / 2, text)
+            }
         }
         selectedLine?.let { ref ->
             PointGen.path(project, ref)?.let { pth ->

@@ -1734,6 +1734,78 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         flowChannels = flowGrid?.channels(a).orEmpty()
     }
 
+    // ---- Drainage basins ----
+
+    /** Basin of the last outlet chosen, or null. */
+    var basin by mutableStateOf<com.appdwg.core.Basin?>(null)
+        private set
+    /** Outlets the app suggests: stream crossings of the alignments, exits of the work area, terrain outlets. */
+    var outlets by mutableStateOf<List<com.appdwg.core.OutletSuggestion>>(emptyList())
+        private set
+    var basinMessage by mutableStateOf<String?>(null)
+        private set
+    /** Pit-filled flow of the surface last used, kept so each outlet is quick. */
+    private var basinFlow: Pair<Surface, com.appdwg.core.FlowGrid>? = null
+
+    private suspend fun basinFlow(surface: Surface): com.appdwg.core.FlowGrid? {
+        basinFlow?.takeIf { it.first === surface }?.let { return it.second }
+        val f = tracked(tr("Escoamento da superfície")) {
+            withContext(Dispatchers.Default) {
+                val g = surface.rasterize(1024) ?: return@withContext null
+                com.appdwg.core.Hydrology.flow(g) { !isActive }
+            }
+        } ?: return null
+        basinFlow = surface to f
+        return f
+    }
+
+    /** Basin draining through the stream nearest to [p] (within about 30 m). */
+    fun basinAt(surface: Surface, p: Point2) {
+        viewModelScope.launch {
+            val f = basinFlow(surface) ?: run { basinMessage = tr("A superfície não tem área para analisar."); return@launch }
+            val cell = com.appdwg.core.Hydrology.snap(f, p, maxOf(30.0, 3 * f.grid.cellSize))
+            val b = cell?.let { c -> tracked(tr("Delimitando a bacia")) { withContext(Dispatchers.Default) { com.appdwg.core.Hydrology.basin(f, c) } } }
+            basin = b
+            basinMessage = if (b == null) tr("O ponto está fora da superfície.") else null
+        }
+    }
+
+    fun basinAt(surface: Surface, s: com.appdwg.core.OutletSuggestion) {
+        viewModelScope.launch {
+            val f = basinFlow(surface) ?: return@launch
+            basin = tracked(tr("Delimitando a bacia")) { withContext(Dispatchers.Default) { com.appdwg.core.Hydrology.basin(f, s.cell) } }
+        }
+    }
+
+    /**
+     * Suggests outlets for the project: where streams of at least [minArea] m² cross the alignments
+     * and the road, where water leaves the platform outline, and where it leaves the terrain.
+     */
+    fun suggestOutlets(surface: Surface, project: LandXmlProject, minArea: Double) {
+        viewModelScope.launch {
+            val f = basinFlow(surface) ?: return@launch
+            val lines = project.alignments.map { a -> a.vertices } + listOfNotNull(road?.alignment?.vertices)
+            val area = view?.platformOutline?.takeIf { it.size >= 3 }
+            outlets = withContext(Dispatchers.Default) {
+                val crossings = lines.flatMap { com.appdwg.core.Hydrology.crossings(f, it, minArea) }
+                val exits = area?.let { com.appdwg.core.Hydrology.exits(f, it, minArea) }.orEmpty()
+                (crossings + exits + com.appdwg.core.Hydrology.terrainOutlets(f).filter { it.area >= minArea }).take(30)
+            }
+            basinMessage = if (outlets.isEmpty()) tr("Nenhum talvegue com essa área cruza os eixos ou sai da área.") else null
+        }
+    }
+
+    fun clearBasin() { basin = null; outlets = emptyList(); basinMessage = null }
+
+    /** Basin outline and main stream for DXF. */
+    fun basinLines(): List<ExportLine> {
+        val b = basin ?: return emptyList()
+        return listOf(
+            ExportLine("_BACIA", b.outline, true, 5),
+            ExportLine("_BACIA_TALVEGUE", b.mainStream.map { Point2(it.x, it.y) }, false, 4, zs = b.mainStream.map { it.z }),
+        )
+    }
+
     // ---- Cross-section sheets ----
 
     /** Title block fields kept on the device, so a new project starts with them. */
@@ -2661,6 +2733,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     asBuilt = null
                     volume = null
                     analysisMode = 0; slopeImage = null; flowGrid = null; flowChannels = emptyList(); flowArrows = emptyList(); slopeClasses = emptyList()
+                    basin = null; outlets = emptyList(); basinFlow = null; basinMessage = null
                     road = null
                     roadMessage = null
                     platformVolumes = null

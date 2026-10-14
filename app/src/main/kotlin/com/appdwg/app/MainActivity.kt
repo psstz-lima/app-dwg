@@ -489,6 +489,7 @@ private fun ProjectScreen(
     var showAsBuilt by remember(fileName) { mutableStateOf(false) }
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
+    var showBasin by remember(fileName) { mutableStateOf(false) }
     var showSurfaceEdit by remember(fileName) { mutableStateOf(false) }
     var showSheets by remember(fileName) { mutableStateOf(false) }
     var sheetParams by remember { mutableStateOf<SheetParams?>(null) }
@@ -564,7 +565,7 @@ private fun ProjectScreen(
         val kind = pendingExport
         pendingExport = null
         if (uri != null && kind != null) {
-            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines() + vm.roadLines()
+            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines() + vm.roadLines() + vm.basinLines()
             when (kind) {
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
@@ -720,6 +721,7 @@ private fun ProjectScreen(
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel) { showSurfaceEdit = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet) { showBasin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, tr("Modelos")) { showModels = true })
@@ -826,6 +828,12 @@ private fun ProjectScreen(
                     onTap = {
                         // Tapping the same snapped point twice would add a zero-length leg.
                         when {
+                            v.pickingOutlet -> {
+                                v.pickingOutlet = false
+                                val name = vm.analysisSurface ?: project.surfaces.firstOrNull()?.name
+                                project.surfaces.firstOrNull { s -> s.name == name }?.let { s -> vm.basinAt(s, it) }
+                                showBasin = true
+                            }
                             addingNote -> { addingNote = false; editingNote = newNote(it, PointQuery.at(project, it).terrainElevation) to true }
                             drawingRoad -> v.roadParams = v.roadParams.copy(pis = (v.roadParams.pis + it).let { l -> if (l.size > 1 && l[l.size - 2] == it) l.dropLast(1) else l })
                             modelPickFor != null -> {
@@ -920,6 +928,8 @@ private fun ProjectScreen(
                     selectedLine = if (genPick == null && !showGen && !genReview) null else if (gen.grid) gen.areaLine?.takeIf { gen.area == GridArea.LINE } else gen.line,
                     previewPoints = gen.preview.map { Point2(it.x, it.y) },
                     onViewport = { viewport = it },
+                    guides = basinGuides(vm).first,
+                    guideMarks = basinGuides(vm).second,
                     designLines = vm.platform?.let { r -> listOf(r.edge, r.daylight) + r.benches }?.map { l -> l.map { Point2(it.x, it.y) } }.orEmpty(),
                     sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) } ?: profileMark,
                     overlay = vm.slopeImage.takeIf { vm.analysisMode == 1 || vm.analysisMode == 3 } ?: differenceOverlay,
@@ -1061,6 +1071,13 @@ private fun ProjectScreen(
                                 TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
                             }
                             TextButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) tr("Concluir") else tr("Cancelar")) }
+                        }
+                    }
+                } else if (v.pickingOutlet) {
+                    Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("Toque no ponto de lançamento; ele encaixa no talvegue mais próximo."), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { v.pickingOutlet = false; showBasin = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingPlatform) {
@@ -1325,6 +1342,10 @@ private fun ProjectScreen(
     }
 
     if (showAnalysis) AnalysisDialog(vm, project, onDismiss = { showAnalysis = false })
+
+    if (showBasin) BasinDialog(vm, project, onPick = {
+        showBasin = false; v.pickingOutlet = true; measuring = false; show3d = false; tapped = null
+    }, onDismiss = { showBasin = false })
 
     if (showVolume) {
         VolumeDialog(vm, project, volumeState, measurePoints, onDraw = {
