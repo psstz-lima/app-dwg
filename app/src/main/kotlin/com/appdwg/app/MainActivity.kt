@@ -1137,7 +1137,7 @@ private fun ProjectScreen(
                     NarrowCards()
                 }
 
-            if (adviceCard && advice.isNotEmpty()) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
+            if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
                 Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { showAdvice = true }) { Text(tr("Ver sugestões")) }

@@ -346,6 +346,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun addFileNow(uri: Uri, wantedLabel: String? = null) {
         val name = displayName(uri)
+        if (Regex("\\.(tiff?|jpe?g|png|webp)$", RegexOption.IGNORE_CASE).containsMatchIn(name)) {
+            projectMessage = tr("{0} é uma imagem: use Imagem > Trocar para colocá-la na planta.", name)
+            return
+        }
+        try { addFileRead(uri, name, wantedLabel) } finally { compareMessage?.let { projectMessage = it } }
+    }
+
+    private suspend fun addFileRead(uri: Uri, name: String, wantedLabel: String?) {
         run {
             try {
                 val drawing = tracked(tr("Adicionando {0}", name)) { t ->
