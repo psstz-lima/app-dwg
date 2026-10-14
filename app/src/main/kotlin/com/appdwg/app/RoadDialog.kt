@@ -138,7 +138,8 @@ fun RoadDialog(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
                                         Text("${i + 1}. " + routeTitle(r.kind), style = MaterialTheme.typography.bodyMedium, color = androidx.compose.ui.graphics.Color(ROUTE_COLORS[i % ROUTE_COLORS.size]))
-                                        Text(tr("{0} · {1} curvas · rampa máx. {2} % · corte ≈ {3} · aterro ≈ {4}", StationFormat.length(r.length, 0), r.pis.size - 2,
+                                        Text(tr("{0} · {1} · rampa máx. {2} % · corte ≈ {3} · aterro ≈ {4}", StationFormat.length(r.length, 0),
+                                            (r.pis.size - 2).let { if (it == 1) tr("1 curva") else tr("{0} curvas", it) },
                                             f(r.grade?.maxGrade ?: 0.0, 2), StationFormat.volume(r.grade?.cut ?: 0.0), StationFormat.volume(r.grade?.fill ?: 0.0)),
                                             style = MaterialTheme.typography.bodySmall)
                                     }
@@ -155,9 +156,9 @@ fun RoadDialog(
                             Text(tr("Terreno"))
                             var open by remember { mutableStateOf(false) }
                             Box {
-                                TextButton(onClick = { open = true }) { Text(rp.terrain ?: names.firstOrNull() ?: "—", maxLines = 1) }
+                                TextButton(onClick = { open = true }) { Text((rp.terrain ?: names.firstOrNull())?.substringAfterLast('|') ?: "—", maxLines = 1) }
                                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                                    names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { rp = rp.copy(terrain = n); open = false }) }
+                                    names.forEach { n -> DropdownMenuItem(text = { Text(n.substringAfterLast('|')) }, onClick = { rp = rp.copy(terrain = n); open = false }) }
                                 }
                             }
                         }

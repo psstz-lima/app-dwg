@@ -35,9 +35,9 @@ object ProjectAdvisor {
         p.alignments.forEachIndexed { i, a ->
             if (a.vertices.none { inside(it.x, it.y) }) return@forEachIndexed
             if (a.profile != null && a.profile.pvis.size >= 2)
-                out += Advice(Advice.Kind.CORRIDOR, tr("Calcular o corredor de {0}", a.name), tr("O eixo tem greide e passa sobre {0}.", surface.name), alignment = i)
+                out += Advice(Advice.Kind.CORRIDOR, tr("Calcular o corredor de {0}", a.name), tr("O eixo tem greide e passa sobre {0}.", surface.name.substringAfterLast('|')), alignment = i)
             else
-                out += Advice(Advice.Kind.GRADE, tr("Sugerir o greide de {0}", a.name), tr("O eixo não tem greide e passa sobre {0}.", surface.name), alignment = i)
+                out += Advice(Advice.Kind.GRADE, tr("Sugerir o greide de {0}", a.name), tr("O eixo não tem greide e passa sobre {0}.", surface.name.substringAfterLast('|')), alignment = i)
         }
         if (p.alignments.isEmpty()) {
             // An exploded drawing keeps the axis as a line on its own layer, often next to its
@@ -58,10 +58,10 @@ object ProjectAdvisor {
             out += Advice(Advice.Kind.CULVERTS, tr("Achar os bueiros do eixo"), tr("Onde os talvegues do terreno cruzam o eixo, com a bacia de cada um."))
         if (p.alignments.isEmpty() && out.none { it.kind == Advice.Kind.AXIS_FROM_LINE })
             out += Advice(Advice.Kind.ROUTE, tr("Traçar uma estrada"), tr("Marque a saída e a chegada; o app sugere o traçado e o greide."))
-        out += Advice(Advice.Kind.BASINS, tr("Bacias e pontos de lançamento"), tr("Escoamento de {0}, com a vazão de pico de cada bacia.", surface.name))
+        out += Advice(Advice.Kind.BASINS, tr("Bacias e pontos de lançamento"), tr("Escoamento de {0}, com a vazão de pico de cada bacia.", surface.name.substringAfterLast('|')))
         if (terrainSurfaces.size >= 2)
-            out += Advice(Advice.Kind.COMPARE, tr("Comparar {0} com {1}", terrainSurfaces[0].name, terrainSurfaces[1].name), tr("Corte e aterro entre as duas superfícies."))
-        out += Advice(Advice.Kind.SLOPES, tr("Mapa de declividades"), tr("Classes de relevo de {0}.", surface.name))
+            out += Advice(Advice.Kind.COMPARE, tr("Comparar {0} com {1}", terrainSurfaces[0].name.substringAfterLast('|'), terrainSurfaces[1].name.substringAfterLast('|')), tr("Corte e aterro entre as duas superfícies."))
+        out += Advice(Advice.Kind.SLOPES, tr("Mapa de declividades"), tr("Classes de relevo de {0}.", surface.name.substringAfterLast('|')))
         return out
     }
 

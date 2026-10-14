@@ -134,7 +134,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(tr("Superfície"), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    names.forEach { n -> FilterChip(n == current, { vm.analysisSurface = n }, { Text(n) }) }
+                    names.forEach { n -> FilterChip(n == current, { vm.analysisSurface = n }, { Text(n.substringAfterLast('|')) }) }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled = surface != null, onClick = { v.basinParams = params(); onPick() }) { Text(tr("Tocar no ponto de lançamento")) }

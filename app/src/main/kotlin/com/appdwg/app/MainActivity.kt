@@ -1024,7 +1024,7 @@ private fun ProjectScreen(
                 } else if (addingNote) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque na planta onde fica a anotação."), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Toque na planta onde fica a anotação."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text(tr("Na posição do GPS")) }
                             TextButton(onClick = { addingNote = false }) { Text(tr("Cancelar")) }
                         }
@@ -1035,14 +1035,14 @@ private fun ProjectScreen(
                 } else if (roadTargetPick != null) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque na linha que o bordo da pista deve seguir."), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Toque na linha que o bordo da pista deve seguir."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { roadTargetPick = null; showRoad = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingRoad) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}).", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}).", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
                             TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
                             TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
@@ -1052,14 +1052,14 @@ private fun ProjectScreen(
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(when (alignPick) { 1 -> tr("Toque onde fica o ponto A do modelo."); 2 -> tr("Toque onde fica o ponto B do modelo.")
-                                else -> tr("Toque o ponto de inserção do modelo.") } + tr(" O toque encaixa em pontos e vértices."), style = MaterialTheme.typography.bodyMedium)
+                                else -> tr("Toque o ponto de inserção do modelo.") } + tr(" O toque encaixa em pontos e vértices."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { modelPickFor = null; showModels = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genReview) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("{0} ponto(s) em ciano.", gen.preview.size), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("{0} ponto(s) em ciano.", gen.preview.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { genReview = false; showGen = true }) { Text(tr("Ajustar")) }
                             TextButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text(tr("Criar")) }
                             TextButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text(tr("Cancelar")) }
@@ -1073,7 +1073,7 @@ private fun ProjectScreen(
                                 GenPick.AREA_LINE -> tr("Toque numa polilinha fechada.")
                                 GenPick.ROTATION -> tr("Toque na linha que dá a direção da malha.")
                                 else -> tr("Toque na linha, polilinha 3D ou eixo.")
-                            }, style = MaterialTheme.typography.bodyMedium)
+                            }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             if (genPick == GenPick.AREA_DRAW) {
                                 TextButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Desfazer")) }
                                 TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
@@ -1084,7 +1084,7 @@ private fun ProjectScreen(
                 } else if (v.pickingOutlet) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque no ponto de lançamento; ele encaixa no talvegue mais próximo."), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Toque no ponto de lançamento; ele encaixa no talvegue mais próximo."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { v.pickingOutlet = false; showBasin = true }) { Text(tr("Cancelar")) }
                         }
                     }
@@ -1092,7 +1092,7 @@ private fun ProjectScreen(
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque os vértices da plataforma ({0}). O toque encaixa em pontos e vértices.", platformOutline.size),
-                                style = MaterialTheme.typography.bodyMedium)
+                                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text(tr("Desfazer")) }
                             TextButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text(tr("Limpar")) }
                             TextButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text(tr("Concluir")) }
@@ -1101,7 +1101,7 @@ private fun ProjectScreen(
                 } else if (addingPoints) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque na planta para criar um ponto (cota da superfície)."), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Toque na planta para criar um ponto (cota da superfície)."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { addingPoints = false }) { Text(tr("Concluir")) }
                         }
                     }

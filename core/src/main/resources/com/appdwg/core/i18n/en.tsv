@@ -1111,7 +1111,7 @@ Traçado automático	Automatic route
 Marque só a saída e a chegada (o primeiro e o último PI). O app procura caminhos pelo terreno dentro da rampa máxima, com raio mínimo pela velocidade ({0} km/h, e máx. {1} %), desviando de construções e água do OSM baixado.	Mark only the start and the end (the first and last PI). The app looks for paths over the terrain within the maximum grade, with the minimum radius for the speed ({0} km/h, max. e {1} %), avoiding buildings and water from the downloaded OSM.
 Velocidade (km/h)	Speed (km/h)
 Sugerir traçado	Suggest route
-{0} · {1} curvas · rampa máx. {2} % · corte ≈ {3} · aterro ≈ {4}	{0} · {1} curves · max. grade {2} % · cut ≈ {3} · fill ≈ {4}
+{0} · {1} · rampa máx. {2} % · corte ≈ {3} · aterro ≈ {4}	{0} · {1} · max. grade {2} % · cut ≈ {3} · fill ≈ {4}
 Mais curto	Shortest
 Equilibrado	Balanced
 Mais suave (menos terraplenagem)	Gentlest (less earthwork)
@@ -1144,3 +1144,5 @@ Buscar equação de chuva por cidade ou UF	Search rainfall equation by city or s
 Nenhuma equação para essa busca; digite K, a, b e c.	No equation matches; type K, a, b and c.
 Mais {0} resultados; refine a busca.	{0} more results; narrow the search.
 Equação de {0} (Coletânea das equações de chuva do Brasil, ABRH). Confira com a do órgão local.	Equation for {0} (Coletânea das equações de chuva do Brasil, ABRH). Check it against the local authority's.
+1 curva	1 curve
+{0} curvas	{0} curves

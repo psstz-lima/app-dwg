@@ -110,9 +110,9 @@ fun PlatformDialog(
                     Text(tr("Terreno"), Modifier.width(120.dp))
                     var open by remember { mutableStateOf(false) }
                     Box {
-                        TextButton(onClick = { open = true }) { Text(v.platformTerrain ?: names.firstOrNull() ?: "—", maxLines = 1) }
+                        TextButton(onClick = { open = true }) { Text((v.platformTerrain ?: names.firstOrNull())?.substringAfterLast('|') ?: "—", maxLines = 1) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                            names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { v.platformTerrain = n; open = false }) }
+                            names.forEach { n -> DropdownMenuItem(text = { Text(n.substringAfterLast('|')) }, onClick = { v.platformTerrain = n; open = false }) }
                         }
                     }
                 }
@@ -147,6 +147,7 @@ fun PlatformDialog(
                         v.platformParams = params(); vm.suggestPlatforms(params(), num(maxGrade)!!, num(swell)!!)
                     }) { Text(tr("Sugerir formas")) }
                 }
+                TaskProgress(vm)
                 vm.platformOptions.takeIf { vm.platformOptionsOutline == v.platformOutline }.orEmpty().forEach { o ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -166,7 +167,6 @@ fun PlatformDialog(
                         }) { Text(tr("Usar")) }
                     }
                 }
-                TaskProgress(vm)
                 vm.platformMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.platformVolumes?.let { d ->
                     HorizontalDivider()
