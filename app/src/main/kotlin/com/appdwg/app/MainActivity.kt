@@ -200,6 +200,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                                 if (state is ProjectState.Loaded && hasDrive) item(tr("Salvar no Google Drive")) { saveAs(true) }
                                 if (viewModel.recent.isNotEmpty()) item(tr("Recentes")) { showRecent = true }
                                 if (state is ProjectState.Loaded) item(tr("Salvar como")) { saveAs(false) }
+                                if (state is ProjectState.Loaded) item(tr("Fechar projeto")) { guarded { viewModel.closeProject() } }
                                 item(tr("Configurações")) { showAppearance = true }
                             }
                         }
@@ -210,6 +211,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         if (state is ProjectState.Loaded) {
                             DropButton(tr("Salvar como"), hasDrive, { saveAs(false) }, { saveAs(true) })
                             GButton(tr("Salvar"), { save() }, primary = true)
+                            GButton(tr("Fechar projeto"), { guarded { viewModel.closeProject() } }, outlined = true)
                         }
                         GButton(tr("Configurações"), { showAppearance = true }, icon = GIcon.SETTINGS, outlined = true)
                     }

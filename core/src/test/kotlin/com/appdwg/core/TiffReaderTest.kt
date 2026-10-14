@@ -116,6 +116,21 @@ class TiffReaderTest {
     }
 
     @Test
+    fun sameOnOneCoreAndFour() {
+        val cores = Parallel.threads
+        try {
+            for (name in listOf("lzw_rgb.tif", "jpeg_rgb.tif", "bigtiff_tiled_overview.tif")) {
+                Parallel.threads = 1
+                val one = read(name).pixels
+                Parallel.threads = 4
+                kotlin.test.assertContentEquals(one, read(name).pixels, name)
+            }
+        } finally {
+            Parallel.threads = cores
+        }
+    }
+
+    @Test
     fun blocksOfTiles() = assertRgb(mosaic("bigtiff_tiled_overview.tif", 1))
 
     @Test

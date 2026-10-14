@@ -2543,6 +2543,24 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private val encodedSurfaces = java.util.IdentityHashMap<Surface, org.json.JSONObject>()
 
     /** True when something changed since the drawing was opened or the project saved. */
+    /** Closes the open project and goes back to the start screen; the next one opened starts clean. */
+    fun closeProject() {
+        if (state !is ProjectState.Loaded) return
+        state = ProjectState.Empty
+        view = null
+        sourceUri = null
+        projectUri = null
+        savedJson = null
+        base = null
+        baseTerrain = emptyList()
+        rasters = emptyMap()
+        tiledRasters.values.forEach { it.close() }
+        tiledRasters = emptyMap()
+        drape = null
+        drapeUris = emptyList()
+        encodedSurfaces.clear()
+    }
+
     fun isDirty(): Boolean {
         val doc = currentDoc() ?: return false
         return doc.toJson().toString() != savedJson
