@@ -35,7 +35,7 @@ import com.appdwg.core.Point2
 import com.appdwg.core.StationFormat
 
 /** Units a model's numbers may be in. */
-private val UNITS = listOf(0.001 to "mm", 0.01 to "cm", 1.0 to "m", 0.3048 to "pé")
+private val UNITS get() = listOf(0.001 to "mm", 0.01 to "cm", 1.0 to "m", 0.3048 to tr("pé"))
 
 /** Adds 3D models and places them: georeference, insertion point, rotation, scale and unit. */
 @Composable

@@ -662,7 +662,7 @@ private fun ProjectScreen(
         }
         add(RailTool(GIcon.COMPARE, tr("Comparar"), differenceOverlay != null) { showCompare = true })
         if (project.surfaces.isNotEmpty()) {
-            add(RailTool(GIcon.PLATFORM, "Plataforma", drawingPlatform || vm.platform != null) { showPlatform = true })
+            add(RailTool(GIcon.PLATFORM, tr("Plataforma"), drawingPlatform || vm.platform != null) { showPlatform = true })
             add(RailTool(GIcon.ROAD, tr("Estrada"), drawingRoad || v.roadBuilt) { showRoad = true })
         }
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
@@ -1653,7 +1653,7 @@ private fun Line(label: String, value: String) {
 }
 
 private fun summary(p: LandXmlProject): String = buildList {
-    if (p.surfaces.isNotEmpty()) add(plural(p.surfaces.size, tr("superfície"), tr("superfícies")))
+    if (p.surfaces.isNotEmpty()) add(plural(p.surfaces.size, "superfície", "superfícies"))
     if (p.alignments.isNotEmpty()) add(plural(p.alignments.size, "alinhamento", "alinhamentos"))
     if (p.cgPoints.isNotEmpty()) add(plural(p.cgPoints.size, "ponto", "pontos"))
     if (p.points.isNotEmpty()) add(plural(p.points.size, "ponto _POINTS", "pontos _POINTS"))
@@ -1772,7 +1772,7 @@ private val Point2Saver = Saver<Point2?, DoubleArray>(
     restore = { Point2(it[0], it[1]) },
 )
 
-private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
+private fun plural(n: Int, one: String, many: String) = "$n ${tr(if (n == 1) one else many)}"
 
 /** A round map scale near [ratio] (1:500, 1:1000, 1:2000, 1:2500, 1:5000…), with thousands grouped. */
 private fun niceScale(ratio: Double): String {

@@ -142,7 +142,7 @@ class GnssManager(private val context: Context) {
         rtcmBytes = 0
         val client = NtripClient(s, { buf, n ->
             runCatching { antennaOut?.write(buf, 0, n) }
-            main.post { rtcmBytes += n; if (ntripStatus?.startsWith("Recebendo") != true) ntripStatus = tr("Recebendo correções de {0}", s.mountpoint) }
+            main.post { rtcmBytes += n; val receiving = tr("Recebendo correções de {0}", s.mountpoint); if (ntripStatus != receiving) ntripStatus = receiving }
         }, { fix?.let { NmeaParser.gga(it.latitude, it.longitude, it.altitude ?: 0.0) } })
         ntrip = client
         thread(name = "ntrip") {

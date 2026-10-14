@@ -1134,7 +1134,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val text = buildString {
             // CSV stays in metres (for spreadsheets and other programs), as the header says.
             append(tr("Estaca;Estaca (m);Terreno eixo (m);Greide (m);Corte/aterro eixo (m);Bordo E afast. (m);Bordo E cota (m);Bordo D afast. (m);Bordo D cota (m);") +
-                "Offset E tipo;Offset E afast. (m);Offset E cota (m);Offset D tipo;Offset D afast. (m);Offset D cota (m);Área corte (m2);Área aterro (m2)\r\n")
+                tr("Offset E tipo;Offset E afast. (m);Offset E cota (m);Offset D tipo;Offset D afast. (m);Offset D cota (m);Área corte (m2);Área aterro (m2)") + "\r\n")
             for (s in r.sections) {
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
                 val oe = s.top.first(); val od = s.top.last()
@@ -1145,9 +1145,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     oe.code, n(-oe.offset), n(oe.z), od.code, n(od.offset), n(od.z), n(s.cutArea), n(s.fillArea)).joinToString(";"))
                 append("\r\n")
             }
-            append("\r\nEstaca;Corte (m3);Aterro (m3);Acumulado (Brückner, m3)\r\n")
+            append("\r\n" + tr("Estaca;Corte (m3);Aterro (m3);Acumulado (Brückner, m3)") + "\r\n")
             for (row in r.volumes) append("${StationFormat.estacaMetric(row.station)};${n(row.cut)};${n(row.fill)};${n(row.accumulated)}\r\n")
-            append("Total;${n(r.totalCut)};${n(r.totalFill)};\r\n")
+            append(tr("Total") + ";${n(r.totalCut)};${n(r.totalFill)};\r\n")
         }
         writeTo(target, tr("nota de serviço")) { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
     }
@@ -1824,22 +1824,22 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         fun n(v: Double) = StationFormat.decimal(v, 3)
         val text = buildString {
             if (d != null) {
-                append("Comparação;A;B;Corte (m3);Aterro (m3);Saldo (m3);Área corte (m2);Área aterro (m2);Malha (m)\r\n")
+                append(tr("Comparação;A;B;Corte (m3);Aterro (m3);Saldo (m3);Área corte (m2);Área aterro (m2);Malha (m)") + "\r\n")
                 append("B - A;${d.baseName};${d.otherName};${n(d.cutVolume)};${n(d.fillVolume)};${n(d.netVolume)};${n(d.cutArea)};${n(d.fillArea)};${n(d.cellSize)}\r\n\r\n")
             }
             if (m.isNotEmpty()) {
-                append("Matriz (linha - coluna);Linha;Coluna;Corte (m3);Aterro (m3);Saldo (m3)\r\n")
+                append(tr("Matriz (linha - coluna);Linha;Coluna;Corte (m3);Aterro (m3);Saldo (m3)") + "\r\n")
                 for (r in names) for (c in names) if (r != c) matrixCell(r, c)?.let { x ->
                     append(";$r;$c;${n(x.cutVolume)};${n(x.fillVolume)};${n(x.netVolume)}\r\n")
                 }
                 append("\r\n")
             }
             if (st != null) {
-                append("Etapas;De;Para;Corte (m3);Aterro (m3);Movimentado (m3)\r\n")
-                st.periods.forEachIndexed { k, p -> append("Período ${k + 1};${p.from};${p.to};${n(p.cut)};${n(p.fill)};${n(p.cut + p.fill)}\r\n") }
-                append("Falta até o projeto;;;${n(st.remainingCut)};${n(st.remainingFill)};${n(st.remainingCut + st.remainingFill)}\r\n")
-                append("Total terreno → projeto;;;${n(st.totalCut)};${n(st.totalFill)};${n(st.totalCut + st.totalFill)}\r\n")
-                append("Concluído (%);;;;;${StationFormat.decimal(st.done * 100, 1)}\r\n")
+                append(tr("Etapas;De;Para;Corte (m3);Aterro (m3);Movimentado (m3)") + "\r\n")
+                st.periods.forEachIndexed { k, p -> append(tr("Período {0}", k + 1) + ";${p.from};${p.to};${n(p.cut)};${n(p.fill)};${n(p.cut + p.fill)}\r\n") }
+                append(tr("Falta até o projeto") + ";;;${n(st.remainingCut)};${n(st.remainingFill)};${n(st.remainingCut + st.remainingFill)}\r\n")
+                append(tr("Total terreno → projeto") + ";;;${n(st.totalCut)};${n(st.totalFill)};${n(st.totalCut + st.totalFill)}\r\n")
+                append(tr("Concluído (%)") + ";;;;;${StationFormat.decimal(st.done * 100, 1)}\r\n")
             }
         }
         // BOM so Excel reads the accents.

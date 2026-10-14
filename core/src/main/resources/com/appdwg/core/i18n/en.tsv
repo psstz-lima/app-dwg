@@ -1,0 +1,964 @@
+# Portuguese<TAB>English. Keys are the Portuguese text passed to tr(); {0}, {1}… are placeholders.
+Sobre o Gromatic	About Gromatic
+Versão {0}	Version {0}
+© 2026 Paulo Lima. Todos os direitos reservados.	© 2026 Paulo Lima. All rights reserved.
+Gromatic: Survey & Earthworks. Visualização e ferramentas de campo para dados do Civil 3D (LandXML, DXF, pontos COGO), sem precisar de CAD.	Gromatic: Survey & Earthworks. Field viewing and tools for Civil 3D data (LandXML, DXF, COGO points), with no CAD needed.
+Privacidade	Privacy
+Os arquivos, pontos, anotações e fotos ficam só no aparelho; o app não tem conta, anúncios nem envia dados a servidores próprios. 	Files, points, notes and photos stay on the device only; the app has no account, no ads and sends no data to its own servers. 
+A assinatura Gromatic Pro é cobrada pelo Google Play; o app não vê dados de pagamento. 	The Gromatic Pro subscription is billed by Google Play; the app never sees payment details. 
+A localização é usada só enquanto o GPS está ligado, para mostrar a posição na planta. 	Location is used only while the GPS is on, to show your position on the plan. 
+A internet é usada para baixar mapas de fundo e, se configurado, receber correções NTRIP do caster informado por você.	The internet is used to download background maps and, if set up, to receive NTRIP corrections from the caster you enter.
+Mapas de fundo	Background maps
+Satélite: Esri, Maxar, Earthstar Geographics e comunidade de usuários GIS.	Satellite: Esri, Maxar, Earthstar Geographics and the GIS user community.
+Ruas e Topográfico: Esri, HERE, Garmin, USGS, NGA, EPA, NPS, © colaboradores do OpenStreetMap.	Streets and Topographic: Esri, HERE, Garmin, USGS, NGA, EPA, NPS, © OpenStreetMap contributors.
+OpenStreetMap: © colaboradores do OpenStreetMap, dados sob a licença ODbL (openstreetmap.org/copyright).	OpenStreetMap: © OpenStreetMap contributors, data under the ODbL licence (openstreetmap.org/copyright).
+Os mapas são de terceiros e seguem os termos de uso de cada serviço.	The maps belong to third parties and follow each service's terms of use.
+Componentes de terceiros	Third-party components
+Kotlin e kotlinx.coroutines (JetBrains)	Kotlin and kotlinx.coroutines (JetBrains)
+Jetpack Compose, Material 3, AndroidX Activity, Lifecycle e Core (Google)	Jetpack Compose, Material 3, AndroidX Activity, Lifecycle and Core (Google)
+Google Play Billing Library (Google)	Google Play Billing Library (Google)
+do Android SDK e do Google Play	of the Android SDK and Google Play
+Delaunator, triangulação adaptada (Vladimir Agafonkin, Mapbox)	Delaunator, adapted triangulation (Vladimir Agafonkin, Mapbox)
+Fontes Barlow, IBM Plex Sans e Plex Mono, Manrope, DM Mono, Atkinson Hyperlegible e JetBrains Mono	Barlow, IBM Plex Sans and Plex Mono, Manrope, DM Mono, Atkinson Hyperlegible and JetBrains Mono fonts
+{0} — licença {1}	{0} — {1} licence
+Textos das licenças: apache.org/licenses/LICENSE-2.0 e openfontlicense.org. Os componentes de terceiros seguem as próprias licenças; o restante do app é proprietário.	Licence texts: apache.org/licenses/LICENSE-2.0 and openfontlicense.org. Third-party components follow their own licences; the rest of the app is proprietary.
+Sistemas de coordenadas: catálogo por região (UTM, LTM, RTM, Lambert e geográficas), Transversa de Mercator pelas séries de Krüger; transformações de SAD69, SAD69(96) e Córrego Alegre para SIRGAS 2000 com os parâmetros do IBGE.	Coordinate systems: catalogue by region (UTM, LTM, RTM, Lambert and geographic), Transverse Mercator by Krüger series; SAD69, SAD69(96) and Córrego Alegre to SIRGAS 2000 with IBGE parameters.
+Fechar	Close
+☁ Google Drive	☁ Google Drive
+Satélite	Satellite
+Esri, Maxar, Earthstar Geographics	Esri, Maxar, Earthstar Geographics
+Ruas	Streets
+Esri, HERE, OpenStreetMap	Esri, HERE, OpenStreetMap
+Topográfico	Topographic
+OpenStreetMap	OpenStreetMap
+© colaboradores do OpenStreetMap	© OpenStreetMap contributors
+Download interrompido.	Download stopped.
+{0} tiles prontos para uso offline.	{0} tiles ready for offline use.
+{0} de {1} tiles baixados ({2} falharam — sem internet?).	{0} of {1} tiles downloaded ({2} failed — no internet?).
+Mapa de fundo	Background map
+Mostrar mapa sob o desenho	Show map under the drawing
+Fonte: {0}	Source: {0}
+Opacidade {0}%	Opacity {0}%
+Baixar da internet o que faltar ao navegar (desligado = só offline)	Download what is missing while browsing (off = offline only)
+Sistema do projeto: {0}	Project system: {0}
+Trocar…	Change…
+Uso offline	Offline use
+{0} não permite baixar áreas inteiras: só ficam salvos os trechos vistos com internet. 	{0} does not allow downloading whole areas: only the parts viewed online are kept. 
+Para uso offline escolha Satélite, Ruas ou Topográfico.	For offline use choose Satellite, Streets or Topographic.
+Área do projeto	Project area
+Área na tela	Area on screen
+Detalhe máximo:	Maximum detail:
+Escolha um sistema projetado (UTM, LTM…) para o mapa.	Choose a projected system (UTM, LTM…) for the map.
+{0} tiles (≈ {1})	{0} tiles (≈ {1})
+ — área grande demais, use menos detalhe ou a área na tela.	 — area too large, use less detail or the area on screen.
+Parar	Stop
+Baixar para uso offline	Download for offline use
+Calculando espaço…	Working out the space…
+Mapas salvos: {0}	Saved maps: {0}
+Apagar mapas salvos	Delete saved maps
+Inverso	Inverse
+Irradiação	Radiation
+Interseção	Intersection
+Área/perímetro	Area/perimeter
+Conversões	Conversions
+nº do ponto ou "E N"	point no. or "E N"
+Ponto{0}: E {1} · N {2}	Point{0}: E {1} · N {2}
+Ponto {0} criado na camada _POINTS.	Point {0} created on layer _POINTS.
+Criar ponto _POINTS	Create _POINTS point
+Sem solução com esses valores.	No solution with these values.
+Cálculos de campo	Field calculations
+De (A)	From (A)
+Para (B)	To (B)
+Distância {0} {1} · Azimute {2} ({3}°)	Distance {0} {1} · Bearing {2} ({3}°)
+ · Desnível {0} · Inclinada {1} · Rampa {2} %	 · Rise {0} · Slope distance {1} · Grade {2} %
+Estação	Station
+Azimute (°)	Bearing (°)
+Distância ({0})	Distance ({0})
+Azimute × azimute	Bearing × bearing
+Distância × distância	Distance × distance
+Azimute × distância	Bearing × distance
+Ponto A	Point A
+Distância de A	Distance from A
+Azimute de A (°)	Bearing from A (°)
+Ponto B	Point B
+Azimute de B (°)	Bearing from B (°)
+Distância de B	Distance from B
+Pontos na ordem (nºs separados por vírgula, ex.: 101, 102, 104)	Points in order (numbers separated by commas, e.g. 101, 102, 104)
+Perímetro {0} {1}	Perimeter {0} {1}
+ · Área {0}	 · Area {0}
+Algum ponto não foi encontrado.	Some point was not found.
+Valor (estaca "12+5,4", metros, ângulo "45 30 15", rampa %)	Value (station "8+05.4", length, angle "45 30 15", grade %)
+Estaca {0} = {1}	Station {0} = {1}
+Ângulo: {0}° = {1} = {2} gon	Angle: {0}° = {1} = {2} gon
+Rampa {0} % = talude {1}:1 (H:V)	Grade {0} % = slope {1}:1 (H:V)
+Sair da tela cheia	Exit full screen
+Tela cheia	Full screen
+Aproximar	Zoom in
+Afastar	Zoom out
+Ver tudo	Show all
+Configurações	Settings
+Assinatura ativa: todas as ferramentas liberadas.	Subscription active: every tool unlocked.
+Versão grátis: abrir e ver a planta.	Free version: open and view the plan.
+Detalhes	Details
+Conhecer o Pro	Discover Pro
+Projeto	Project
+Sistema de coordenadas: {0}	Coordinate system: {0}
+Idioma	Language
+Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades.	Changes the number format (1.234,56 or 1,234.56) and, in Automatic, the units.
+Unidades	Units
+Só a exibição muda: os arquivos exportados continuam em metros, com ponto decimal. 	Only the display changes: exported files stay in metres, with a decimal point. 
+Vírgula ou ponto nos números seguem o idioma acima.	Comma or point in numbers follows the language above.
+Tema	Theme
+Adicionar arquivos	Add files
+Arquivos do projeto e comparação	Project files and comparison
+Arquivos do projeto (mosaico)	Project files (mosaic)
+Adicione outros LandXML, DXF ou .aecc.pnt (trechos vizinhos, o levantamento ou o projeto) para montar um mosaico e comparar. Dá para escolher vários de uma vez.	Add other LandXML, DXF or .aecc.pnt files (neighbouring sections, the survey or the design) to build a mosaic and compare. You can pick several at once.
+Remover	Remove
+Comparar superfícies	Compare surfaces
+É preciso ter duas superfícies. Adicione um arquivo com outra superfície.	Two surfaces are needed. Add a file with another surface.
+A (base, terreno)	A (base, existing ground)
+B (projeto ou levantamento)	B (design or survey)
+Calcular B − A	Compute B − A
+Limpar	Clear
+Comparação cruzada e por etapas…	Cross and staged comparison…
+Mostrar mapa de B − A na planta	Show B − A map on the plan
+Escolher	Choose
+Corte (B abaixo de A)	Cut (B below A)
+Aterro (B acima de A)	Fill (B above A)
+Saldo (aterro − corte)	Balance (fill − cut)
+Maior corte / aterro	Largest cut / fill
+Calculado na área comum às duas, em malha de {0}.	Computed over the area common to both, on a {0} grid.
+Comparação cruzada	Cross comparison
+Marque as superfícies na ordem das etapas: terreno original primeiro, levantamentos no meio, projeto por último.	Tick the surfaces in stage order: original ground first, surveys in between, design last.
+Calcular matriz	Compute matrix
+Calcular etapas	Compute stages
+Matriz: saldo linha − coluna (m³). Toque numa célula para ver o mapa.	Matrix: balance row − column (m³). Tap a cell to see the map.
+Etapas	Stages
+Período {0}: {1} → {2}	Period {0}: {1} → {2}
+Executado até {0}: 	Done up to {0}: 
+Falta até o projeto: corte {0} · aterro {1}	Left to the design: cut {0} · fill {1}
+Total terreno → projeto: corte {0} · aterro {1}	Total ground → design: cut {0} · fill {1}
+Concluído: 	Complete: 
+ % (pelo volume movimentado)	 % (by volume moved)
+sem área comum	no common area
+ (cópia)	 (copy)
+Mover	Move
+Copiar	Copy
+Offset	Offset
+Deslocar na vertical (ΔZ)	Shift vertically (ΔZ)
+Projetar na superfície	Drape on surface
+Achatar numa cota	Flatten to an elevation
+Girar	Rotate
+Espelhar	Mirror
+Inverter sentido	Reverse direction
+Unir	Join
+Explodir	Explode
+Dividir	Divide
+Trocar camada/cor	Change layer/colour
+Apagar	Delete
+Distância + azimute	Distance + bearing
+Ponto a ponto	Point to point
+Selecione linhas tocando na planta ou por janela.	Select lines by tapping the plan or with a window.
+{0} inválido.	{0} is invalid.
+Distância	Distance
+Azimute	Bearing
+Toque o ponto de origem e o de destino.	Tap the start point and the end point.
+Número de cópias	Number of copies
+Lista de offsets	Offset list
+Rampa	Grade
+Sem superfície para projetar.	No surface to drape on.
+Espaçamento	Spacing
+Cota	Elevation
+Ângulo	Angle
+Toque dois pontos do eixo de espelhamento.	Tap two points of the mirror axis.
+Divisão	Division
+Toque o 1º canto da janela.	Tap the 1st corner of the window.
+Toque o canto oposto da janela.	Tap the opposite corner of the window.
+Toque o ponto de origem e depois o de destino ({0}/2).	Tap the start point and then the end point ({0}/2).
+Toque o centro da rotação.	Tap the centre of rotation.
+Toque dois pontos do eixo de espelhamento ({0}/2).	Tap two points of the mirror axis ({0}/2).
+{0} linha(s) selecionada(s). Toque linhas para marcar ou desmarcar.	{0} line(s) selected. Tap lines to select or deselect them.
+Camada {0} · {1} vértices · 2D {2}	Layer {0} · {1} vertices · 2D {2}
+Janela	Window
+Limpar seleção	Clear selection
+Operação…	Operation…
+Desfazer	Undo
+Refazer	Redo
+Concluir	Done
+{0} linha(s) resultante(s) em ciano na planta.	{0} resulting line(s) in cyan on the plan.
+Pré-visualizar	Preview
+Aplicar	Apply
+Editar {0} linha(s)	Edit {0} line(s)
+Pontos escolhidos (trocar)	Picked points (change)
+Tocar origem e destino	Tap start and end
+Nº de cópias	No. of copies
+Camada nova	New layer
+Distâncias ({0}; ex.: {1}; 7)	Distances ({0}; e.g. {1}; 7)
+Direita	Right
+Esquerda	Left
+Ambos	Both
+Talude H:V (desce)	Slope H:V (down)
+Rampa % (− desce)	Grade % (− down)
+em H:V	as H:V
+Offset com rampa gera crista ou pé de talude: a cota muda pela distância × rampa, mais o ΔZ.	Offset with a grade makes a slope crest or toe: the elevation changes by distance × grade, plus ΔZ.
+Densificar a cada ({0})	Densify every ({0})
+sem superfície	no surface
+Cota ({0})	Elevation ({0})
+Ângulo (°, anti-horário)	Angle (°, counterclockwise)
+Centro escolhido (trocar)	Picked centre (change)
+Tocar centro (padrão: centro da linha)	Tap centre (default: line centre)
+Eixo escolhido (trocar)	Picked axis (change)
+Tocar dois pontos do eixo	Tap two axis points
+Manter original	Keep original
+Em N partes	Into N parts
+Ou a cada ({0})	Or every ({0})
+Camada	Layer
+Da camada	By layer
+Vermelho	Red
+Amarelo	Yellow
+Verde	Green
+Ciano	Cyan
+Azul	Blue
+Magenta	Magenta
+Une as linhas cujas pontas se tocam (até 1 cm).	Joins lines whose ends touch (within 1 cm).
+Cada segmento vira uma linha.	Each segment becomes a line.
+Apaga as linhas selecionadas (pode desfazer).	Deletes the selected lines (can be undone).
+Inverte o sentido das linhas.	Reverses the direction of the lines.
+DXF	DXF
+LandXML	LandXML
+Pontos PDENZ (TXT)	PNEZD points (TXT)
+KML (Google Earth)	KML (Google Earth)
+GeoJSON	GeoJSON
+Shapefile (ZIP)	Shapefile (ZIP)
+Volumes (CSV)	Volumes (CSV)
+Anotações com fotos (KMZ)	Notes with photos (KMZ)
+Anotações (CSV)	Notes (CSV)
+Tela em PNG	Screen as PNG
+Tela em PDF	Screen as PDF
+Exportar	Export
+Salvar em	Save to
+Neste aparelho	On this device
+Desenho e CAD	Drawing and CAD
+Linhas, textos, eixos, pontos, medição e seção para CAD, sem as camadas desligadas	Lines, texts, alignments, points, measurement and section for CAD, without the layers turned off
+Superfícies como 3DFACE (arquivo grande)	Surfaces as 3DFACE (large file)
+Curvas de nível com cota (camada _CURVAS)	Contours with elevation (layer _CURVAS)
+Modelos 3D como 3DFACE	3D models as 3DFACE
+Superfícies, eixos, greide e pontos para o Civil 3D	Surfaces, alignments, grade and points for Civil 3D
+Mapas e SIG	Maps and GIS
+Indisponível em sistema local	Not available in a local system
+Pontos e linhas em longitude/latitude, para o Google Earth	Points and lines in longitude/latitude, for Google Earth
+Pontos e linhas em longitude/latitude (WGS84), para QGIS e web	Points and lines in longitude/latitude (WGS84), for QGIS and the web
+Pontos e linhas nas coordenadas do projeto, com o .prj	Points and lines in project coordinates, with the .prj
+Pontos e tabelas	Points and tables
+Sem pontos _POINTS no projeto	No _POINTS points in the project
+Pontos _POINTS: número, descrição, E, N, cota	_POINTS points: number, description, E, N, elevation
+Volumes das comparações de superfícies	Volumes of the surface comparisons
+Calcule uma comparação antes	Compute a comparison first
+Sem anotações no projeto	No notes in the project
+Anotações em tabela	Notes as a table
+Anotações com fotos, para o Google Earth	Notes with photos, for Google Earth
+Relatórios e imagens	Reports and images
+Seções transversais em escala, com carimbo	Cross sections to scale, with a title block
+A tela como está: planta, 3D ou seção aberta	The screen as it is: plan, 3D or open section
+A tela como está, em imagem	The screen as it is, as an image
+Da linha 3D	From the 3D line
+Da superfície	From the surface
+Fixa	Fixed
+Polígono desenhado	Drawn polygon
+Polilinha fechada	Closed polyline
+Área visível	Visible area
+Limite da superfície	Surface boundary
+Altura referencial inválida.	Invalid reference height.
+Toque numa linha ou eixo na planta.	Tap a line or alignment on the plan.
+Linha não encontrada.	Line not found.
+Espaçamento inválido.	Invalid spacing.
+Offsets inválidos (ex.: -3,5; 0; 3,5).	Invalid offsets (e.g. -3.5; 0; 3.5).
+A linha não é 3D: escolha cota da superfície ou fixa.	The line is not 3D: choose surface or fixed elevation.
+Estaca inicial inválida.	Invalid start station.
+Estaca final inválida.	Invalid end station.
+Espaçamento X inválido.	Invalid X spacing.
+Espaçamento Y inválido.	Invalid Y spacing.
+Rotação inválida.	Invalid rotation.
+Na malha, use cota da superfície ou fixa.	On a grid, use surface or fixed elevation.
+Desenhe o polígono da malha.	Draw the grid polygon.
+Toque numa polilinha fechada.	Tap a closed polyline.
+A polilinha precisa de 3 vértices.	The polyline needs 3 vertices.
+Área visível indisponível.	Visible area not available.
+Escolha uma superfície.	Choose a surface.
+Nenhum ponto gerado com essas opções.	No points generated with these options.
+Criar {0} pontos	Create {0} points
+Gerar pontos (camada _POINTS)	Generate points (layer _POINTS)
+Sobre linha	Along a line
+Malha	Grid
+Tocar na linha	Tap the line
+Trocar linha	Change line
+nenhuma linha escolhida	no line chosen
+Eixo {0}	Alignment {0}
+Linha na camada {0}	Line on layer {0}
+Distância entre pontos ({0})	Distance between points ({0})
+Offsets (+D / −E), ex.: -3,5; 0; 3,5	Offsets (+R / −L), e.g. -3.5; 0; 3.5
+Incluir vértices	Include vertices
+Estaca inicial (opcional)	Start station (optional)
+Estaca final (opcional)	End station (optional)
+Redesenhar polígono ({0} vértices)	Redraw polygon ({0} vertices)
+Desenhar polígono na planta	Draw polygon on the plan
+Tocar na polilinha fechada	Tap the closed polyline
+Trocar polilinha	Change polyline
+Espaçamento X ({0})	X spacing ({0})
+Espaçamento Y ({0})	Y spacing ({0})
+Rotação (°)	Rotation (°)
+Alinhar a uma linha	Align to a line
+Altura referencial (+/− {0})	Reference height (+/− {0})
+Prefixo da descrição	Description prefix
+Numeração continua a partir do ponto {0}.	Numbering continues from point {0}.
+Antena Bluetooth (NMEA)	Bluetooth receiver (NMEA)
+GPS do aparelho	Device GPS
+Arquivo NMEA (simulação)	NMEA file (simulation)
+Desconectado	Disconnected
+Permissão negada: libere em Configurações > Apps > Gromatic > Permissões	Permission denied: allow it in Settings > Apps > Gromatic > Permissions
+Conectando à antena…	Connecting to the receiver…
+Bluetooth indisponível	Bluetooth not available
+Conectado a {0}	Connected to {0}
+Falha na antena: {0}	Receiver failure: {0}
+GPS do aparelho indisponível: {0}	Device GPS not available: {0}
+Simulando com arquivo NMEA	Simulating from an NMEA file
+arquivo indisponível	file not available
+Falha na simulação: {0}	Simulation failed: {0}
+Conectando a {0}:{1}/{2}…	Connecting to {0}:{1}/{2}…
+Recebendo correções de {0}	Receiving corrections from {0}
+Caster encerrou a conexão	Caster closed the connection
+Ir para	Go to
+Buscar ponto, texto ou alinhamento	Search point, text or alignment
+Nada encontrado.	Nothing found.
+Estaca e afastamento	Station and offset
+Estaca (12+5,40)	Station (8+05.40)
+Afast. (+D/−E)	Offset (+R/−L)
+Coordenada	Coordinate
+Desconectar	Disconnect
+Pareie a antena (ex.: Hi-Target V200) nas configurações de Bluetooth do Android e escolha-a aqui. Ela deve enviar NMEA (GGA, GST).	Pair the receiver (e.g. Hi-Target V200) in Android's Bluetooth settings and pick it here. It must send NMEA (GGA, GST).
+Listar antenas pareadas	List paired receivers
+Conectar à antena	Connect to receiver
+Usar o GPS do aparelho	Use the device GPS
+Escolher arquivo NMEA gravado	Choose a recorded NMEA file
+Sistema: {0}	System: {0}
+Seguir a posição na planta	Follow the position on the plan
+Correções NTRIP (RTK pela internet)	NTRIP corrections (RTK over the internet)
+Caster (endereço)	Caster (address)
+Porta	Port
+Usuário	User
+Senha	Password
+Iniciar NTRIP	Start NTRIP
+As correções vão para a antena pelo Bluetooth; a posição (GGA) volta ao caster a cada 10 s.	Corrections go to the receiver over Bluetooth; the position (GGA) goes back to the caster every 10 s.
+ · {0} satélites	 · {0} satellites
+ · idade {0} s	 · age {0} s
+Precisão 	Precision 
+Terreno {0}	Ground {0}
+Lendo arquivo	Reading file
+Cancelar	Cancel
+Salvar	Save
+Abrir	Open
+Abrir do Google Drive	Open from Google Drive
+Salvar no Google Drive	Save to Google Drive
+Recentes	Recent
+Salvar como	Save as
+Arquivos recentes	Recent files
+Salvar alterações?	Save changes?
+O projeto tem alterações que ainda não foram salvas (camadas, pontos, medições, arquivos adicionados…).	The project has unsaved changes (layers, points, measurements, added files…).
+Descartar	Discard
+Cotas · 	Elevations · 
+Versão grátis: visualização da planta	Free version: plan viewing
+Estaca, cotas, 3D, seções, medições e as demais ferramentas estão no Gromatic Pro. Toque para conhecer.	Stations, elevations, 3D, sections, measurements and the other tools are in Gromatic Pro. Tap to learn more.
+Abra um arquivo LandXML ou DXF	Open a LandXML or DXF file
+No Civil 3D, use Saída > Exportar para LandXML (.xml) ou salve como DXF (.dxf) e copie o arquivo para o aparelho.	In Civil 3D, use Output > Export to LandXML (.xml) or save as DXF (.dxf) and copy the file to the device.
+Abrir arquivo	Open file
+☁ Abrir do Google Drive	☁ Open from Google Drive
+Localizar desenho	Find drawing
+Abrir outro arquivo	Open another file
+Greide	Grade
+Medir	Measure
+Pontos	Points
+Linhas	Lines
+Camadas	Layers
+Curvas	Contours
+Imagem	Image
+Comparar	Compare
+Plataforma	Pad
+Estrada	Road
+Modelos	Models
+Anotar	Note
+Cálculos	Calculations
+Mapa	Map
+Referências	References
+Avisos	Warnings
+Toque na planta para ver estaca, afastamento e cotas	Tap the plan to see station, offset and elevations
+Planta	Plan
+Seção	Section
+Perfil	Profile
+Curvas de nível a cada {0} (mestras a cada 5)	Contours every {0} (index every 5)
+Curvas densas demais neste zoom: aproxime ou aumente o intervalo	Contours too dense at this zoom: zoom in or raise the interval
+1 dedo gira · 2 dedos movem · pinça aproxima	1 finger orbits · 2 fingers pan · pinch zooms
+Toque na planta onde fica a anotação.	Tap the plan where the note goes.
+Na posição do GPS	At the GPS position
+Toque na linha que o bordo da pista deve seguir.	Tap the line the lane edge should follow.
+Toque os PIs do eixo, do início ao fim ({0}).	Tap the alignment PIs, from start to end ({0}).
+Toque onde fica o ponto A do modelo.	Tap where point A of the model goes.
+Toque onde fica o ponto B do modelo.	Tap where point B of the model goes.
+Toque o ponto de inserção do modelo.	Tap the model's insertion point.
+ O toque encaixa em pontos e vértices.	 Taps snap to points and vertices.
+{0} ponto(s) em ciano.	{0} point(s) in cyan.
+Ajustar	Adjust
+Criar	Create
+Toque os vértices do polígono da malha ({0}).	Tap the vertices of the grid polygon ({0}).
+Toque na linha que dá a direção da malha.	Tap the line that gives the grid direction.
+Toque na linha, polilinha 3D ou eixo.	Tap the line, 3D polyline or alignment.
+Toque os vértices da plataforma ({0}). O toque encaixa em pontos e vértices.	Tap the pad vertices ({0}). Taps snap to points and vertices.
+Toque na planta para criar um ponto (cota da superfície).	Tap the plan to create a point (surface elevation).
+ da leitura	 from reading
+Toque na planta para ver estaca, afastamento e cotas.	Tap the plan to see station, offset and elevations.
+Coordenadas ({0})	Coordinates ({0})
+Copiar E N	Copy E N
+Casas decimais	Decimal places
+Ir para coordenada ou estaca…	Go to coordinate or station…
+Ir para estaca…	Go to station…
+Seção nesta estaca	Section at this station
+Perfil neste ponto	Profile at this point
+Escala da planta	Plan scale
+Ajustar à tela	Fit to screen
+Auto	Auto
+Grátis	Free
+Versão grátis: abrir e ver a planta	Free version: open and view the plan
+Conhecer o Gromatic Pro…	Discover Gromatic Pro…
+Arquivos	Files
+Arquivos {0}/{1}	Files {0}/{1}
+Arquivos do projeto	Project files
+Adicionar arquivos…	Add files…
+Adicionar do Google Drive…	Add from Google Drive…
+Remover ou comparar…	Remove or compare…
+Camadas {0}/{1}	Layers {0}/{1}
+Ligar todas	Turn all on
+Desligar todas	Turn all off
+Todas as camadas…	All layers…
+Superfícies {0}/{1}	Surfaces {0}/{1}
+Superfície mostrada	Surface shown
+Todas	All
+Só 	Only 
+Estilo · 	Style · 
+Triângulos (malha)	Triangles (mesh)
+Borda	Border
+Curvas de nível	Contours
+Elevações em cores	Elevations in colour
+Só sombreamento	Shading only
+Sem elevações	No elevations
+Legenda de cotas	Elevation legend
+Curvas 	Contours 
+Curvas: não	Contours: off
+Mostrar curvas de nível	Show contours
+Intervalo	Interval
+Automático	Automatic
+Rótulos: sim	Labels: on
+Rótulos: não	Labels: off
+Nome, descrição e cota dos pontos	Point name, description and elevation
+Escolher sistema de coordenadas…	Choose coordinate system…
+GPS desligado	GPS off
+Conectar GPS…	Connect GPS…
+Calibração e geoide…	Calibration and geoid…
+Desligar	Turn off
+"Auto" escolhe o intervalo pelo zoom. As curvas são calculadas para a área visível.	"Auto" picks the interval from the zoom. Contours are computed for the visible area.
+Avisos da leitura	Reading warnings
+Trocar	Change
+Imagem sobre a superfície	Image over the surface
+Escolha um TIFF, JPG ou PNG. Para posicionar um JPG ou PNG, selecione junto o arquivo de georreferência (.jgw, .pgw ou .tfw).	Choose a TIFF, JPG or PNG. To place a JPG or PNG, select its world file (.jgw, .pgw or .tfw) along with it.
+Estaca	Station
+Afastamento	Offset
+  (fora do eixo)	  (off the alignment)
+Greide no eixo	Grade at centreline
+Terreno no eixo	Ground at centreline
+Aterro	Fill
+Corte	Cut
+B − A no ponto	B − A at point
+Terreno no ponto	Ground at point
+fora da superfície	off the surface
+fora de uma das superfícies	off one of the surfaces
+Toque na planta para marcar os pontos. O toque encaixa em pontos e vértices próximos.	Tap the plan to mark the points. Taps snap to nearby points and vertices.
+ Marque o próximo ponto.	 Mark the next point.
+Último trecho	Last leg
+Desnível	Rise
+Inclinação	Slope
+Total ({0} pontos)	Total ({0} points)
+Comprimento	Length
+Desnível 1º → último	Rise 1st → last
+Comprimento inclinado	Slope length
+Área	Area
+Perímetro	Perimeter
+Cor	Colour
+Nome	Name
+Ligada	On
+Congelada	Frozen
+Cor original	Original colour
+Cor de {0}	Colour of {0}
+Google Drive	Google Drive
+pé	ft
+Adicionar modelo	Add model
+Modelos 3D	3D models
+OBJ (com .mtl), STL, PLY, glTF/GLB (com .bin) e IFC. Selecione junto os arquivos que o modelo usa. 	OBJ (with .mtl), STL, PLY, glTF/GLB (with .bin) and IFC. Select the files the model uses along with it. 
+FBX, DWG 3D e Revit: exporte em OBJ, glTF ou IFC.	FBX, 3D DWG and Revit: export as OBJ, glTF or IFC.
+{0} · {1} elementos · {2} triângulos	{0} · {1} elements · {2} triangles
+Avisos: 	Warnings: 
+E inserção	Insertion E
+N inserção	Insertion N
+Rotação (° anti-horário)	Rotation (° counterclockwise)
+Escala	Scale
+Unidade do arquivo	File unit
+Tocar ponto de inserção	Tap insertion point
+Usar ponto tocado	Use tapped point
+Cota do terreno	Ground elevation
+Georreferência do IFC	IFC georeference
+Alinhar por 2 pontos	Align by 2 points
+A na planta ✓	A on plan ✓
+Tocar A na planta	Tap A on the plan
+B na planta ✓	B on plan ✓
+Tocar B na planta	Tap B on the plan
+Alinhar	Align
+Nova anotação	New note
+Anotação {0}	Note {0}
+Texto	Text
+Tirar foto	Take photo
+Da galeria	From gallery
+Remover foto	Remove photo
+Anotação {0} · {1}	Note {0} · {1}
+Editar	Edit
+Imagem: {0}	Image: {0}
+Calcular	Compute
+Remover projeto	Remove design
+Projeto de plataforma	Pad design
+Contorno: {0} vértice(s)	Outline: {0} vertex(es)
+Desenhar na planta	Draw on the plan
+Usar pontos _POINTS ({0})	Use _POINTS points ({0})
+Terreno	Ground
+Cota da plataforma	Pad elevation
+Cota no 1º vértice ({0}; vazio = média do terreno)	Elevation at 1st vertex ({0}; empty = ground average)
+Inclinação %	Grade %
+Direção (azimute °)	Direction (bearing °)
+Usar a cota de cada ponto _POINTS como cota do vértice	Use each _POINTS point's elevation as the vertex elevation
+Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Alturas das bermas: uma altura para todas (ex.: 8) 	Slope H:V (e.g. 1.5 = 1.5 m horizontal per 1 m of height). Bench heights: one height for all (e.g. 8) 
+ou a altura de cada berma, da plataforma para fora, separadas por ; (ex.: 6; 8; 10; a última se repete). 0 = sem bermas. 	or each bench's height, from the pad outwards, separated by ; (e.g. 6; 8; 10; the last one repeats). 0 = no benches. 
+A inclinação interna da berma (%) cai para o pé do talude de cima, levando a água para a canaleta.	The bench's inner slope (%) falls towards the toe of the slope above, taking the water to the drain.
+Resultado contra {0}	Result against {0}
+Corte {0} · Aterro {1} · 	Cut {0} · Fill {1} · 
+Saldo {0}	Balance {0}
+Área do projeto (até o offset): {0} · malha {1}	Design area (up to the offset): {0} · grid {1}
+A superfície "{0}" já entra na seção, no perfil, no comparativo e na exportação (LandXML com breaklines e limite; DXF com borda, offset e bermas).	The surface "{0}" is already in the section, profile, comparison and export (LandXML with breaklines and boundary; DXF with edge, offset and benches).
+Talude H:V	Slope H:V
+Alturas das bermas ({0})	Bench heights ({0})
+Largura berma ({0})	Bench width ({0})
+Inclinação interna %	Inner slope %
+Pontos (camada _POINTS)	Points (layer _POINTS)
+{0} ponto(s). Formato do Civil 3D: número, descrição, E, N, cota (PDENZ).	{0} point(s). Civil 3D format: number, description, E, N, elevation (PNEZD).
+Importar TXT/CSV	Import TXT/CSV
+☁ Importar do Google Drive	☁ Import from Google Drive
+Exportar PDENZ	Export PNEZD
+Criar ponto na planta	Create point on the plan
+Gerar pontos…	Generate points…
+Gerar superfície	Generate surface
+Desfazer última geração ({0} pontos)	Undo last generation ({0} points)
+Novo ponto	New point
+Ponto {0}	Point {0}
+Número	Number
+Descrição	Description
+sem cota	no elevation
+Ponto − terreno	Point − ground
+Vistas 3D, Seção e Perfil	3D, Section and Profile views
+Estaca, afastamento e cotas ao tocar na planta	Station, offset and elevations by tapping the plan
+Camadas, superfícies e curvas de nível	Layers, surfaces and contours
+Pontos, linhas, anotações e medições	Points, lines, notes and measurements
+Estrada, plataforma, volumes, as-built e boletim de medição	Road, pad, volumes, as-built and progress report
+GPS/RTK, calibração e sistemas de coordenadas	GPS/RTK, calibration and coordinate systems
+Exportar (DXF, KML, CSV, PDF…) e salvar projetos	Export (DXF, KML, CSV, PDF…) and save projects
+Pro simulado (versão de desenvolvimento).	Simulated Pro (development build).
+Assinatura ativa: todas as ferramentas estão liberadas.	Subscription active: every tool is unlocked.
+Você está na versão grátis: abrir e ver a planta (2D), arquivos de até {0} MB, 	You are on the free version: open and view the plan (2D), files up to {0} MB, 
+zoom e escala, unidades, idioma e tema.	zoom and scale, units, language and theme.
+O Pro libera:	Pro unlocks:
+Buscando os preços no Google Play…	Getting prices from Google Play…
+Anual	Yearly
+Mensal	Monthly
+{0} dias grátis para testar	{0}-day free trial
+Assinar	Subscribe
+Verificando…	Checking…
+Restaurar compra	Restore purchase
+Gerenciar assinatura	Manage subscription
+Cobrada pela sua conta do Google Play, com renovação automática; cancele quando quiser no Google Play. 	Billed to your Google Play account, renews automatically; cancel any time in Google Play. 
+Sem anúncios. Sem internet, o Pro continua liberado por até {0} dias depois da última verificação.	No ads. Without internet, Pro stays unlocked for up to {0} days after the last check.
+Teste (só na versão de desenvolvimento)	Test (development build only)
+Real (Google Play)	Real (Google Play)
+Simular Grátis	Simulate Free
+Simular Pro	Simulate Pro
+por mês	per month
+por ano	per year
+por semana	per week
+Perfil · {0}	Profile · {0}
+Inteiro	Whole
+Greide: arraste um PVI (bolinha vermelha) para mudar a cota; toque para escolher.	Grade: drag a PVI (red dot) to change its elevation; tap to pick one.
+PVI no cursor	PVI at cursor
+Remover PVI	Remove PVI
+Recalcular estrada	Recompute road
+Sem superfície nem greide neste trecho.	No surface or grade on this stretch.
+Estaca {0}	Station {0}
+Greide {0}	Grade {0}
+Aterro 	Fill 
+Corte 	Cut 
+não é um projeto do Gromatic	not a Gromatic project
+Aguardando o Google Drive…	Waiting for Google Drive…
+Baixando do Google Drive · 	Downloading from Google Drive · 
+Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência.	Choose the image too (TIFF, JPG or PNG), not just the world file.
+Imagem {0}	Image {0}
+formato de imagem não reconhecido	image format not recognised
+projeto sem área	project has no area
+posicionada pelo arquivo {0}	placed by the file {0}
+posicionada pelo GeoTIFF	placed by the GeoTIFF
+esticada sobre a superfície (a imagem não tem georreferência)	stretched over the surface (the image has no georeference)
+A imagem foi {0}, mas não cai sobre a superfície. Confira se as duas estão no mesmo sistema de coordenadas.	The image was {0}, but it does not fall on the surface. Check that both use the same coordinate system.
+Imagem {0}.	Image {0}.
+Imagem grande demais para a memória deste aparelho.	Image too large for this device's memory.
+Não foi possível usar a imagem: {0}	Could not use the image: {0}
+Adicionando {0}	Adding {0}
+{0} não tem superfície, alinhamento, ponto nem linha.	{0} has no surface, alignment, point or line.
+{0} superfície(s)	{0} surface(s)
+Arquivo grande demais para a memória deste aparelho.	File too large for this device's memory.
+Não foi possível ler {0}: {1}	Could not read {0}: {1}
+Par {0} de {1}	Pair {0} of {1}
+Superfícies grandes demais para comparar neste aparelho.	Surfaces too large to compare on this device.
+Comparação por etapas	Staged comparison
+Há etapas que não se sobrepõem.	Some stages do not overlap.
+Comparando superfícies	Comparing surfaces
+Calculando diferença e volumes	Computing difference and volumes
+As duas superfícies não se sobrepõem.	The two surfaces do not overlap.
+ {0} linha(s) ignorada(s) por não estarem no formato número, descrição, E, N, cota: 	 {0} line(s) skipped because they are not in the number, description, E, N, elevation format: 
+destino indisponível	destination not available
+Não foi possível exportar: {0}	Could not export: {0}
+{0} ponto(s) gerado(s) na camada {1}.	{0} point(s) generated on layer {1}.
+São precisos 3 pontos com cota para gerar uma superfície.	3 points with elevation are needed to build a surface.
+{0} superfície	{0} surface
+Superfície "{0}" gerada com {1} pontos ({2} triângulos).	Surface "{0}" built from {1} points ({2} triangles).
+Não foi possível gerar a superfície: {0}	Could not build the surface: {0}
+Desenho grande demais para a memória deste aparelho.	Drawing too large for this device's memory.
+arquivo original indisponível	original file not available
+Cópia salva em {0} com {1} caminho(s) alterado(s).	Copy saved to {0} with {1} path(s) changed.
+Não foi possível salvar: {0}	Could not save: {0}
+Atualizando referências	Updating references
+Formato de imagem não reconhecido.	Image format not recognised.
+Não foi possível ler a imagem: {0}	Could not read the image: {0}
+ECW é um formato fechado (Hexagon) sem leitor livre para Android. Converta para TIFF ou JPG no QGIS (Exportar > Salvar como)	ECW is a closed format (Hexagon) with no free reader for Android. Convert it to TIFF or JPG in QGIS (Export > Save as)
+JPEG 2000 não é suportado. Converta para TIFF ou JPG	JPEG 2000 is not supported. Convert it to TIFF or JPG
+Decodificando imagem	Decoding image
+CSV de anotações	Notes CSV
+KMZ de anotações	Notes KMZ
+Eixo	Alignment
+Abra ou adicione uma superfície de terreno.	Open or add a ground surface.
+Alinhamento escolhido não existe mais.	The chosen alignment no longer exists.
+Desenhe o eixo com 2 PIs ou mais.	Draw the alignment with 2 or more PIs.
+Defina o greide: ao menos 2 PVIs (estaca e cota).	Set the grade: at least 2 PVIs (station and elevation).
+Projetando estrada	Designing road
+Seções e taludes	Sections and slopes
+{0} seção(ões) com talude que não encontrou o terreno.	{0} section(s) with a slope that did not reach the ground.
+Memória insuficiente para projetar.	Not enough memory to design.
+Não foi possível projetar: {0}	Could not design: {0}
+Estaca;Estaca (m);Terreno eixo (m);Greide (m);Corte/aterro eixo (m);Bordo E afast. (m);Bordo E cota (m);Bordo D afast. (m);Bordo D cota (m);	Station;Station (m);Ground CL (m);Grade (m);Cut/fill CL (m);L edge offset (m);L edge elev (m);R edge offset (m);R edge elev (m);
+Offset E tipo;Offset E afast. (m);Offset E cota (m);Offset D tipo;Offset D afast. (m);Offset D cota (m);Área corte (m2);Área aterro (m2)	L offset type;L offset dist. (m);L offset elev (m);R offset type;R offset dist. (m);R offset elev (m);Cut area (m2);Fill area (m2)
+Estaca;Corte (m3);Aterro (m3);Acumulado (Brückner, m3)	Station;Cut (m3);Fill (m3);Cumulative (mass haul, m3)
+Total	Total
+nota de serviço	stakeout report
+nota de serviço (PDF)	stakeout report (PDF)
+Terreno ({0})	Ground ({0})
+Greide ({0})	Grade ({0})
+C/A eixo ({0})	C/F CL ({0})
+Bordo E (af./cota)	L edge (off./elev)
+Bordo D (af./cota)	R edge (off./elev)
+Offset E (tipo af./cota)	L offset (type off./elev)
+Offset D (tipo af./cota)	R offset (type off./elev)
+Área C ({0})	Cut area ({0})
+Área A ({0})	Fill area ({0})
+Nota de serviço — {0} — eixo {1}	Stakeout report — {0} — alignment {1}
+Corte total {0} · Aterro total {1} · página {2}	Total cut {0} · Total fill {1} · page {2}
+Escolha um arquivo OBJ, STL, PLY, glTF/GLB ou IFC.	Choose an OBJ, STL, PLY, glTF/GLB or IFC file.
+Lendo modelo {0}	Reading model {0}
+{0}: {1} elemento(s), {2} triângulos	{0}: {1} element(s), {2} triangles
+, posicionado pela georreferência do IFC	, placed by the IFC georeference
+ Avisos: 	 Warnings: 
+Modelo grande demais para a memória deste aparelho.	Model too large for this device's memory.
+Montando a geometria	Building the geometry
+nenhuma geometria encontrada	no geometry found
+modelo com {0} triângulos; o limite neste aparelho é {1}. Simplifique o modelo.	model with {0} triangles; the limit on this device is {1}. Simplify the model.
+Desenhe a plataforma com 3 vértices ou mais.	Draw the pad with 3 or more vertices.
+Há vértices sem cota de ponto; desmarque "usar a cota de cada ponto".	Some vertices have no point elevation; untick "use each point's elevation".
+A plataforma está fora do terreno.	The pad is outside the ground surface.
+Projetando plataforma	Designing pad
+Taludes e bermas	Slopes and benches
+Volumes	Volumes
+{0} perfil(is) de talude não encontraram o terreno (saem da superfície ou passam de 300 m).	{0} slope profile(s) did not reach the ground (they leave the surface or go beyond 300 m).
+Enviando · 	Sending · 
+Gravando · 	Writing · 
+Exportando {0} para o Google Drive	Exporting {0} to Google Drive
+Exportando {0}	Exporting {0}
+{0} exportado para o Google Drive ({1}); o app Drive termina o envio em segundo plano.	{0} exported to Google Drive ({1}); the Drive app finishes the upload in the background.
+{0} exportado para {1}.	{0} exported to {1}.
+Memória insuficiente para exportar {0}.	Not enough memory to export {0}.
+Não foi possível exportar {0}: {1}	Could not export {0}: {1}
+Comparação;A;B;Corte (m3);Aterro (m3);Saldo (m3);Área corte (m2);Área aterro (m2);Malha (m)	Comparison;A;B;Cut (m3);Fill (m3);Balance (m3);Cut area (m2);Fill area (m2);Grid (m)
+Matriz (linha - coluna);Linha;Coluna;Corte (m3);Aterro (m3);Saldo (m3)	Matrix (row - column);Row;Column;Cut (m3);Fill (m3);Balance (m3)
+Etapas;De;Para;Corte (m3);Aterro (m3);Movimentado (m3)	Stages;From;To;Cut (m3);Fill (m3);Moved (m3)
+Período {0}	Period {0}
+Falta até o projeto	Left to the design
+Total terreno → projeto	Total ground → design
+Concluído (%)	Complete (%)
+CSV de volumes	Volumes CSV
+Enviando ao Google Drive	Sending to Google Drive
+Salvando projeto	Saving project
+Projeto salvo no Google Drive ({0}); o app Drive termina o envio em segundo plano.	Project saved to Google Drive ({0}); the Drive app finishes the upload in the background.
+Projeto salvo em {0}.	Project saved to {0}.
+Não foi possível salvar o projeto: {0}	Could not save the project: {0}
+Abrindo {0}	Opening {0}
+Download cancelado.	Download cancelled.
+Não foi possível baixar do Google Drive: {0}	Could not download from Google Drive: {0}
+Não foi possível ler o projeto: {0}	Could not read the project: {0}
+um desenho	a drawing
+O projeto {0} usa {1}, mas o app não consegue abri-lo 	Project {0} uses {1}, but the app cannot open it 
+(o arquivo mudou de lugar ou o app foi reinstalado).\n\nToque em "Localizar desenho" e escolha o arquivo; depois salve o projeto.	(the file moved or the app was reinstalled).\n\nTap "Find drawing" and choose the file; then save the project.
+Projeto {0} aberto.	Project {0} opened.
+Projeto {0} aberto, mas não foi possível abrir: {1}.	Project {0} opened, but could not open: {1}.
+Preparando consulta de cotas	Preparing elevation lookup
+Gerando imagem do terreno	Building the terrain image
+Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?	No surface, alignment or point found. Is the file a LandXML, DXF or Civil 3D point cache (.aecc.pnt)?
+Não foi possível ler o arquivo: {0}	Could not read the file: {0}
+o ZIP não tem arquivo .shp	the ZIP has no .shp file
+arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML	DWG file. In AutoCAD/Civil 3D, save as DXF (Save As > DXF) or export to LandXML
+DXF binário. Salve o DXF no formato ASCII	binary DXF. Save the DXF in ASCII format
+fim inesperado do arquivo	unexpected end of file
+Decodificando TIFF	Decoding TIFF
+Salvar cópia do DXF	Save DXF copy
+Referências externas	External references
+O DXF guarda só o caminho de cada referência. Escolha o arquivo no aparelho para vê-la. 	The DXF only keeps the path of each reference. Choose the file on the device to see it. 
+Imagens: TIFF/GeoTIFF, JPG, PNG, WebP. Desenhos (XREF): DXF. Edite o caminho salvo e use 	Images: TIFF/GeoTIFF, JPG, PNG, WebP. Drawings (XREF): DXF. Edit the saved path and use 
+"Salvar cópia do DXF" para gravar os novos caminhos.	"Save DXF copy" to write the new paths.
+arquivo não escolhido	no file chosen
+{0} × {1} px · camada {2} · {3}	{0} × {1} px · layer {2} · {3}
+Desenho (sobreposição)	Drawing (overlay)
+Desenho (anexo)	Drawing (attached)
+{0} · {1} inserção(ões) · {2}	{0} · {1} insertion(s) · {2}
+Caminho salvo no DXF	Path saved in the DXF
+Anexar de novo	Attach again
+Escolher arquivo	Choose file
+Recarregar	Reload
+Descarregar	Unload
+Desanexar	Detach
+Seção tipo	Typical section
+Regiões	Regions
+Taludes	Slopes
+Superelevação	Superelevation
+Resultado	Result
+Remover estrada	Remove road
+Projeto de estrada (corredor)	Road design (corridor)
+Novo eixo por PIs	New alignment from PIs
+PIs: {0}. O primeiro e o último são o início e o fim; nos demais entra curva circular com espirais.	PIs: {0}. The first and last are the start and end; the others get a circular curve with spirals.
+Desenhar PIs na planta	Draw PIs on the plan
+Usar pontos _POINTS	Use _POINTS points
+Raio ({0})	Radius ({0})
+Espiral Ls ({0}, 0 = sem)	Spiral Ls ({0}, 0 = none)
+Usa o alinhamento do arquivo, com estaqueamento de 20 m.	Uses the file's alignment, with 20 m stations.
+Usando o greide do arquivo. Edite abaixo para substituir.	Using the file's grade. Edit below to replace it.
+Sem greide: gere ou digite os PVIs.	No grade: generate or type the PVIs.
+{0} PVI(s). Curva vertical: comprimento digitado ou K × |Δg|.	{0} PVI(s). Vertical curve: typed length or K × |Δg|.
+K das curvas verticais	K of the vertical curves
+Gerar PVIs no terreno (a cada 100 m)	Generate PVIs on the ground (every 100 m)
+Copiar greide do arquivo	Copy grade from the file
+Curva vertical ({0})	Vertical curve ({0})
+Adicionar PVI	Add PVI
+Lados iguais	Same both sides
+Lado esquerdo	Left side
+Lado direito	Right side
+Espessura do pavimento ({0})	Pavement thickness ({0})
+Seções a cada ({0})	Sections every ({0})
+Caimento negativo desce para fora. A sarjeta é um degrau no fim do acostamento; a valeta (em V) entra só em corte.	Negative cross slope falls outwards. The gutter is a step at the end of the shoulder; the (V) ditch is added in cut only.
+Fator de empolamento/compactação do aterro	Fill bulking/compaction factor
+Caimento de cada pista por estaca, em % (negativo desce para fora; positivo sobe para fora). Interpolado entre as estacas; 	Cross slope of each lane by station, in % (negative falls outwards; positive rises outwards). Interpolated between stations; 
+sem linhas, vale o caimento da seção tipo.	with no rows, the typical section's cross slope applies.
+Velocidade (km/h)	Speed (km/h)
+e máx. (%)	e max. (%)
+Calcular pelas curvas (DNIT)	Compute from the curves (DNIT)
+Pista esquerda %	Left lane %
+Pista direita %	Right lane %
+Adicionar estaca	Add station
+A seção tipo vale do início do eixo. Cada região muda as larguras a partir da sua estaca, com transição linear; 	The typical section applies from the start of the alignment. Each region changes the widths from its station, with a linear transition; 
+um alvo (linha tocada na planta) faz o bordo da pista seguir essa linha.	a target (a line tapped on the plan) makes the lane edge follow that line.
+A partir da estaca	From station
+Transição ({0})	Transition ({0})
+Alvo E ✓ (trocar)	L target ✓ (change)
+Alvo bordo E	L edge target
+Alvo D ✓ (trocar)	R target ✓ (change)
+Alvo bordo D	R edge target
+Sem alvos	No targets
+Adicionar região	Add region
+Toque em Calcular.	Tap Compute.
+Pista ({0})	Lane ({0})
+Caimento pista %	Lane cross slope %
+Acostamento ({0})	Shoulder ({0})
+Caimento acost. %	Shoulder slope %
+Sarjeta ({0})	Gutter ({0})
+Degrau sarjeta ({0})	Gutter step ({0})
+Valeta ({0})	Ditch ({0})
+Prof. valeta ({0})	Ditch depth ({0})
+Altura entre bermas ({0})	Height between benches ({0})
+Caimento berma %	Bench slope %
+Eixo {0}: {1}, {2} seções	Alignment {0}: {1}, {2} sections
+Corte {0} · Aterro {1} · Saldo final (Brückner) {2}	Cut {0} · Fill {1} · Final balance (mass haul) {2}
+Superfícies "{0}" (acabada) e "{1} (terraplenagem)" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.	Surfaces "{0}" (finished) and "{1} (earthworks)" and the alignment with its grade are already in the project: use Section, Profile and Compare.
+Nota de serviço e volumes (CSV)	Stakeout report and volumes (CSV)
+Nota de serviço (PDF)	Stakeout report (PDF)
+No Exportar: LandXML leva o eixo, o greide, as seções e as superfícies com breaklines; DXF leva bordos, crista e pé em 3D.	In Export: LandXML carries the alignment, grade, sections and surfaces with breaklines; DXF carries edges, crest and toe in 3D.
+Diagrama de Brückner (volume acumulado: acima = sobra de corte)	Mass haul diagram (cumulative volume: above = surplus cut)
+Estaca · corte · aterro · acumulado	Station · cut · fill · cumulative
+Largura	Width
+Sem seção nesta estaca.	No section at this station.
+A seção não cruza nenhuma superfície.	The section does not cross any surface.
+Greide no eixo {0}	Grade at centreline {0}
+Estaca {0} · 	Station {0} · 
+Estaca 	Station 
+Área C {0} {1} · A {2} {3}	Cut area {0} {1} · Fill {2} {3}
+Obra	Job
+Desenho	Drawing
+SEÇÕES TRANSVERSAIS	CROSS SECTIONS
+Eixo {0} · estacas {1} a {2}	Alignment {0} · stations {1} to {2}
+Folha	Sheet
+Escalas	Scales
+Data	Date
+Responsável técnico	Engineer in charge
+Legenda	Legend
+Cotas e distâncias em metros. Gerado pelo Gromatic.	Elevations and distances in metres. Made with Gromatic.
+Cotas e distâncias em pés (ft). Gerado pelo Gromatic.	Elevations and distances in feet (ft). Made with Gromatic.
+Campo Escuro com o sistema escuro, Engenharia Clara de dia	Field Dark with the system's dark mode, Engineering Light by day
+Campo Escuro	Field Dark
+Escuro, para pouca luz e economia de bateria	Dark, for low light and battery saving
+Engenharia Clara	Engineering Light
+Claro e sóbrio, como um desenho técnico	Light and sober, like a technical drawing
+Terra	Earth
+Tons de terra, cantos arredondados e painéis flutuantes	Earth tones, rounded corners and floating panels
+Alto Contraste (sol)	High Contrast (sun)
+Preto e amarelo, para sol forte; alvos de toque maiores	Black and yellow, for strong sun; larger touch targets
+Pelo idioma: imperial só em inglês dos EUA	By language: imperial only in US English
+Métrico	Metric
+m, m², ha, m³	m, m², ha, m³
+Imperial	Imperial
+pé internacional (ft), ft², acre, jarda cúbica (yd³)	international foot (ft), ft², acre, cubic yard (yd³)
+Automático (do sistema)	Automatic (system)
+Português (Brasil)	Português (Brasil)
+English	English
+nenhum ponto encontrado no arquivo	no points found in the file
+Triangulando {0} pontos	Triangulating {0} points
+Superfície triangulada a partir do cache de pontos do Civil 3D ({0} pontos); linhas de quebra e contornos do Civil 3D não estão no arquivo.	Surface triangulated from the Civil 3D point cache ({0} points); Civil 3D breaklines and boundaries are not in the file.
+OK	OK
+Acima	Above
+Abaixo	Below
+Fora do projeto	Outside the design
+o eixo precisa de 2 pontos ou mais	the alignment needs 2 or more points
+o eixo precisa de greide (perfil com PVIs)	the alignment needs a grade (profile with PVIs)
+o eixo não tem greide em pelo menos duas seções	the alignment has no grade in at least two sections
+parâmetro {0} ausente	parameter {0} missing
+unidade {0} (só metros)	unit {0} (metres only)
+transformação por grade (nadgrids)	grid shift transformation (nadgrids)
+elipsoide não informado	ellipsoid not given
+datum {0} sem parâmetros	datum {0} without parameters
+projeção {0} (só Transversa de Mercator, UTM, Lambert cônica e geográficas)	projection {0} (only Transverse Mercator, UTM, Lambert conic and geographic)
+Meus sistemas	My systems
+número inválido: {0}	invalid number: {0}
+Montando desenho ({0} objetos)	Building drawing ({0} objects)
+Montando superfícies	Building surfaces
+DXF inválido perto de "{0}"	invalid DXF near "{0}"
+POLYLINE (malha)	POLYLINE (mesh)
+Não exibidos: {0} {1}	Not shown: {0} {1}
+chamadas (LEADER)	leaders (LEADER)
+chamadas (MULTILEADER)	leaders (MULTILEADER)
+a grade precisa de pelo menos 4 pontos (latitude, longitude, N)	the grid needs at least 4 points (latitude, longitude, N)
+a grade precisa de pelo menos 2 latitudes e 2 longitudes	the grid needs at least 2 latitudes and 2 longitudes
+grade grande demais	grid too large
+os pontos não formam uma grade regular	the points do not form a regular grid
+cabeçalho GTX inválido	invalid GTX header
+não é um arquivo .shp	not a .shp file
+sem posição	no position
+autônomo	autonomous
+DGPS	DGPS
+PPS	PPS
+RTK fixo	RTK fixed
+RTK flutuante	RTK float
+estimado	estimated
+manual	manual
+simulado	simulated
+caster recusou usuário/senha (401)	caster refused user/password (401)
+mountpoint "{0}" não existe no caster	mountpoint "{0}" does not exist on the caster
+resposta inesperada do caster: {0}	unexpected caster response: {0}
+Superfície {0}	Surface {0}
+Superfície "{0}" não é TIN e foi ignorada.	Surface "{0}" is not a TIN and was skipped.
+Superfície "{0}": {1} triângulos com pontos inexistentes foram ignorados.	Surface "{0}": {1} triangles with missing points were skipped.
+Alinhamento "{0}": um elemento referencia um ponto inexistente e foi ignorado.	Alignment "{0}": an element refers to a missing point and was skipped.
+Alinhamento {0}	Alignment {0}
+Alinhamento "{0}": elemento {1} ainda não é suportado.	Alignment "{0}": element {1} is not supported yet.
+Alinhamento "{0}": equações de estaca ainda não são aplicadas.	Alignment "{0}": station equations are not applied yet.
+Greide "{0}": curva vertical assimétrica tratada como simétrica.	Grade "{0}": asymmetric vertical curve treated as symmetric.
+acima de {0} m	above {0} m
+formato {0} não é lido diretamente: exporte o modelo em OBJ, glTF/GLB ou IFC	format {0} is not read directly: export the model as OBJ, glTF/GLB or IFC
+formato de modelo não reconhecido (use OBJ, STL, PLY, glTF/GLB ou IFC)	model format not recognised (use OBJ, STL, PLY, glTF/GLB or IFC)
+Arquivo de materiais {0} não encontrado: cores padrão.	Material file {0} not found: default colours.
+Grupo	Group
+Material	Material
+PLY sem cabeçalho	PLY without header
+tipo PLY {0} não suportado	PLY type {0} not supported
+GLB sem dados binários	GLB without binary data
+arquivo {0} do glTF não encontrado (escolha o .glb ou junte os arquivos)	glTF file {0} not found (choose the .glb or pick the files together)
+Primitiva não triangular ignorada em {0}.	Non-triangle primitive skipped in {0}.
+Face com contorno {0}	Face with outline {0}
+Recorte booleano (mostrado sem o recorte)	Boolean cut (shown without the cut)
+Geometria {0} não suportada	Geometry {0} not supported
+sem pavimento	no storey
+Tipo	Type
+Pavimento	Storey
+Perfil com curva {0}	Profile with curve {0}
+Perfil com vazios (mostrado cheio)	Profile with voids (shown solid)
+Perfil {0} não suportado	Profile {0} not supported
+inclinação do talude deve ser maior que zero	the slope ratio must be greater than zero
+a plataforma precisa de 3 vértices ou mais	the pad needs 3 or more vertices
+malha com mais de {0} pontos: aumente o espaçamento	grid with more than {0} points: raise the spacing
+Ponto	Point
+Ponto COGO	COGO point
+Alinhamento	Alignment
+Plano	Flat
+Suave ondulado	Gently undulating
+Ondulado	Undulating
+Forte ondulado	Strongly undulating
+Montanhoso	Mountainous
+Escarpado	Steep
+não é um arquivo TIFF	not a TIFF file
+TIFF sem imagem	TIFF without an image
+TIFF inválido	invalid TIFF
+TIFF com {0} bits por amostra não é suportado	TIFF with {0} bits per sample is not supported
+TIFF com amostras em ponto flutuante não é suportado	TIFF with floating-point samples is not supported
+TIFF com planos de cor separados não é suportado	TIFF with separate colour planes is not supported
+compressão TIFF {0} não é suportada	TIFF compression {0} is not supported
+preditor TIFF {0} não é suportado	TIFF predictor {0} is not supported
+TIFF sem dados	TIFF without data
+JPEG em TIFF não disponível	JPEG in TIFF not available
+TIFF truncado	truncated TIFF
+arquivo de georreferência inválido	invalid world file
+arquivo de georreferência inválido: precisa de 6 números	invalid world file: it needs 6 numbers
+imagem rotacionada não é suportada	rotated image is not supported
+# Words passed to tr() at run time (plural() and others)
+aviso	warning
+avisos	warnings
+alinhamento	alignment
+alinhamentos	alignments
+ponto	point
+pontos	points
+ponto _POINTS	_POINTS point
+pontos _POINTS	_POINTS points
+linha	line
+linhas	lines
+texto	text
+textos	texts

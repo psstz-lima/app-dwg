@@ -489,7 +489,7 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         Text(l.label, fontWeight = FontWeight.Bold)
                     }
                 }
-                Text(tr("Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades. Os textos do app ainda estão só em português."),
+                Text(tr("Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades."),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
                 androidx.compose.material3.HorizontalDivider()
                 Text(tr("Unidades"), fontWeight = FontWeight.Bold)
