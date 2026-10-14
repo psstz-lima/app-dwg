@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
@@ -21,7 +23,7 @@ import java.util.UUID
 import kotlin.concurrent.thread
 
 /** Where positions come from. */
-enum class GnssSource(val label: String) { BLUETOOTH("Antena Bluetooth (NMEA)"), INTERNAL("GPS do aparelho"), REPLAY("Arquivo NMEA (simulação)") }
+enum class GnssSource(private val labelPt: String) { BLUETOOTH("Antena Bluetooth (NMEA)"), INTERNAL("GPS do aparelho"), REPLAY("Arquivo NMEA (simulação)"); val label: String get() = tr(labelPt) }
 
 /**
  * Receiver connection: NMEA from a Bluetooth (SPP) antenna, the device's own GPS or a recorded file,
@@ -30,12 +32,12 @@ enum class GnssSource(val label: String) { BLUETOOTH("Antena Bluetooth (NMEA)"),
 class GnssManager(private val context: Context) {
     var fix by mutableStateOf<GnssFix?>(null)
         private set
-    var status by mutableStateOf("Desconectado")
+    var status by mutableStateOf(tr("Desconectado"))
         private set
     var connected by mutableStateOf(false)
         private set
 
-    fun permissionDenied() { status = "Permissão negada: libere em Configurações > Apps > Gromatic > Permissões" }
+    fun permissionDenied() { status = tr("Permissão negada: libere em Configurações > Apps > Gromatic > Permissões") }
     var ntripStatus by mutableStateOf<String?>(null)
         private set
     var rtcmBytes by mutableStateOf(0L)
@@ -63,22 +65,22 @@ class GnssManager(private val context: Context) {
     fun connectBluetooth(address: String) {
         disconnect()
         running = true
-        status = "Conectando à antena…"
+        status = tr("Conectando à antena…")
         thread(name = "gnss-bt") {
             try {
-                val adapter = context.getSystemService(BluetoothManager::class.java).adapter ?: error("Bluetooth indisponível")
+                val adapter = context.getSystemService(BluetoothManager::class.java).adapter ?: error(tr("Bluetooth indisponível"))
                 adapter.cancelDiscovery()
                 val dev = adapter.getRemoteDevice(address)
                 val sock = dev.createRfcommSocketToServiceRecord(SPP)
                 sock.connect()
                 btSocket = sock
                 antennaOut = sock.outputStream
-                main.post { connected = true; status = "Conectado a ${dev.name ?: address}" }
+                main.post { connected = true; status = tr("Conectado a {0}", dev.name ?: address) }
                 sock.inputStream.bufferedReader(Charsets.ISO_8859_1).use { r ->
                     while (running) { val l = r.readLine() ?: break; onLine(l) }
                 }
             } catch (e: Exception) {
-                main.post { status = "Falha na antena: ${e.message ?: e.javaClass.simpleName}" }
+                main.post { status = tr("Falha na antena: {0}", e.message ?: e.javaClass.simpleName) }
             } finally {
                 main.post { connected = false }
                 antennaOut = null
@@ -96,9 +98,9 @@ class GnssManager(private val context: Context) {
             lm.addNmeaListener(l, main)
             lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper())
             connected = true
-            status = "GPS do aparelho"
+            status = tr("GPS do aparelho")
         } catch (e: Exception) {
-            status = "GPS do aparelho indisponível: ${e.message ?: e.javaClass.simpleName}"
+            status = tr("GPS do aparelho indisponível: {0}", e.message ?: e.javaClass.simpleName)
         }
     }
 
@@ -109,13 +111,13 @@ class GnssManager(private val context: Context) {
         disconnect()
         running = true
         connected = true
-        status = "Simulando com arquivo NMEA"
+        status = tr("Simulando com arquivo NMEA")
         // A previous replay may still be asleep between positions: it stops when it sees a newer one.
         val gen = ++replayGen
         fun current() = running && gen == replayGen
         thread(name = "gnss-replay") {
             try {
-                val lines = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.ISO_8859_1).lines() } ?: error("arquivo indisponível")
+                val lines = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.ISO_8859_1).lines() } ?: error(tr("arquivo indisponível"))
                 while (current()) {
                     for (l in lines) {
                         if (!current()) break
@@ -124,7 +126,7 @@ class GnssManager(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                if (gen == replayGen) main.post { status = "Falha na simulação: ${e.message ?: e.javaClass.simpleName}" }
+                if (gen == replayGen) main.post { status = tr("Falha na simulação: {0}", e.message ?: e.javaClass.simpleName) }
             } finally {
                 if (gen == replayGen) main.post { connected = false }
             }
@@ -136,17 +138,17 @@ class GnssManager(private val context: Context) {
     /** Corrections from an NTRIP caster, passed to the antenna when one is connected. */
     fun startNtrip(s: NtripSettings) {
         stopNtrip()
-        ntripStatus = "Conectando a ${s.host}:${s.port}/${s.mountpoint}…"
+        ntripStatus = tr("Conectando a {0}:{1}/{2}…", s.host, s.port, s.mountpoint)
         rtcmBytes = 0
         val client = NtripClient(s, { buf, n ->
             runCatching { antennaOut?.write(buf, 0, n) }
-            main.post { rtcmBytes += n; if (ntripStatus?.startsWith("Recebendo") != true) ntripStatus = "Recebendo correções de ${s.mountpoint}" }
+            main.post { rtcmBytes += n; if (ntripStatus?.startsWith("Recebendo") != true) ntripStatus = tr("Recebendo correções de {0}", s.mountpoint) }
         }, { fix?.let { NmeaParser.gga(it.latitude, it.longitude, it.altitude ?: 0.0) } })
         ntrip = client
         thread(name = "ntrip") {
             try {
                 client.run()
-                main.post { if (ntrip === client) ntripStatus = "Caster encerrou a conexão" }
+                main.post { if (ntrip === client) ntripStatus = tr("Caster encerrou a conexão") }
             } catch (e: Exception) {
                 main.post { ntripStatus = "NTRIP: ${e.message ?: e.javaClass.simpleName}" }
             }
@@ -173,7 +175,7 @@ class GnssManager(private val context: Context) {
         nmeaListener = null
         connected = false
         fix = null
-        status = "Desconectado"
+        status = tr("Desconectado")
     }
 
     companion object {

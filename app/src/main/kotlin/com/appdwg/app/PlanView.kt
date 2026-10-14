@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -603,7 +605,7 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: P
         canvas.drawPath(outline, paint)
         val first = toScreen(Point2(b.xs[0], b.ys[0]))
         val label = Paint().apply { isAntiAlias = true; textSize = 12.sp.toPx(); color = paint.color }
-        canvas.drawText("Imagem: ${img.fileName}", first.x + 8f, first.y - 8f, label)
+        canvas.drawText(tr("Imagem: {0}", img.fileName), first.x + 8f, first.y - 8f, label)
     }
 }
 

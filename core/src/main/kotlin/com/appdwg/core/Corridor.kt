@@ -19,7 +19,7 @@ object AlignmentBuilder {
      * with symmetric clothoids of its spiral length when given. The first and last PIs are the ends.
      */
     fun fromPis(name: String, pis: List<Pi>, startStation: Double = 0.0, profile: Profile? = null): Alignment {
-        require(pis.size >= 2) { "o eixo precisa de 2 pontos ou mais" }
+        require(pis.size >= 2) { tr("o eixo precisa de 2 pontos ou mais") }
         val elements = ArrayList<AlignmentElement>()
         var cursor = pis.first().position
         for (i in 1 until pis.size - 1) {
@@ -237,7 +237,7 @@ object Corridor {
         swell: Double = 1.0,
         name: String = "Corredor",
     ): CorridorResult {
-        val profile = alignment.profile ?: error("o eixo precisa de greide (perfil com PVIs)")
+        val profile = alignment.profile ?: error(tr("o eixo precisa de greide (perfil com PVIs)"))
         require(regions.isNotEmpty())
         val stations = sortedSetOf<Double>()
         var s = ceil(alignment.startStation / step) * step
@@ -270,7 +270,7 @@ object Corridor {
             val se = interpolateSe(superelevation, sta)
             section(alignment, profile, terrain, tpl, sta, se)?.also { if (it.second) unresolved++ }?.first
         }
-        require(sections.size >= 2) { "o eixo não tem greide em pelo menos duas seções" }
+        require(sections.size >= 2) { tr("o eixo não tem greide em pelo menos duas seções") }
 
         val top = surface(name, sections) { it.top }
         val datum = surface("$name (terraplenagem)", sections) { it.datum }

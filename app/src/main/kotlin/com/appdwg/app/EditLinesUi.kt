@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,14 +44,16 @@ import com.appdwg.core.StationFormat
 import kotlin.math.abs
 
 /** Line editing operations offered. */
-enum class LineOp(val label: String) {
+enum class LineOp(private val labelPt: String) {
     MOVE("Mover"), COPY("Copiar"), OFFSET("Offset"), DZ("Deslocar na vertical (ΔZ)"),
     DRAPE("Projetar na superfície"), FLATTEN("Achatar numa cota"), ROTATE("Girar"), MIRROR("Espelhar"),
-    REVERSE("Inverter sentido"), JOIN("Unir"), EXPLODE("Explodir"), DIVIDE("Dividir"), LAYER("Trocar camada/cor"), DELETE("Apagar"),
+    REVERSE("Inverter sentido"), JOIN("Unir"), EXPLODE("Explodir"), DIVIDE("Dividir"), LAYER("Trocar camada/cor"), DELETE("Apagar");
+
+    val label: String get() = tr(labelPt)
 }
 
 /** How a move or copy is given. */
-enum class MoveBy(val label: String) { DELTA("ΔX / ΔY"), POLAR("Distância + azimute"), POINTS("Ponto a ponto") }
+enum class MoveBy(private val labelPt: String) { DELTA("ΔX / ΔY"), POLAR("Distância + azimute"), POINTS("Ponto a ponto"); val label: String get() = tr(labelPt) }
 
 /** What the plan is picking for the line editor. */
 enum class EditPick { SELECT, WINDOW, FROM_TO, CENTER, AXIS }
@@ -91,28 +95,28 @@ private fun len(s: String) = StationFormat.parseLength(s)
  */
 fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Triple<List<Polyline>?, Boolean, String?> {
     val lines = e.selected.mapNotNull { vm.shownLine(it) }
-    if (lines.isEmpty()) return Triple(null, false, "Selecione linhas tocando na planta ou por janela.")
+    if (lines.isEmpty()) return Triple(null, false, tr("Selecione linhas tocando na planta ou por janela."))
     val layer = e.layer.trim().ifEmpty { "_EDICAO" }
-    fun bad(what: String) = Triple<List<Polyline>?, Boolean, String?>(null, false, "$what inválido.")
+    fun bad(what: String) = Triple<List<Polyline>?, Boolean, String?>(null, false, tr("{0} inválido.", what))
     return when (e.op) {
         LineOp.MOVE, LineOp.COPY -> {
             val d = when (e.moveBy) {
                 MoveBy.DELTA -> Point2(len(e.dx) ?: return bad("ΔX"), len(e.dy) ?: return bad("ΔY"))
-                MoveBy.POLAR -> LineOps.polar(len(e.distance) ?: return bad("Distância"), num(e.azimuth) ?: return bad("Azimute"))
+                MoveBy.POLAR -> LineOps.polar(len(e.distance) ?: return bad(tr("Distância")), num(e.azimuth) ?: return bad(tr("Azimute")))
                 MoveBy.POINTS -> if (e.picked.size >= 2) Point2(e.picked[1].x - e.picked[0].x, e.picked[1].y - e.picked[0].y)
-                    else return Triple(null, false, "Toque o ponto de origem e o de destino.")
+                    else return Triple(null, false, tr("Toque o ponto de origem e o de destino."))
             }
             val dz = len(e.dz) ?: return bad("ΔZ")
             if (e.op == LineOp.MOVE) Triple(lines.map { LineOps.move(it, d.x, d.y, dz) }, true, null)
             else {
-                val n = e.count.trim().toIntOrNull()?.takeIf { it in 1..200 } ?: return bad("Número de cópias")
+                val n = e.count.trim().toIntOrNull()?.takeIf { it in 1..200 } ?: return bad(tr("Número de cópias"))
                 Triple(lines.flatMap { LineOps.copies(it, d.x, d.y, dz, n, layer) }, false, null)
             }
         }
         LineOp.OFFSET -> {
-            val ds = com.appdwg.core.PointGen.parseOffsets(e.offsets)?.map { StationFormat.fromLength(it) } ?: return bad("Lista de offsets")
+            val ds = com.appdwg.core.PointGen.parseOffsets(e.offsets)?.map { StationFormat.fromLength(it) } ?: return bad(tr("Lista de offsets"))
             val dz = len(e.dz) ?: return bad("ΔZ")
-            val g = num(e.grade) ?: return bad("Rampa")
+            val g = num(e.grade) ?: return bad(tr("Rampa"))
             // H:V ratio becomes a percent grade (1,5:1 falls 66,7 %).
             val pct = if (e.gradeAsRatio) (if (g == 0.0) 0.0 else -100 / g) else g
             val signed = ds.flatMap { d -> when (e.side) { 1 -> listOf(abs(d)); -1 -> listOf(-abs(d)); else -> listOf(abs(d), -abs(d)) } }.distinct()
@@ -121,18 +125,18 @@ fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Trip
         LineOp.DZ -> Triple(lines.map { LineOps.move(it, 0.0, 0.0, len(e.dz) ?: return bad("ΔZ")) }, true, null)
         LineOp.DRAPE -> {
             val s = project.surfaces.firstOrNull { it.name == e.surface } ?: project.surfaces.firstOrNull()
-                ?: return Triple(null, false, "Sem superfície para projetar.")
-            val step = len(e.step)?.takeIf { it > 0 } ?: return bad("Espaçamento")
+                ?: return Triple(null, false, tr("Sem superfície para projetar."))
+            val step = len(e.step)?.takeIf { it > 0 } ?: return bad(tr("Espaçamento"))
             Triple(lines.map { LineOps.drape(it, s, step) }, true, null)
         }
-        LineOp.FLATTEN -> Triple(lines.map { LineOps.flatten(it, len(e.z) ?: return bad("Cota")) }, true, null)
+        LineOp.FLATTEN -> Triple(lines.map { LineOps.flatten(it, len(e.z) ?: return bad(tr("Cota"))) }, true, null)
         LineOp.ROTATE -> {
-            val a = num(e.angle) ?: return bad("Ângulo")
+            val a = num(e.angle) ?: return bad(tr("Ângulo"))
             val c = e.picked.firstOrNull() ?: lines.first().let { l -> Point2(l.xs.average(), l.ys.average()) }
             Triple(lines.map { LineOps.rotate(it, c, a) }, true, null)
         }
         LineOp.MIRROR -> {
-            if (e.picked.size < 2) return Triple(null, false, "Toque dois pontos do eixo de espelhamento.")
+            if (e.picked.size < 2) return Triple(null, false, tr("Toque dois pontos do eixo de espelhamento."))
             Triple(lines.map { LineOps.mirror(it, e.picked[0], e.picked[1], if (e.keepOriginal) layer else it.layer) }, !e.keepOriginal, null)
         }
         LineOp.REVERSE -> Triple(lines.map { LineOps.reverse(it) }, true, null)
@@ -141,7 +145,7 @@ fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Trip
         LineOp.DIVIDE -> {
             val every = len(e.divideEvery)
             val parts = e.divideParts.trim().toIntOrNull()
-            if (every == null && (parts == null || parts < 1)) return bad("Divisão")
+            if (every == null && (parts == null || parts < 1)) return bad(tr("Divisão"))
             Triple(lines.flatMap { if (every != null && every > 0) LineOps.divide(it, every = every) else LineOps.divide(it, parts = parts) }, true, null)
         }
         LineOp.LAYER -> Triple(lines.map { LineOps.relayer(it, layer, e.color) }, true, null)
@@ -156,27 +160,27 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, on
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
             val one = e.selected.singleOrNull()?.let { vm.shownLine(it) }
             Text(when (e.pick) {
-                EditPick.WINDOW -> if (e.windowCorner == null) "Toque o 1º canto da janela." else "Toque o canto oposto da janela."
-                EditPick.FROM_TO -> "Toque o ponto de origem e depois o de destino (${e.picked.size}/2)."
-                EditPick.CENTER -> "Toque o centro da rotação."
-                EditPick.AXIS -> "Toque dois pontos do eixo de espelhamento (${e.picked.size}/2)."
-                EditPick.SELECT -> "${e.selected.size} linha(s) selecionada(s). Toque linhas para marcar ou desmarcar."
+                EditPick.WINDOW -> if (e.windowCorner == null) tr("Toque o 1º canto da janela.") else tr("Toque o canto oposto da janela.")
+                EditPick.FROM_TO -> tr("Toque o ponto de origem e depois o de destino ({0}/2).", e.picked.size)
+                EditPick.CENTER -> tr("Toque o centro da rotação.")
+                EditPick.AXIS -> tr("Toque dois pontos do eixo de espelhamento ({0}/2).", e.picked.size)
+                EditPick.SELECT -> tr("{0} linha(s) selecionada(s). Toque linhas para marcar ou desmarcar.", e.selected.size)
             }, style = MaterialTheme.typography.bodyMedium)
             one?.let { l ->
                 val i = LineOps.info(l)
-                Text("Camada ${l.layer} · ${i.vertices} vértices · 2D ${StationFormat.length(i.length2d, 3)}" +
+                Text(tr("Camada {0} · {1} vértices · 2D {2}", l.layer, i.vertices, StationFormat.length(i.length2d, 3)) +
                     (i.length3d?.let { " · 3D ${StationFormat.length(it, 3)}" } ?: "") +
                     (i.zStart?.let { " · cotas ${StationFormat.lengthValue(it)} → ${StationFormat.lengthValue(i.zEnd!!)}" } ?: "") +
                     (i.gradePercent?.let { " · rampa ${StationFormat.decimal(it, 2)} %" } ?: ""),
                     style = MaterialTheme.typography.bodySmall)
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }) { Text("Janela") }
-                TextButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty()) { Text("Limpar seleção") }
-                TextButton(onClick = onOperation, enabled = e.selected.isNotEmpty()) { Text("Operação…") }
-                TextButton(onClick = { vm.undoLines(); e.selected = emptyList() }, enabled = vm.canUndo) { Text("Desfazer") }
-                TextButton(onClick = { vm.redoLines(); e.selected = emptyList() }, enabled = vm.canRedo) { Text("Refazer") }
-                TextButton(onClick = onDone) { Text("Concluir") }
+                TextButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }) { Text(tr("Janela")) }
+                TextButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty()) { Text(tr("Limpar seleção")) }
+                TextButton(onClick = onOperation, enabled = e.selected.isNotEmpty()) { Text(tr("Operação…")) }
+                TextButton(onClick = { vm.undoLines(); e.selected = emptyList() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
+                TextButton(onClick = { vm.redoLines(); e.selected = emptyList() }, enabled = vm.canRedo) { Text(tr("Refazer")) }
+                TextButton(onClick = onDone) { Text(tr("Concluir")) }
             }
         }
     }
@@ -197,19 +201,19 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
             Row {
                 TextButton(onClick = {
                     val (res, _, why) = runLineOp(e, vm, project)
-                    e.preview = res.orEmpty(); e.message = why ?: "${res!!.size} linha(s) resultante(s) em ciano na planta."
-                }) { Text("Pré-visualizar") }
+                    e.preview = res.orEmpty(); e.message = why ?: tr("{0} linha(s) resultante(s) em ciano na planta.", res!!.size)
+                }) { Text(tr("Pré-visualizar")) }
                 TextButton(onClick = {
                     val (res, replace, why) = runLineOp(e, vm, project)
                     if (res == null) { e.message = why; return@TextButton }
                     vm.editLines(e.selected, res, replace)
                     e.selected = emptyList(); e.preview = emptyList(); e.picked = emptyList(); e.message = null
                     onDismiss()
-                }) { Text("Aplicar") }
+                }) { Text(tr("Aplicar")) }
             }
         },
-        dismissButton = { TextButton(onClick = { e.preview = emptyList(); onDismiss() }) { Text("Fechar") } },
-        title = { Text("Editar ${e.selected.size} linha(s)") },
+        dismissButton = { TextButton(onClick = { e.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
+        title = { Text(tr("Editar {0} linha(s)", e.selected.size)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 // All operations visible at once, wrapping onto more lines.
@@ -224,72 +228,72 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             when (e.moveBy) {
                                 MoveBy.DELTA -> { field(e.dx, { e.dx = it }, "ΔX (${StationFormat.lengthUnit})"); field(e.dy, { e.dy = it }, "ΔY (${StationFormat.lengthUnit})") }
-                                MoveBy.POLAR -> { field(e.distance, { e.distance = it }, "Distância (${StationFormat.lengthUnit})"); field(e.azimuth, { e.azimuth = it }, "Azimute (°)") }
+                                MoveBy.POLAR -> { field(e.distance, { e.distance = it }, tr("Distância ({0})", StationFormat.lengthUnit)); field(e.azimuth, { e.azimuth = it }, tr("Azimute (°)")) }
                                 MoveBy.POINTS -> OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.FROM_TO) }) {
-                                    Text(if (e.picked.size >= 2) "Pontos escolhidos (trocar)" else "Tocar origem e destino")
+                                    Text(if (e.picked.size >= 2) tr("Pontos escolhidos (trocar)") else tr("Tocar origem e destino"))
                                 }
                             }
                             field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
-                            if (e.op == LineOp.COPY) { field(e.count, { e.count = it }, "Nº de cópias", 130); field(e.layer, { e.layer = it }, "Camada nova", 170) }
+                            if (e.op == LineOp.COPY) { field(e.count, { e.count = it }, tr("Nº de cópias"), 130); field(e.layer, { e.layer = it }, tr("Camada nova"), 170) }
                         }
                     }
                     LineOp.OFFSET -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            field(e.offsets, { e.offsets = it }, "Distâncias (${StationFormat.lengthUnit}; ex.: ${StationFormat.decimal(3.5, 1)}; 7)", 220)
-                            listOf(1 to "Direita", -1 to "Esquerda", 0 to "Ambos").forEach { (v, l) -> FilterChip(selected = e.side == v, onClick = { e.side = v }, label = { Text(l) }) }
+                            field(e.offsets, { e.offsets = it }, tr("Distâncias ({0}; ex.: {1}; 7)", StationFormat.lengthUnit, StationFormat.decimal(3.5, 1)), 220)
+                            listOf(1 to tr("Direita"), -1 to tr("Esquerda"), 0 to tr("Ambos")).forEach { (v, l) -> FilterChip(selected = e.side == v, onClick = { e.side = v }, label = { Text(l) }) }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
-                            field(e.grade, { e.grade = it }, if (e.gradeAsRatio) "Talude H:V (desce)" else "Rampa % (− desce)", 190)
+                            field(e.grade, { e.grade = it }, if (e.gradeAsRatio) tr("Talude H:V (desce)") else tr("Rampa % (− desce)"), 190)
                             Checkbox(checked = e.gradeAsRatio, onCheckedChange = { e.gradeAsRatio = it })
-                            Text("em H:V", style = MaterialTheme.typography.bodySmall)
-                            field(e.layer, { e.layer = it }, "Camada nova", 170)
+                            Text(tr("em H:V"), style = MaterialTheme.typography.bodySmall)
+                            field(e.layer, { e.layer = it }, tr("Camada nova"), 170)
                         }
-                        Text("Offset com rampa gera crista ou pé de talude: a cota muda pela distância × rampa, mais o ΔZ.", style = MaterialTheme.typography.bodySmall)
+                        Text(tr("Offset com rampa gera crista ou pé de talude: a cota muda pela distância × rampa, mais o ΔZ."), style = MaterialTheme.typography.bodySmall)
                     }
                     LineOp.DZ -> field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
                     LineOp.DRAPE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        field(e.step, { e.step = it }, "Densificar a cada (${StationFormat.lengthUnit})", 190)
+                        field(e.step, { e.step = it }, tr("Densificar a cada ({0})", StationFormat.lengthUnit), 190)
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
-                            TextButton(onClick = { open = true }) { Text(e.surface ?: names.firstOrNull() ?: "sem superfície") }
+                            TextButton(onClick = { open = true }) { Text(e.surface ?: names.firstOrNull() ?: tr("sem superfície")) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { e.surface = n; open = false }) }
                             }
                         }
                     }
-                    LineOp.FLATTEN -> field(e.z, { e.z = it }, "Cota (${StationFormat.lengthUnit})")
+                    LineOp.FLATTEN -> field(e.z, { e.z = it }, tr("Cota ({0})", StationFormat.lengthUnit))
                     LineOp.ROTATE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        field(e.angle, { e.angle = it }, "Ângulo (°, anti-horário)", 200)
+                        field(e.angle, { e.angle = it }, tr("Ângulo (°, anti-horário)"), 200)
                         OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.CENTER) }) {
-                            Text(if (e.picked.isNotEmpty()) "Centro escolhido (trocar)" else "Tocar centro (padrão: centro da linha)")
+                            Text(if (e.picked.isNotEmpty()) tr("Centro escolhido (trocar)") else tr("Tocar centro (padrão: centro da linha)"))
                         }
                     }
                     LineOp.MIRROR -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.AXIS) }) {
-                            Text(if (e.picked.size >= 2) "Eixo escolhido (trocar)" else "Tocar dois pontos do eixo")
+                            Text(if (e.picked.size >= 2) tr("Eixo escolhido (trocar)") else tr("Tocar dois pontos do eixo"))
                         }
                         Checkbox(checked = e.keepOriginal, onCheckedChange = { e.keepOriginal = it })
-                        Text("Manter original", style = MaterialTheme.typography.bodySmall)
-                        if (e.keepOriginal) field(e.layer, { e.layer = it }, "Camada nova", 170)
+                        Text(tr("Manter original"), style = MaterialTheme.typography.bodySmall)
+                        if (e.keepOriginal) field(e.layer, { e.layer = it }, tr("Camada nova"), 170)
                     }
                     LineOp.DIVIDE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        field(e.divideParts, { e.divideParts = it }, "Em N partes", 140)
-                        field(e.divideEvery, { e.divideEvery = it }, "Ou a cada (${StationFormat.lengthUnit})", 140)
+                        field(e.divideParts, { e.divideParts = it }, tr("Em N partes"), 140)
+                        field(e.divideEvery, { e.divideEvery = it }, tr("Ou a cada ({0})", StationFormat.lengthUnit), 140)
                     }
                     LineOp.LAYER -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        field(e.layer, { e.layer = it }, "Camada", 200)
-                        listOf(null to "Da camada", 1 to "Vermelho", 2 to "Amarelo", 3 to "Verde", 4 to "Ciano", 5 to "Azul", 6 to "Magenta").forEach { (aci, l) ->
+                        field(e.layer, { e.layer = it }, tr("Camada"), 200)
+                        listOf(null to tr("Da camada"), 1 to tr("Vermelho"), 2 to tr("Amarelo"), 3 to tr("Verde"), 4 to tr("Ciano"), 5 to tr("Azul"), 6 to tr("Magenta")).forEach { (aci, l) ->
                             val argb = aci?.let { com.appdwg.core.DxfReader.aciColor(it) }
                             FilterChip(selected = e.color == argb, onClick = { e.color = argb }, label = { Text(l) })
                         }
                     }
                     LineOp.REVERSE, LineOp.JOIN, LineOp.EXPLODE, LineOp.DELETE -> Text(when (e.op) {
-                        LineOp.JOIN -> "Une as linhas cujas pontas se tocam (até 1 cm)."
-                        LineOp.EXPLODE -> "Cada segmento vira uma linha."
-                        LineOp.DELETE -> "Apaga as linhas selecionadas (pode desfazer)."
-                        else -> "Inverte o sentido das linhas."
+                        LineOp.JOIN -> tr("Une as linhas cujas pontas se tocam (até 1 cm).")
+                        LineOp.EXPLODE -> tr("Cada segmento vira uma linha.")
+                        LineOp.DELETE -> tr("Apaga as linhas selecionadas (pode desfazer).")
+                        else -> tr("Inverte o sentido das linhas.")
                     }, style = MaterialTheme.typography.bodySmall)
                 }
                 e.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

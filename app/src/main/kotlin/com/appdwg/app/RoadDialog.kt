@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,7 +48,7 @@ import com.appdwg.core.SlopeRule
 import com.appdwg.core.StationFormat
 import com.appdwg.core.Superelevation
 
-private enum class RoadTab(val label: String) { AXIS("Eixo"), GRADE("Greide"), SECTION("Seção tipo"), REGIONS("Regiões"), SLOPES("Taludes"), SE("Superelevação"), RESULT("Resultado") }
+private enum class RoadTab(private val labelPt: String) { AXIS("Eixo"), GRADE("Greide"), SECTION("Seção tipo"), REGIONS("Regiões"), SLOPES("Taludes"), SE("Superelevação"), RESULT("Resultado"); val label: String get() = tr(labelPt) }
 
 private fun num(s: String) = StationFormat.number(s)
 
@@ -86,15 +88,15 @@ fun RoadDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.95f),
         confirmButton = {
-            TextButton(enabled = vm.tasks.isEmpty(), onClick = { v.roadParams = rp; vm.designRoad(); tab = RoadTab.RESULT }) { Text("Calcular") }
+            TextButton(enabled = vm.tasks.isEmpty(), onClick = { v.roadParams = rp; vm.designRoad(); tab = RoadTab.RESULT }) { Text(tr("Calcular")) }
         },
         dismissButton = {
             Row {
-                if (vm.road != null) OutlinedButton(onClick = { vm.removeRoad() }) { Text("Remover estrada") }
-                TextButton(onClick = { v.roadParams = rp; onDismiss() }) { Text("Fechar") }
+                if (vm.road != null) OutlinedButton(onClick = { vm.removeRoad() }) { Text(tr("Remover estrada")) }
+                TextButton(onClick = { v.roadParams = rp; onDismiss() }) { Text(tr("Fechar")) }
             }
         },
-        title = { Text("Projeto de estrada (corredor)") },
+        title = { Text(tr("Projeto de estrada (corredor)")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -103,24 +105,24 @@ fun RoadDialog(
                 when (tab) {
                     RoadTab.AXIS -> {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(selected = rp.alignmentIndex < 0, onClick = { rp = rp.copy(alignmentIndex = -1) }, label = { Text("Novo eixo por PIs") })
+                            FilterChip(selected = rp.alignmentIndex < 0, onClick = { rp = rp.copy(alignmentIndex = -1) }, label = { Text(tr("Novo eixo por PIs")) })
                             axes.forEachIndexed { i, a -> FilterChip(selected = rp.alignmentIndex == i, onClick = { rp = rp.copy(alignmentIndex = i) }, label = { Text(a.name) }) }
                         }
                         if (rp.alignmentIndex < 0) {
-                            Text("PIs: ${rp.pis.size}. O primeiro e o último são o início e o fim; nos demais entra curva circular com espirais.",
+                            Text(tr("PIs: {0}. O primeiro e o último são o início e o fim; nos demais entra curva circular com espirais.", rp.pis.size),
                                 style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedButton(onClick = { v.roadParams = rp; onDrawAxis() }) { Text("Desenhar PIs na planta") }
+                                OutlinedButton(onClick = { v.roadParams = rp; onDrawAxis() }) { Text(tr("Desenhar PIs na planta")) }
                                 OutlinedButton(enabled = vm.userPoints.size >= 2, onClick = {
                                     rp = rp.copy(pis = vm.userPoints.map { com.appdwg.core.Point2(it.x, it.y) })
-                                }) { Text("Usar pontos _POINTS") }
-                                numField(rp.radius, "Raio (${StationFormat.lengthUnit})") { rp = rp.copy(radius = it) }
-                                numField(rp.spiral, "Espiral Ls (${StationFormat.lengthUnit}, 0 = sem)", 190) { rp = rp.copy(spiral = it) }
+                                }) { Text(tr("Usar pontos _POINTS")) }
+                                numField(rp.radius, tr("Raio ({0})", StationFormat.lengthUnit)) { rp = rp.copy(radius = it) }
+                                numField(rp.spiral, tr("Espiral Ls ({0}, 0 = sem)", StationFormat.lengthUnit), 190) { rp = rp.copy(spiral = it) }
                             }
-                        } else Text("Usa o alinhamento do arquivo, com estaqueamento de 20 m.", style = MaterialTheme.typography.bodySmall)
+                        } else Text(tr("Usa o alinhamento do arquivo, com estaqueamento de 20 m."), style = MaterialTheme.typography.bodySmall)
                         val names = project.surfaces.map { it.name }.filter { !it.startsWith(ROAD_LABEL) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Terreno")
+                            Text(tr("Terreno"))
                             var open by remember { mutableStateOf(false) }
                             Box {
                                 TextButton(onClick = { open = true }) { Text(rp.terrain ?: names.firstOrNull() ?: "—", maxLines = 1) }
@@ -132,117 +134,117 @@ fun RoadDialog(
                     }
                     RoadTab.GRADE -> {
                         val axis = vm.roadAxis(rp, project)
-                        Text(if (rp.pvis.isEmpty()) (if (axis?.profile != null) "Usando o greide do arquivo. Edite abaixo para substituir." else "Sem greide: gere ou digite os PVIs.")
-                            else "${rp.pvis.size} PVI(s). Curva vertical: comprimento digitado ou K × |Δg|.", style = MaterialTheme.typography.bodySmall)
+                        Text(if (rp.pvis.isEmpty()) (if (axis?.profile != null) tr("Usando o greide do arquivo. Edite abaixo para substituir.") else tr("Sem greide: gere ou digite os PVIs."))
+                            else tr("{0} PVI(s). Curva vertical: comprimento digitado ou K × |Δg|.", rp.pvis.size), style = MaterialTheme.typography.bodySmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            numField(rp.kValue, "K das curvas verticais") { rp = rp.copy(kValue = it) }
+                            numField(rp.kValue, tr("K das curvas verticais")) { rp = rp.copy(kValue = it) }
                             OutlinedButton(enabled = axis != null, onClick = {
                                 // PVIs on the terrain every 100 m, a starting point to adjust.
                                 val a = axis!!
                                 val terrain = project.surfaces.firstOrNull { it.name == rp.terrain } ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) }
                                 val stas = (generateSequence(a.startStation) { it + 100.0 }.takeWhile { it < a.endStation } + a.endStation).toList()
                                 rp = rp.copy(pvis = stas.map { s -> Profile.Pvi(s, a.pointAt(s)?.let { terrain?.elevationAt(it) } ?: 0.0) })
-                            }) { Text("Gerar PVIs no terreno (a cada 100 m)") }
-                            if (axis?.profile != null) OutlinedButton(onClick = { rp = rp.copy(pvis = axis.profile!!.pvis) }) { Text("Copiar greide do arquivo") }
+                            }) { Text(tr("Gerar PVIs no terreno (a cada 100 m)")) }
+                            if (axis?.profile != null) OutlinedButton(onClick = { rp = rp.copy(pvis = axis.profile!!.pvis) }) { Text(tr("Copiar greide do arquivo")) }
                         }
                         rp.pvis.forEachIndexed { i, p ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text("PVI ${i + 1}", Modifier.width(60.dp))
                                 var st by remember(i, p.station) { mutableStateOf(StationFormat.estaca(p.station)) }
                                 OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(station = s) }) } },
-                                    label = { Text("Estaca") }, singleLine = true, modifier = Modifier.width(150.dp))
-                                numField(p.elevation, "Cota (${StationFormat.lengthUnit})") { z -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(elevation = z) }) }
-                                numField(p.curveLength, "Curva vertical (${StationFormat.lengthUnit})") { c -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(curveLength = c) }) }
+                                    label = { Text(tr("Estaca")) }, singleLine = true, modifier = Modifier.width(150.dp))
+                                numField(p.elevation, tr("Cota ({0})", StationFormat.lengthUnit)) { z -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(elevation = z) }) }
+                                numField(p.curveLength, tr("Curva vertical ({0})", StationFormat.lengthUnit)) { c -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(curveLength = c) }) }
                                 if (i > 0) Text("rampa " + f((p.elevation - rp.pvis[i - 1].elevation) / (p.station - rp.pvis[i - 1].station) * 100) + " %",
                                     style = MaterialTheme.typography.bodySmall)
-                                OutlinedButton(onClick = { rp = rp.copy(pvis = rp.pvis.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                                OutlinedButton(onClick = { rp = rp.copy(pvis = rp.pvis.filterIndexed { j, _ -> j != i }) }) { Text(tr("Remover")) }
                             }
                         }
                         Row {
                             TextButton(onClick = {
                                 val last = rp.pvis.lastOrNull()
                                 rp = rp.copy(pvis = rp.pvis + Profile.Pvi((last?.station ?: 0.0) + 100, last?.elevation ?: 0.0))
-                            }) { Text("Adicionar PVI") }
-                            if (rp.pvis.isNotEmpty()) TextButton(onClick = { rp = rp.copy(pvis = emptyList()) }) { Text("Limpar") }
+                            }) { Text(tr("Adicionar PVI")) }
+                            if (rp.pvis.isNotEmpty()) TextButton(onClick = { rp = rp.copy(pvis = emptyList()) }) { Text(tr("Limpar")) }
                         }
                     }
                     RoadTab.SECTION -> {
                         var same by remember { mutableStateOf(rp.left == rp.right) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = same, onCheckedChange = { same = it; if (it) rp = rp.copy(right = rp.left) })
-                            Text("Lados iguais")
+                            Text(tr("Lados iguais"))
                         }
-                        SideEditor("Lado esquerdo", rp.left) { s -> rp = if (same) rp.copy(left = s, right = s) else rp.copy(left = s) }
-                        if (!same) SideEditor("Lado direito", rp.right) { s -> rp = rp.copy(right = s) }
+                        SideEditor(tr("Lado esquerdo"), rp.left) { s -> rp = if (same) rp.copy(left = s, right = s) else rp.copy(left = s) }
+                        if (!same) SideEditor(tr("Lado direito"), rp.right) { s -> rp = rp.copy(right = s) }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            numField(rp.pavement, "Espessura do pavimento (${StationFormat.lengthUnit})", 220) { rp = rp.copy(pavement = it) }
-                            numField(rp.step, "Seções a cada (${StationFormat.lengthUnit})") { rp = rp.copy(step = it.coerceAtLeast(1.0)) }
+                            numField(rp.pavement, tr("Espessura do pavimento ({0})", StationFormat.lengthUnit), 220) { rp = rp.copy(pavement = it) }
+                            numField(rp.step, tr("Seções a cada ({0})", StationFormat.lengthUnit)) { rp = rp.copy(step = it.coerceAtLeast(1.0)) }
                         }
-                        Text("Caimento negativo desce para fora. A sarjeta é um degrau no fim do acostamento; a valeta (em V) entra só em corte.",
+                        Text(tr("Caimento negativo desce para fora. A sarjeta é um degrau no fim do acostamento; a valeta (em V) entra só em corte."),
                             style = MaterialTheme.typography.bodySmall)
                     }
                     RoadTab.SLOPES -> {
-                        SlopeEditor("Corte", rp.cut) { rp = rp.copy(cut = it) }
-                        SlopeEditor("Aterro", rp.fill) { rp = rp.copy(fill = it) }
-                        numField(rp.swell, "Fator de empolamento/compactação do aterro", 330) { rp = rp.copy(swell = it) }
+                        SlopeEditor(tr("Corte"), rp.cut) { rp = rp.copy(cut = it) }
+                        SlopeEditor(tr("Aterro"), rp.fill) { rp = rp.copy(fill = it) }
+                        numField(rp.swell, tr("Fator de empolamento/compactação do aterro"), 330) { rp = rp.copy(swell = it) }
                     }
                     RoadTab.SE -> {
-                        Text("Caimento de cada pista por estaca, em % (negativo desce para fora; positivo sobe para fora). Interpolado entre as estacas; " +
-                            "sem linhas, vale o caimento da seção tipo.", style = MaterialTheme.typography.bodySmall)
+                        Text(tr("Caimento de cada pista por estaca, em % (negativo desce para fora; positivo sobe para fora). Interpolado entre as estacas; ") +
+                            tr("sem linhas, vale o caimento da seção tipo."), style = MaterialTheme.typography.bodySmall)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            numField(rp.speed, "Velocidade (km/h)") { rp = rp.copy(speed = it) }
-                            numField(rp.emax, "e máx. (%)") { rp = rp.copy(emax = it) }
+                            numField(rp.speed, tr("Velocidade (km/h)")) { rp = rp.copy(speed = it) }
+                            numField(rp.emax, tr("e máx. (%)")) { rp = rp.copy(emax = it) }
                             val axis = vm.roadAxis(rp, project)
                             OutlinedButton(enabled = axis != null, onClick = {
                                 rp = rp.copy(superelevation = com.appdwg.core.Superelevations.auto(axis!!, rp.speed, rp.emax, -rp.left.laneSlope.coerceAtMost(0.0).let { if (it == 0.0) 2.0 else it }))
-                            }) { Text("Calcular pelas curvas (DNIT)") }
+                            }) { Text(tr("Calcular pelas curvas (DNIT)")) }
                         }
                         rp.superelevation.forEachIndexed { i, e ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 var st by remember(i, e.station) { mutableStateOf(StationFormat.estaca(e.station)) }
                                 OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(station = s) }) } },
-                                    label = { Text("Estaca") }, singleLine = true, modifier = Modifier.width(150.dp))
-                                numField(e.left, "Pista esquerda %") { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(left = v2) }) }
-                                numField(e.right, "Pista direita %") { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(right = v2) }) }
-                                OutlinedButton(onClick = { rp = rp.copy(superelevation = rp.superelevation.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                                    label = { Text(tr("Estaca")) }, singleLine = true, modifier = Modifier.width(150.dp))
+                                numField(e.left, tr("Pista esquerda %")) { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(left = v2) }) }
+                                numField(e.right, tr("Pista direita %")) { v2 -> rp = rp.copy(superelevation = rp.superelevation.toMutableList().also { l -> l[i] = e.copy(right = v2) }) }
+                                OutlinedButton(onClick = { rp = rp.copy(superelevation = rp.superelevation.filterIndexed { j, _ -> j != i }) }) { Text(tr("Remover")) }
                             }
                         }
                         Row {
                             TextButton(onClick = { rp = rp.copy(superelevation = rp.superelevation + Superelevation((rp.superelevation.lastOrNull()?.station ?: 0.0) + 20, -2.0, -2.0)) }) {
-                                Text("Adicionar estaca")
+                                Text(tr("Adicionar estaca"))
                             }
-                            if (rp.superelevation.isNotEmpty()) TextButton(onClick = { rp = rp.copy(superelevation = emptyList()) }) { Text("Limpar") }
+                            if (rp.superelevation.isNotEmpty()) TextButton(onClick = { rp = rp.copy(superelevation = emptyList()) }) { Text(tr("Limpar")) }
                         }
                     }
                     RoadTab.REGIONS -> {
-                        Text("A seção tipo vale do início do eixo. Cada região muda as larguras a partir da sua estaca, com transição linear; " +
-                            "um alvo (linha tocada na planta) faz o bordo da pista seguir essa linha.", style = MaterialTheme.typography.bodySmall)
+                        Text(tr("A seção tipo vale do início do eixo. Cada região muda as larguras a partir da sua estaca, com transição linear; ") +
+                            tr("um alvo (linha tocada na planta) faz o bordo da pista seguir essa linha."), style = MaterialTheme.typography.bodySmall)
                         rp.regions.forEachIndexed { i, r ->
                             HorizontalDivider()
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 var st by remember(i, r.from) { mutableStateOf(StationFormat.estaca(r.from)) }
                                 OutlinedTextField(st, { st = it; StationFormat.parse(it)?.let { s -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(from = s) }) } },
-                                    label = { Text("A partir da estaca") }, singleLine = true, modifier = Modifier.width(170.dp))
-                                numField(r.transition, "Transição (${StationFormat.lengthUnit})") { t -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(transition = t) }) }
-                                OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, -1) }) { Text(if (r.leftTarget != null) "Alvo E ✓ (trocar)" else "Alvo bordo E") }
-                                OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, 1) }) { Text(if (r.rightTarget != null) "Alvo D ✓ (trocar)" else "Alvo bordo D") }
+                                    label = { Text(tr("A partir da estaca")) }, singleLine = true, modifier = Modifier.width(170.dp))
+                                numField(r.transition, tr("Transição ({0})", StationFormat.lengthUnit)) { t -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(transition = t) }) }
+                                OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, -1) }) { Text(if (r.leftTarget != null) tr("Alvo E ✓ (trocar)") else tr("Alvo bordo E")) }
+                                OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, 1) }) { Text(if (r.rightTarget != null) tr("Alvo D ✓ (trocar)") else tr("Alvo bordo D")) }
                                 if (r.leftTarget != null || r.rightTarget != null) TextButton(onClick = {
                                     rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(leftTarget = null, rightTarget = null) })
-                                }) { Text("Sem alvos") }
-                                OutlinedButton(onClick = { rp = rp.copy(regions = rp.regions.filterIndexed { j, _ -> j != i }) }) { Text("Remover") }
+                                }) { Text(tr("Sem alvos")) }
+                                OutlinedButton(onClick = { rp = rp.copy(regions = rp.regions.filterIndexed { j, _ -> j != i }) }) { Text(tr("Remover")) }
                             }
-                            SideEditor("Esquerda", r.left) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(left = sd) }) }
-                            SideEditor("Direita", r.right) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(right = sd) }) }
+                            SideEditor(tr("Esquerda"), r.left) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(left = sd) }) }
+                            SideEditor(tr("Direita"), r.right) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(right = sd) }) }
                         }
                         TextButton(onClick = {
                             val last = rp.regions.lastOrNull()
                             rp = rp.copy(regions = rp.regions + RoadRegion((last?.from ?: 0.0) + 100, last?.left ?: rp.left, last?.right ?: rp.right))
-                        }) { Text("Adicionar região") }
+                        }) { Text(tr("Adicionar região")) }
                     }
                     RoadTab.RESULT -> {
                         vm.tasks.forEach { LoadProgress(it) }
                         vm.roadMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                        vm.road?.let { r -> RoadResult(r, v.roadParams.swell, onServiceNote, onServiceNotePdf, onBulletin) } ?: if (vm.tasks.isEmpty()) Text("Toque em Calcular.") else Unit
+                        vm.road?.let { r -> RoadResult(r, v.roadParams.swell, onServiceNote, onServiceNotePdf, onBulletin) } ?: if (vm.tasks.isEmpty()) Text(tr("Toque em Calcular.")) else Unit
                     }
                 }
             }
@@ -261,16 +263,16 @@ private fun SideEditor(title: String, s: SideTemplate, onChange: (SideTemplate) 
     }
     Text(title, style = MaterialTheme.typography.labelLarge)
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        field(s.laneWidth, "Pista (${StationFormat.lengthUnit})") { s.copy(laneWidth = it) }
-        field(s.laneSlope, "Caimento pista %") { s.copy(laneSlope = it) }
-        field(s.shoulderWidth, "Acostamento (${StationFormat.lengthUnit})") { s.copy(shoulderWidth = it) }
-        field(s.shoulderSlope, "Caimento acost. %") { s.copy(shoulderSlope = it) }
+        field(s.laneWidth, tr("Pista ({0})", StationFormat.lengthUnit)) { s.copy(laneWidth = it) }
+        field(s.laneSlope, tr("Caimento pista %")) { s.copy(laneSlope = it) }
+        field(s.shoulderWidth, tr("Acostamento ({0})", StationFormat.lengthUnit)) { s.copy(shoulderWidth = it) }
+        field(s.shoulderSlope, tr("Caimento acost. %")) { s.copy(shoulderSlope = it) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        field(s.gutterWidth, "Sarjeta (${StationFormat.lengthUnit})") { s.copy(gutterWidth = it) }
-        field(s.gutterDepth, "Degrau sarjeta (${StationFormat.lengthUnit})") { s.copy(gutterDepth = it) }
-        field(s.ditchWidth, "Valeta (${StationFormat.lengthUnit})") { s.copy(ditchWidth = it) }
-        field(s.ditchDepth, "Prof. valeta (${StationFormat.lengthUnit})") { s.copy(ditchDepth = it) }
+        field(s.gutterWidth, tr("Sarjeta ({0})", StationFormat.lengthUnit)) { s.copy(gutterWidth = it) }
+        field(s.gutterDepth, tr("Degrau sarjeta ({0})", StationFormat.lengthUnit)) { s.copy(gutterDepth = it) }
+        field(s.ditchWidth, tr("Valeta ({0})", StationFormat.lengthUnit)) { s.copy(ditchWidth = it) }
+        field(s.ditchDepth, tr("Prof. valeta ({0})", StationFormat.lengthUnit)) { s.copy(ditchDepth = it) }
     }
 }
 
@@ -285,27 +287,27 @@ private fun SlopeEditor(title: String, r: SlopeRule, onChange: (SlopeRule) -> Un
     }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Modifier.width(70.dp), style = MaterialTheme.typography.labelLarge)
-        field(r.ratio, "Talude H:V") { if (it > 0) r.copy(ratio = it) else null }
-        field(r.benchHeight, "Altura entre bermas (${StationFormat.lengthUnit})") { r.copy(benchHeight = it) }
-        field(r.benchWidth, "Largura berma (${StationFormat.lengthUnit})") { r.copy(benchWidth = it) }
-        field(r.benchFall, "Caimento berma %") { r.copy(benchFall = it) }
+        field(r.ratio, tr("Talude H:V")) { if (it > 0) r.copy(ratio = it) else null }
+        field(r.benchHeight, tr("Altura entre bermas ({0})", StationFormat.lengthUnit)) { r.copy(benchHeight = it) }
+        field(r.benchWidth, tr("Largura berma ({0})", StationFormat.lengthUnit)) { r.copy(benchWidth = it) }
+        field(r.benchFall, tr("Caimento berma %")) { r.copy(benchFall = it) }
     }
 }
 
 @Composable
 private fun RoadResult(r: CorridorResult, swell: Double, onServiceNote: () -> Unit, onServiceNotePdf: () -> Unit, onBulletin: () -> Unit) {
-    Text("Eixo ${r.alignment.name}: ${StationFormat.length(r.alignment.length)}, ${r.sections.size} seções", style = MaterialTheme.typography.labelLarge)
-    Text("Corte ${StationFormat.volume(r.totalCut)} · Aterro ${StationFormat.volume(r.totalFill)} · Saldo final (Brückner) ${StationFormat.volume(r.volumes.last().accumulated)}")
-    Text("Superfícies \"$ROAD_LABEL\" (acabada) e \"$ROAD_LABEL (terraplenagem)\" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.",
+    Text(tr("Eixo {0}: {1}, {2} seções", r.alignment.name, StationFormat.length(r.alignment.length), r.sections.size), style = MaterialTheme.typography.labelLarge)
+    Text(tr("Corte {0} · Aterro {1} · Saldo final (Brückner) {2}", StationFormat.volume(r.totalCut), StationFormat.volume(r.totalFill), StationFormat.volume(r.volumes.last().accumulated)))
+    Text(tr("Superfícies \"{0}\" (acabada) e \"{1} (terraplenagem)\" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.", ROAD_LABEL, ROAD_LABEL),
         style = MaterialTheme.typography.bodySmall)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onServiceNote) { Text("Nota de serviço e volumes (CSV)") }
-        OutlinedButton(onClick = onServiceNotePdf) { Text("Nota de serviço (PDF)") }
+        OutlinedButton(onClick = onServiceNote) { Text(tr("Nota de serviço e volumes (CSV)")) }
+        OutlinedButton(onClick = onServiceNotePdf) { Text(tr("Nota de serviço (PDF)")) }
     }
-    Text("No Exportar: LandXML leva o eixo, o greide, as seções e as superfícies com breaklines; DXF leva bordos, crista e pé em 3D.",
+    Text(tr("No Exportar: LandXML leva o eixo, o greide, as seções e as superfícies com breaklines; DXF leva bordos, crista e pé em 3D."),
         style = MaterialTheme.typography.bodySmall)
     HorizontalDivider()
-    Text("Diagrama de Brückner (volume acumulado: acima = sobra de corte)", style = MaterialTheme.typography.labelMedium)
+    Text(tr("Diagrama de Brückner (volume acumulado: acima = sobra de corte)"), style = MaterialTheme.typography.labelMedium)
     val fg = MaterialTheme.colorScheme.onSurface
     Canvas(Modifier.fillMaxWidth().height(160.dp)) {
         val vs = r.volumes
@@ -320,7 +322,7 @@ private fun RoadResult(r: CorridorResult, swell: Double, onServiceNote: () -> Un
     }
     HaulSummary(r, swell, onBulletin)
     HorizontalDivider()
-    Text("Estaca · corte · aterro · acumulado", style = MaterialTheme.typography.labelMedium)
+    Text(tr("Estaca · corte · aterro · acumulado"), style = MaterialTheme.typography.labelMedium)
     r.volumes.filterIndexed { i, _ -> i % maxOf(1, r.volumes.size / 40) == 0 || i == r.volumes.size - 1 }.forEach { row ->
         Text("${StationFormat.estaca(row.station)} · ${f(row.cut, 1)} · ${f(row.fill, 1)} · ${f(row.accumulated, 1)}", style = MaterialTheme.typography.bodySmall)
     }

@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,20 +58,20 @@ fun CompareDialog(
     val names = project.surfaces.map { it.name }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onAddFile) { Text("Adicionar arquivos") }
-                onAddDrive?.let { TextButton(onClick = it) { Text("☁ Google Drive") } }
+                TextButton(onClick = onAddFile) { Text(tr("Adicionar arquivos")) }
+                onAddDrive?.let { TextButton(onClick = it) { Text(tr("☁ Google Drive")) } }
             }
         },
-        title = { Text("Arquivos do projeto e comparação") },
+        title = { Text(tr("Arquivos do projeto e comparação")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Arquivos do projeto (mosaico)", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Arquivos do projeto (mosaico)"), style = MaterialTheme.typography.labelLarge)
                 if (vm.addedFiles.isEmpty()) {
                     Text(
-                        "Adicione outros LandXML, DXF ou .aecc.pnt (trechos vizinhos, o levantamento ou o projeto) para montar um mosaico e comparar. Dá para escolher vários de uma vez.",
+                        tr("Adicione outros LandXML, DXF ou .aecc.pnt (trechos vizinhos, o levantamento ou o projeto) para montar um mosaico e comparar. Dá para escolher vários de uma vez."),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -78,7 +80,7 @@ fun CompareDialog(
                         // Files read from disk can be switched off; generated surfaces (road, platform) cannot.
                         if (uri != null) androidx.compose.material3.Checkbox(label !in vm.hiddenFiles, { vm.setFileVisible(label, it) })
                         Text(label, Modifier.weight(1f), maxLines = 1)
-                        OutlinedButton(onClick = { vm.removeFile(label) }) { Text("Remover") }
+                        OutlinedButton(onClick = { vm.removeFile(label) }) { Text(tr("Remover")) }
                     }
                 }
                 vm.tasks.forEach { LoadProgress(it) }
@@ -89,26 +91,26 @@ fun CompareDialog(
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
-                Text("Comparar superfícies", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Comparar superfícies"), style = MaterialTheme.typography.labelLarge)
                 if (names.size < 2) {
-                    Text("É preciso ter duas superfícies. Adicione um arquivo com outra superfície.", style = MaterialTheme.typography.bodySmall)
+                    Text(tr("É preciso ter duas superfícies. Adicione um arquivo com outra superfície."), style = MaterialTheme.typography.bodySmall)
                 } else {
-                    SurfacePicker("A (base, terreno)", names, base, onBase)
-                    SurfacePicker("B (projeto ou levantamento)", names, other, onOther)
+                    SurfacePicker(tr("A (base, terreno)"), names, base, onBase)
+                    SurfacePicker(tr("B (projeto ou levantamento)"), names, other, onOther)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedButton(
                             onClick = { if (base != null && other != null) vm.compare(base, other) },
                             enabled = base != null && other != null && base != other && vm.tasks.isEmpty(),
-                        ) { Text("Calcular B − A") }
-                        if (vm.difference != null) TextButton(onClick = { vm.clearDifference() }) { Text("Limpar") }
+                        ) { Text(tr("Calcular B − A")) }
+                        if (vm.difference != null) TextButton(onClick = { vm.clearDifference() }) { Text(tr("Limpar")) }
                     }
-                    TextButton(onClick = onCross) { Text("Comparação cruzada e por etapas…") }
+                    TextButton(onClick = onCross) { Text(tr("Comparação cruzada e por etapas…")) }
                 }
                 vm.difference?.let { d ->
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = vm.differenceVisible, onCheckedChange = { vm.differenceVisible = it })
-                        Text("Mostrar mapa de B − A na planta")
+                        Text(tr("Mostrar mapa de B − A na planta"))
                     }
                     DifferenceSummary(d)
                 }
@@ -123,7 +125,7 @@ private fun SurfacePicker(label: String, names: List<String>, selected: String?,
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(200.dp), style = MaterialTheme.typography.bodyMedium)
         Box {
-            TextButton(onClick = { open = true }) { Text(selected ?: "Escolher", maxLines = 1) }
+            TextButton(onClick = { open = true }) { Text(selected ?: tr("Escolher"), maxLines = 1) }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { onSelect(n); open = false }) }
             }
@@ -134,12 +136,12 @@ private fun SurfacePicker(label: String, names: List<String>, selected: String?,
 @Composable
 private fun DifferenceSummary(d: SurfaceDifference) {
     Column {
-        Row2("Corte (B abaixo de A)", m3(d.cutVolume) + " em " + StationFormat.area(d.cutArea, 0))
-        Row2("Aterro (B acima de A)", m3(d.fillVolume) + " em " + StationFormat.area(d.fillArea, 0))
-        Row2("Saldo (aterro − corte)", (if (d.netVolume >= 0) "+" else "−") + m3(kotlin.math.abs(d.netVolume)))
-        Row2("Maior corte / aterro", StationFormat.lengthValue(-d.minDifference) + " / " + StationFormat.length(d.maxDifference, 3))
+        Row2(tr("Corte (B abaixo de A)"), m3(d.cutVolume) + " em " + StationFormat.area(d.cutArea, 0))
+        Row2(tr("Aterro (B acima de A)"), m3(d.fillVolume) + " em " + StationFormat.area(d.fillArea, 0))
+        Row2(tr("Saldo (aterro − corte)"), (if (d.netVolume >= 0) "+" else "−") + m3(kotlin.math.abs(d.netVolume)))
+        Row2(tr("Maior corte / aterro"), StationFormat.lengthValue(-d.minDifference) + " / " + StationFormat.length(d.maxDifference, 3))
         Text(
-            "Calculado na área comum às duas, em malha de ${StationFormat.length(d.cellSize, 2)}.",
+            tr("Calculado na área comum às duas, em malha de {0}.", StationFormat.length(d.cellSize, 2)),
             style = MaterialTheme.typography.bodySmall,
         )
     }

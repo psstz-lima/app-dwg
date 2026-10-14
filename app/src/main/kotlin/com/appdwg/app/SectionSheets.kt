@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.graphics.Canvas
 import android.graphics.DashPathEffect
 import android.graphics.Paint
@@ -180,12 +182,12 @@ object SectionSheets {
         }
         s.design?.let { d -> c.drawCircle(x(0.0), y(d), 1.8f, Paint().apply { color = 0xFFD32F2F.toInt(); isAntiAlias = true }) }
         // Heading: station, axis heights, areas.
-        c.drawText("Estaca " + U.u.station(s.station), left, y0 + 9f, bold)
+        c.drawText(tr("Estaca ") + U.u.station(s.station), left, y0 + 9f, bold)
         val parts = buildList {
-            s.terrainOnAxis?.let { add("Terreno ${U.u.l(it)}") }
-            (road?.grade ?: s.design)?.let { add("Greide ${U.u.l(it)}") }
-            road?.terrainAxis?.let { t -> val d = road.grade - t; add((if (d >= 0) "Aterro " else "Corte ") + U.u.l(abs(d))) }
-            road?.let { add("Área C ${U.u.a(it.cutArea)} ${U.u.area} · A ${U.u.a(it.fillArea)} ${U.u.area}") }
+            s.terrainOnAxis?.let { add(tr("Terreno {0}", U.u.l(it))) }
+            (road?.grade ?: s.design)?.let { add(tr("Greide {0}", U.u.l(it))) }
+            road?.terrainAxis?.let { t -> val d = road.grade - t; add((if (d >= 0) tr("Aterro ") else tr("Corte ")) + U.u.l(abs(d))) }
+            road?.let { add(tr("Área C {0} {1} · A {2} {3}", U.u.a(it.cutArea), U.u.area, U.u.a(it.fillArea), U.u.area)) }
         }
         c.drawText(parts.joinToString(" · "), left, y0 + 19f, text)
     }
@@ -208,26 +210,26 @@ object SectionSheets {
         c.drawLine(x0 + w * 0.6f, rows[1], x0 + w * 0.6f, y0 + h, frame)
         fun cell(label: String, value: String, x: Float, y: Float, p2: Paint = bold) { c.drawText(label, x + 4f, y + 8f, text); c.drawText(value, x + 4f, y + 19f, p2) }
         c.drawText(p.company.ifBlank { "Gromatic" }, x0 + 6f, y0 + 18f, big)
-        cell("Obra", fit(p.work.ifBlank { title }, bold, w - 8f), x0, rows[0])
+        cell(tr("Obra"), fit(p.work.ifBlank { title }, bold, w - 8f), x0, rows[0])
         // Title on two lines so it stays inside its cell.
-        c.drawText("Desenho", x0 + 4f, rows[1] + 8f, text)
-        c.drawText("SEÇÕES TRANSVERSAIS", x0 + 4f, rows[1] + 16f, Paint(bold).apply { textSize = 7f })
-        c.drawText(fit("Eixo $axis · estacas ${U.u.station(s0)} a ${U.u.station(s1)}", text, w * 0.6f - 8f), x0 + 4f, rows[1] + 22.5f, text)
-        cell("Folha", "$page / $pages", x0 + w * 0.6f, rows[1])
-        cell("Escalas", "H 1:${p.scale} · V 1:${p.scale / max(1, p.exaggeration)}", x0, rows[2])
-        cell("Data", date, x0 + w * 0.6f, rows[2])
-        cell("Responsável técnico", listOf(p.responsible, p.registration.takeIf { it.isNotBlank() }?.let { "CREA $it" }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "),
+        c.drawText(tr("Desenho"), x0 + 4f, rows[1] + 8f, text)
+        c.drawText(tr("SEÇÕES TRANSVERSAIS"), x0 + 4f, rows[1] + 16f, Paint(bold).apply { textSize = 7f })
+        c.drawText(fit(tr("Eixo {0} · estacas {1} a {2}", axis, U.u.station(s0), U.u.station(s1)), text, w * 0.6f - 8f), x0 + 4f, rows[1] + 22.5f, text)
+        cell(tr("Folha"), "$page / $pages", x0 + w * 0.6f, rows[1])
+        cell(tr("Escalas"), "H 1:${p.scale} · V 1:${p.scale / max(1, p.exaggeration)}", x0, rows[2])
+        cell(tr("Data"), date, x0 + w * 0.6f, rows[2])
+        cell(tr("Responsável técnico"), listOf(p.responsible, p.registration.takeIf { it.isNotBlank() }?.let { "CREA $it" }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "),
             x0, rows[3])
         cell("Nº", p.drawing, x0 + w * 0.6f, rows[3])
         // Legend at the left of the block.
         var ly = y0 + 10f
-        c.drawText("Legenda", margin, ly, bold); ly += 12f
+        c.drawText(tr("Legenda"), margin, ly, bold); ly += 12f
         surfaces.take(5).forEachIndexed { k, n ->
             val paint = Paint().apply { color = COLORS[k % COLORS.size]; strokeWidth = 1.2f; if (k == 0) pathEffect = DashPathEffect(floatArrayOf(5f, 2f), 0f) }
             c.drawLine(margin, ly - 2.5f, margin + 24f, ly - 2.5f, paint)
             c.drawText(n, margin + 30f, ly, text); ly += 10f
         }
-        c.drawText(if (U.u.metric) "Cotas e distâncias em metros. Gerado pelo Gromatic." else "Cotas e distâncias em pés (ft). Gerado pelo Gromatic.",
+        c.drawText(if (U.u.metric) tr("Cotas e distâncias em metros. Gerado pelo Gromatic.") else tr("Cotas e distâncias em pés (ft). Gerado pelo Gromatic."),
             margin, ph - margin - 2f, text)
     }
 }

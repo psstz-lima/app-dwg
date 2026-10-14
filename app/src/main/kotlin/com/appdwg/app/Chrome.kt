@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -327,8 +329,8 @@ fun ZoomButtons(onIn: () -> Unit, onOut: () -> Unit, onFit: () -> Unit, fullScre
     val g = LocalG.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for ((icon, desc, act) in listOf(
-            Triple(if (fullScreen) GIcon.EXIT_FULLSCREEN else GIcon.FULLSCREEN, if (fullScreen) "Sair da tela cheia" else "Tela cheia", onFullScreen),
-            Triple(GIcon.PLUS, "Aproximar", onIn), Triple(GIcon.MINUS, "Afastar", onOut), Triple(GIcon.FIT, "Ver tudo", onFit),
+            Triple(if (fullScreen) GIcon.EXIT_FULLSCREEN else GIcon.FULLSCREEN, if (fullScreen) tr("Sair da tela cheia") else tr("Tela cheia"), onFullScreen),
+            Triple(GIcon.PLUS, tr("Aproximar"), onIn), Triple(GIcon.MINUS, tr("Afastar"), onOut), Triple(GIcon.FIT, tr("Ver tudo"), onFit),
         ).filter { plusMinus || (it.first != GIcon.PLUS && it.first != GIcon.MINUS) }) {
             val shape = if (g.choice == ThemeChoice.EARTH) CircleShape else RoundedCornerShape(if (g.choice == ThemeChoice.SUN) 8.dp else 10.dp)
             val bg = if (g.choice == ThemeChoice.EARTH) g.rail else g.panel
@@ -458,26 +460,26 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                      pro: Boolean = false, onPro: (() -> Unit)? = null) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Configurações") },
+        title = { Text(tr("Configurações")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (onPro != null) {
                     Text("Gromatic Pro", fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(if (pro) "Assinatura ativa: todas as ferramentas liberadas." else "Versão grátis: abrir e ver a planta.", Modifier.weight(1f))
-                        androidx.compose.material3.OutlinedButton(onClick = onPro) { Text(if (pro) "Detalhes" else "Conhecer o Pro") }
+                        Text(if (pro) tr("Assinatura ativa: todas as ferramentas liberadas.") else tr("Versão grátis: abrir e ver a planta."), Modifier.weight(1f))
+                        androidx.compose.material3.OutlinedButton(onClick = onPro) { Text(if (pro) tr("Detalhes") else tr("Conhecer o Pro")) }
                     }
                     androidx.compose.material3.HorizontalDivider()
                 }
                 if (onCrs != null) {
-                    Text("Projeto", fontWeight = FontWeight.Bold)
+                    Text(tr("Projeto"), fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Sistema de coordenadas: ${crsName ?: ""}", Modifier.weight(1f))
-                        androidx.compose.material3.OutlinedButton(onClick = onCrs) { Text("Trocar…") }
+                        Text(tr("Sistema de coordenadas: {0}", crsName ?: ""), Modifier.weight(1f))
+                        androidx.compose.material3.OutlinedButton(onClick = onCrs) { Text(tr("Trocar…")) }
                     }
                     androidx.compose.material3.HorizontalDivider()
                 }
-                Text("Idioma", fontWeight = FontWeight.Bold)
+                Text(tr("Idioma"), fontWeight = FontWeight.Bold)
                 for (l in LanguageChoice.entries) {
                     Row(
                         Modifier.fillMaxWidth().selectable(l == language, role = Role.RadioButton) { onLanguage(l) }.padding(vertical = 2.dp),
@@ -487,10 +489,10 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         Text(l.label, fontWeight = FontWeight.Bold)
                     }
                 }
-                Text("Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades. Os textos do app ainda estão só em português.",
+                Text(tr("Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades. Os textos do app ainda estão só em português."),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
                 androidx.compose.material3.HorizontalDivider()
-                Text("Unidades", fontWeight = FontWeight.Bold)
+                Text(tr("Unidades"), fontWeight = FontWeight.Bold)
                 for (u in UnitChoice.entries) {
                     Row(
                         Modifier.fillMaxWidth().selectable(u == units, role = Role.RadioButton) { onUnits(u) }.padding(vertical = 2.dp),
@@ -503,10 +505,10 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         }
                     }
                 }
-                Text("Só a exibição muda: os arquivos exportados continuam em metros, com ponto decimal. " +
-                    "Vírgula ou ponto nos números seguem o idioma acima.", style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                Text(tr("Só a exibição muda: os arquivos exportados continuam em metros, com ponto decimal. ") +
+                    tr("Vírgula ou ponto nos números seguem o idioma acima."), style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
                 androidx.compose.material3.HorizontalDivider()
-                Text("Tema", fontWeight = FontWeight.Bold)
+                Text(tr("Tema"), fontWeight = FontWeight.Bold)
                 for (c in ThemeChoice.entries) {
                     Row(
                         Modifier.fillMaxWidth().selectable(c == current, role = Role.RadioButton) { onPick(c) }.padding(vertical = 4.dp),
@@ -520,10 +522,10 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         }
                     }
                 }
-                TextButton(onClick = onAbout) { Text("Sobre o Gromatic") }
+                TextButton(onClick = onAbout) { Text(tr("Sobre o Gromatic")) }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
     )
 }
 

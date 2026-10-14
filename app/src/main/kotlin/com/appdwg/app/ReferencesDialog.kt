@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -53,19 +55,19 @@ fun ReferencesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             TextButton(enabled = vm.pathEdits.isNotEmpty(), onClick = { saver.launch("referencias-editadas.dxf") }) {
-                Text("Salvar cópia do DXF")
+                Text(tr("Salvar cópia do DXF"))
             }
         },
-        title = { Text("Referências externas") },
+        title = { Text(tr("Referências externas")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "O DXF guarda só o caminho de cada referência. Escolha o arquivo no aparelho para vê-la. " +
-                        "Imagens: TIFF/GeoTIFF, JPG, PNG, WebP. Desenhos (XREF): DXF. Edite o caminho salvo e use " +
-                        "\"Salvar cópia do DXF\" para gravar os novos caminhos.",
+                    tr("O DXF guarda só o caminho de cada referência. Escolha o arquivo no aparelho para vê-la. ") +
+                        tr("Imagens: TIFF/GeoTIFF, JPG, PNG, WebP. Desenhos (XREF): DXF. Edite o caminho salvo e use ") +
+                        tr("\"Salvar cópia do DXF\" para gravar os novos caminhos."),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 (vm.rasterError ?: vm.referenceMessage)?.let {
@@ -77,12 +79,12 @@ fun ReferencesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
                         key in vm.detached -> "desanexada"
                         key in vm.unloaded -> "descarregada"
                         key in vm.rasters -> "carregada"
-                        else -> "arquivo não escolhido"
+                        else -> tr("arquivo não escolhido")
                     }
                     ReferenceCard(
-                        kind = "Imagem",
+                        kind = tr("Imagem"),
                         title = img.fileName,
-                        details = "${img.widthPx} × ${img.heightPx} px · camada ${img.layer} · $status",
+                        details = tr("{0} × {1} px · camada {2} · {3}", img.widthPx, img.heightPx, img.layer, status),
                         path = vm.pathEdits[key] ?: key,
                         onPath = { vm.editPath(key, it) },
                         detached = key in vm.detached,
@@ -97,12 +99,12 @@ fun ReferencesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
                         x.name in vm.detached -> "desanexado"
                         x.name in vm.unloaded -> "descarregado"
                         x.name in vm.loadedXrefs -> "carregado"
-                        else -> "arquivo não escolhido"
+                        else -> tr("arquivo não escolhido")
                     }
                     ReferenceCard(
-                        kind = if (x.overlay) "Desenho (sobreposição)" else "Desenho (anexo)",
+                        kind = if (x.overlay) tr("Desenho (sobreposição)") else tr("Desenho (anexo)"),
                         title = x.name,
-                        details = "${x.fileName} · ${x.placements.size} inserção(ões) · $status",
+                        details = tr("{0} · {1} inserção(ões) · {2}", x.fileName, x.placements.size, status),
                         path = vm.pathEdits[x.path] ?: x.path,
                         onPath = { vm.editPath(x.path, it) },
                         detached = x.name in vm.detached,
@@ -139,17 +141,17 @@ private fun ReferenceCard(
             OutlinedTextField(
                 value = path,
                 onValueChange = onPath,
-                label = { Text("Caminho salvo no DXF") },
+                label = { Text(tr("Caminho salvo no DXF")) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (detached) {
-                    OutlinedButton(onClick = { onDetach(false) }) { Text("Anexar de novo") }
+                    OutlinedButton(onClick = { onDetach(false) }) { Text(tr("Anexar de novo")) }
                 } else {
-                    OutlinedButton(onClick = onChoose) { Text("Escolher arquivo") }
-                    OutlinedButton(onClick = { onUnload(!unloaded) }) { Text(if (unloaded) "Recarregar" else "Descarregar") }
-                    OutlinedButton(onClick = { onDetach(true) }) { Text("Desanexar") }
+                    OutlinedButton(onClick = onChoose) { Text(tr("Escolher arquivo")) }
+                    OutlinedButton(onClick = { onUnload(!unloaded) }) { Text(if (unloaded) tr("Recarregar") else tr("Descarregar")) }
+                    OutlinedButton(onClick = { onDetach(true) }) { Text(tr("Desanexar")) }
                 }
             }
         }

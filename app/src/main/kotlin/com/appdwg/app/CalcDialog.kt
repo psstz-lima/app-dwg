@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -33,7 +35,7 @@ import com.appdwg.core.Point2
 import com.appdwg.core.PointFile
 import com.appdwg.core.StationFormat
 
-private enum class CalcTab(val label: String) { INVERSE("Inverso"), RADIATE("Irradiação"), INTERSECT("Interseção"), AREA("Área/perímetro"), CONVERT("Conversões") }
+private enum class CalcTab(private val labelPt: String) { INVERSE("Inverso"), RADIATE("Irradiação"), INTERSECT("Interseção"), AREA("Área/perímetro"), CONVERT("Conversões"); val label: String get() = tr(labelPt) }
 
 private fun num(s: String) = StationFormat.number(s)
 /** Distances and coordinates typed in the shown unit, in metres. */
@@ -69,7 +71,7 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
     fun pointField(v: String, set: (String) -> Unit, label: String) {
         val r = resolve(v, project, pts)
         OutlinedTextField(v, set, label = { Text(label) }, singleLine = true, modifier = Modifier.width(240.dp), isError = v.isNotBlank() && r == null,
-            supportingText = { Text(r?.let { "E ${f3(it.first.x)} N ${f3(it.first.y)}" } ?: "nº do ponto ou \"E N\"") })
+            supportingText = { Text(r?.let { "E ${f3(it.first.x)} N ${f3(it.first.y)}" } ?: tr("nº do ponto ou \"E N\"")) })
     }
     @Composable
     fun field(v: String, set: (String) -> Unit, label: String, w: Int = 160) =
@@ -78,22 +80,22 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
     fun results(points: List<Point2>) {
         points.forEachIndexed { i, p ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Ponto${if (points.size > 1) " ${i + 1}" else ""}: E ${f3(p.x)} · N ${f3(p.y)}", style = MaterialTheme.typography.bodyLarge)
+                Text(tr("Ponto{0}: E {1} · N {2}", if (points.size > 1) " ${i + 1}" else "", f3(p.x), f3(p.y)), style = MaterialTheme.typography.bodyLarge)
                 TextButton(onClick = {
                     val n = PointFile.nextNumber(vm.userPoints)
                     vm.savePoint(null, CogoPoint(n, "CALC", p.x, p.y, project.surfaces.firstNotNullOfOrNull { it.elevationAt(p) } ?: Double.NaN))
-                    created = "Ponto $n criado na camada _POINTS."
-                }) { Text("Criar ponto _POINTS") }
+                    created = tr("Ponto {0} criado na camada _POINTS.", n)
+                }) { Text(tr("Criar ponto _POINTS")) }
             }
         }
-        if (points.isEmpty()) Text("Sem solução com esses valores.", style = MaterialTheme.typography.bodySmall)
+        if (points.isEmpty()) Text(tr("Sem solução com esses valores."), style = MaterialTheme.typography.bodySmall)
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.9f),
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
-        title = { Text("Cálculos de campo") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        title = { Text(tr("Cálculos de campo")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -101,37 +103,37 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                 }
                 when (tab) {
                     CalcTab.INVERSE -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { pointField(pa, { pa = it }, "De (A)"); pointField(pb, { pb = it }, "Para (B)") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { pointField(pa, { pa = it }, tr("De (A)")); pointField(pb, { pb = it }, tr("Para (B)")) }
                         val a = resolve(pa, project, pts); val b = resolve(pb, project, pts)
                         if (a != null && b != null) {
                             val za = a.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(a.first) }
                             val zb = b.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(b.first) }
                             val inv = Cogo.inverse(a.first, b.first, za, zb)
-                            Text("Distância ${f3(inv.distance)} ${StationFormat.lengthUnit} · Azimute ${Measure.dms(inv.azimuth)} (${StationFormat.decimal(inv.azimuth, 6)}°)")
+                            Text(tr("Distância {0} {1} · Azimute {2} ({3}°)", f3(inv.distance), StationFormat.lengthUnit, Measure.dms(inv.azimuth), StationFormat.decimal(inv.azimuth, 6)))
                             Text("ΔE ${f3(b.first.x - a.first.x)} · ΔN ${f3(b.first.y - a.first.y)}" +
-                                (inv.rise?.let { " · Desnível ${f3(it)} · Inclinada ${f3(inv.slopeDistance!!)} · Rampa ${StationFormat.decimal(inv.gradePercent!!, 2)} %" } ?: ""))
+                                (inv.rise?.let { tr(" · Desnível {0} · Inclinada {1} · Rampa {2} %", f3(it), f3(inv.slopeDistance!!), StationFormat.decimal(inv.gradePercent!!, 2)) } ?: ""))
                         }
                     }
                     CalcTab.RADIATE -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            pointField(pa, { pa = it }, "Estação"); field(az, { az = it }, "Azimute (°)"); field(dist, { dist = it }, "Distância (${StationFormat.lengthUnit})")
+                            pointField(pa, { pa = it }, tr("Estação")); field(az, { az = it }, tr("Azimute (°)")); field(dist, { dist = it }, tr("Distância ({0})", StationFormat.lengthUnit))
                         }
                         val a = resolve(pa, project, pts); val z = num(az); val d = len(dist)
                         if (a != null && z != null && d != null) results(listOf(Cogo.radiate(a.first, z, d)))
                     }
                     CalcTab.INTERSECT -> {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf("Azimute × azimute", "Distância × distância", "Azimute × distância").forEachIndexed { i, l ->
+                            listOf(tr("Azimute × azimute"), tr("Distância × distância"), tr("Azimute × distância")).forEachIndexed { i, l ->
                                 FilterChip(selected = mode == i, onClick = { mode = i }, label = { Text(l) })
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            pointField(pa, { pa = it }, "Ponto A")
-                            if (mode == 1) field(dist, { dist = it }, "Distância de A") else field(az, { az = it }, "Azimute de A (°)")
+                            pointField(pa, { pa = it }, tr("Ponto A"))
+                            if (mode == 1) field(dist, { dist = it }, tr("Distância de A")) else field(az, { az = it }, tr("Azimute de A (°)"))
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            pointField(pb, { pb = it }, "Ponto B")
-                            if (mode == 0) field(az2, { az2 = it }, "Azimute de B (°)") else field(dist2, { dist2 = it }, "Distância de B")
+                            pointField(pb, { pb = it }, tr("Ponto B"))
+                            if (mode == 0) field(az2, { az2 = it }, tr("Azimute de B (°)")) else field(dist2, { dist2 = it }, tr("Distância de B"))
                         }
                         val a = resolve(pa, project, pts)?.first; val b = resolve(pb, project, pts)?.first
                         if (a != null && b != null) when (mode) {
@@ -141,22 +143,22 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                         }
                     }
                     CalcTab.AREA -> {
-                        OutlinedTextField(areaPts, { areaPts = it }, label = { Text("Pontos na ordem (nºs separados por vírgula, ex.: 101, 102, 104)") },
+                        OutlinedTextField(areaPts, { areaPts = it }, label = { Text(tr("Pontos na ordem (nºs separados por vírgula, ex.: 101, 102, 104)")) },
                             modifier = Modifier.fillMaxWidth())
                         val list = areaPts.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { resolve(it, project, pts) }
                         if (list.size >= 2 && list.all { it != null }) {
                             val m = Measure.of(list.map { it!!.first }, list.map { it!!.second })
-                            Text("Perímetro ${m.perimeter?.let { f3(it) } ?: f3(m.length)} ${StationFormat.lengthUnit}" + (m.area?.let { " · Área ${Measure.area(it)}" } ?: ""))
-                        } else if (list.isNotEmpty()) Text("Algum ponto não foi encontrado.", style = MaterialTheme.typography.bodySmall)
+                            Text(tr("Perímetro {0} {1}", m.perimeter?.let { f3(it) } ?: f3(m.length), StationFormat.lengthUnit) + (m.area?.let { tr(" · Área {0}", Measure.area(it)) } ?: ""))
+                        } else if (list.isNotEmpty()) Text(tr("Algum ponto não foi encontrado."), style = MaterialTheme.typography.bodySmall)
                     }
                     CalcTab.CONVERT -> {
-                        OutlinedTextField(conv, { conv = it }, label = { Text("Valor (estaca \"12+5,4\", metros, ângulo \"45 30 15\", rampa %)") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(conv, { conv = it }, label = { Text(tr("Valor (estaca \"12+5,4\", metros, ângulo \"45 30 15\", rampa %)")) }, modifier = Modifier.fillMaxWidth())
                         val parts = conv.trim().split(Regex("[\\s°'\"]+")).mapNotNull { num(it) }
-                        StationFormat.parse(conv)?.let { m -> Text("Estaca ${StationFormat.estaca(m)} = ${StationFormat.length(m, 3)}") }
+                        StationFormat.parse(conv)?.let { m -> Text(tr("Estaca {0} = {1}", StationFormat.estaca(m), StationFormat.length(m, 3))) }
                         if (parts.isNotEmpty()) {
                             val deg = Cogo.fromDms(parts[0], parts.getOrElse(1) { 0.0 }, parts.getOrElse(2) { 0.0 })
-                            Text("Ângulo: ${StationFormat.decimal(deg, 6)}° = ${Measure.dms(deg)} = ${StationFormat.decimal(Cogo.toGon(deg), 6)} gon")
-                            if (parts.size == 1 && parts[0] != 0.0) Text("Rampa ${StationFormat.decimal(parts[0], 3)} % = talude ${StationFormat.decimal(Cogo.percentToRatio(parts[0]), 3)}:1 (H:V)")
+                            Text(tr("Ângulo: {0}° = {1} = {2} gon", StationFormat.decimal(deg, 6), Measure.dms(deg), StationFormat.decimal(Cogo.toGon(deg), 6)))
+                            if (parts.size == 1 && parts[0] != 0.0) Text(tr("Rampa {0} % = talude {1}:1 (H:V)", StationFormat.decimal(parts[0], 3), StationFormat.decimal(Cogo.percentToRatio(parts[0]), 3)))
                         }
                     }
                 }

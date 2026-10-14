@@ -64,21 +64,21 @@ class GeoidGrid(
                 val n = f[2].toDoubleOrNull() ?: continue
                 lats += a; lons += b; ns += n
             }
-            require(lats.size >= 4) { "a grade precisa de pelo menos 4 pontos (latitude, longitude, N)" }
+            require(lats.size >= 4) { tr("a grade precisa de pelo menos 4 pontos (latitude, longitude, N)") }
             fun step(v: List<Double>): Double {
                 val s = v.map { (it * 1e6).roundToInt() }.distinct().sorted()
-                require(s.size >= 2) { "a grade precisa de pelo menos 2 latitudes e 2 longitudes" }
+                require(s.size >= 2) { tr("a grade precisa de pelo menos 2 latitudes e 2 longitudes") }
                 return (1 until s.size).minOf { s[it] - s[it - 1] } / 1e6
             }
             val dLat = step(lats); val dLon = step(lons)
             val la0 = lats.min(); val lo0 = lons.min()
             val rows = ((lats.max() - la0) / dLat).roundToInt() + 1
             val cols = ((lons.max() - lo0) / dLon).roundToInt() + 1
-            require(rows.toLong() * cols <= 50_000_000) { "grade grande demais" }
+            require(rows.toLong() * cols <= 50_000_000) { tr("grade grande demais") }
             val values = FloatArray(rows * cols) { Float.NaN }
             for (i in lats.indices) {
                 val r = ((lats[i] - la0) / dLat).roundToInt(); val c = ((lons[i] - lo0) / dLon).roundToInt()
-                require(abs(la0 + r * dLat - lats[i]) < dLat / 10 && abs(lo0 + c * dLon - lons[i]) < dLon / 10) { "os pontos não formam uma grade regular" }
+                require(abs(la0 + r * dLat - lats[i]) < dLat / 10 && abs(lo0 + c * dLon - lons[i]) < dLon / 10) { tr("os pontos não formam uma grade regular") }
                 values[r * cols + c] = ns[i].toFloat()
             }
             return GeoidGrid(name, la0, lo0, dLat, dLon, rows, cols, values)
@@ -89,7 +89,7 @@ class GeoidGrid(
             val d = DataInputStream(input.buffered(1 shl 16))
             val la0 = d.readDouble(); val lo0 = d.readDouble(); val dLat = d.readDouble(); val dLon = d.readDouble()
             val rows = d.readInt(); val cols = d.readInt()
-            require(rows in 2..100_000 && cols in 2..100_000 && rows.toLong() * cols <= 50_000_000 && dLat > 0 && dLon > 0) { "cabeçalho GTX inválido" }
+            require(rows in 2..100_000 && cols in 2..100_000 && rows.toLong() * cols <= 50_000_000 && dLat > 0 && dLon > 0) { tr("cabeçalho GTX inválido") }
             val values = FloatArray(rows * cols) { val v = d.readFloat(); if (v == -88.8888f || v.isNaN()) Float.NaN else v }
             return GeoidGrid(name, la0, lo0, dLat, dLon, rows, cols, values)
         }

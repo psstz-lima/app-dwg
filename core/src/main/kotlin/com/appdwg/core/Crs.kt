@@ -433,20 +433,20 @@ object Proj4 {
             val t = tok.removePrefix("+"); val i = t.indexOf('=')
             if (i < 0) p[t] = "" else p[t.substring(0, i)] = t.substring(i + 1)
         }
-        fun d(k: String, def: Double? = null): Double = p[k]?.toDoubleOrNull() ?: def ?: throw Unsupported("parâmetro $k ausente")
-        if (p["units"] != null && p["units"] != "m" && p["proj"] != "longlat") throw Unsupported("unidade ${p["units"]} (só metros)")
-        if (p.containsKey("nadgrids")) throw Unsupported("transformação por grade (nadgrids)")
+        fun d(k: String, def: Double? = null): Double = p[k]?.toDoubleOrNull() ?: def ?: throw Unsupported(tr("parâmetro {0} ausente", k))
+        if (p["units"] != null && p["units"] != "m" && p["proj"] != "longlat") throw Unsupported(tr("unidade {0} (só metros)", p["units"]))
+        if (p.containsKey("nadgrids")) throw Unsupported(tr("transformação por grade (nadgrids)"))
         val ellipsoid = when {
             p["a"] != null && p["rf"] != null -> Ellipsoid("a=${p["a"]}", d("a"), d("rf"))
             p["a"] != null && p["b"] != null -> d("a").let { a -> Ellipsoid("a=${p["a"]}", a, a / (a - d("b"))) }
             p["ellps"] != null -> ellipsoids[p["ellps"]] ?: throw Unsupported("elipsoide ${p["ellps"]}")
             p["datum"] == "WGS84" -> Ellipsoid.WGS84
             p["datum"] == "NAD83" -> Ellipsoid.GRS80
-            else -> throw Unsupported("elipsoide não informado")
+            else -> throw Unsupported(tr("elipsoide não informado"))
         }
         val tw = p["towgs84"]?.split(',')?.map { it.toDouble() }
         val helmert = when {
-            tw == null -> if (p["datum"] != null && p["datum"] !in setOf("WGS84", "NAD83")) throw Unsupported("datum ${p["datum"]} sem parâmetros") else Helmert()
+            tw == null -> if (p["datum"] != null && p["datum"] !in setOf("WGS84", "NAD83")) throw Unsupported(tr("datum {0} sem parâmetros", p["datum"])) else Helmert()
             tw.size >= 7 -> Helmert(tw[0], tw[1], tw[2], tw[3], tw[4], tw[5], tw[6])
             tw.size >= 3 -> Helmert(tw[0], tw[1], tw[2])
             else -> throw Unsupported("towgs84 incompleto")
@@ -461,8 +461,8 @@ object Proj4 {
                 if (lat2 == null || lat2 == lat1) Projection.LambertConic(d("lat_0", lat1), d("lon_0", 0.0), lat1, null, p["k_0"]?.toDoubleOrNull() ?: d("k", 1.0), d("x_0", 0.0), d("y_0", 0.0))
                 else Projection.LambertConic(d("lat_0", 0.0), d("lon_0", 0.0), lat1, lat2, 1.0, d("x_0", 0.0), d("y_0", 0.0))
             }
-            else -> throw Unsupported("projeção ${p["proj"]} (só Transversa de Mercator, UTM, Lambert cônica e geográficas)")
+            else -> throw Unsupported(tr("projeção {0} (só Transversa de Mercator, UTM, Lambert cônica e geográficas)", p["proj"]))
         }
-        return Crs("epsg_$code", name.ifBlank { "EPSG $code" }, code, datum, projection, custom = true, region = "Meus sistemas")
+        return Crs("epsg_$code", name.ifBlank { "EPSG $code" }, code, datum, projection, custom = true, region = tr("Meus sistemas"))
     }
 }

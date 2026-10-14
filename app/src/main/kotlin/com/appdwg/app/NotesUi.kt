@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,28 +66,28 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
             TextButton(onClick = {
                 vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
                 onDismiss()
-            }) { Text("Salvar") }
+            }) { Text(tr("Salvar")) }
         },
         dismissButton = {
             Row {
-                if (!isNew) TextButton(onClick = { vm.deleteNote(initial); onDismiss() }) { Text("Apagar") }
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                if (!isNew) TextButton(onClick = { vm.deleteNote(initial); onDismiss() }) { Text(tr("Apagar")) }
+                TextButton(onClick = onDismiss) { Text(tr("Cancelar")) }
             }
         },
-        title = { Text(if (isNew) "Nova anotação" else "Anotação ${initial.id}") },
+        title = { Text(if (isNew) tr("Nova anotação") else tr("Anotação {0}", initial.id)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("E ${StationFormat.lengthValue(initial.x)} · N ${StationFormat.lengthValue(initial.y)} · ${initial.time}", style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(text, { text = it }, label = { Text("Texto") }, minLines = 2)
-                OutlinedTextField(z, { z = it }, label = { Text("Cota (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(180.dp))
+                OutlinedTextField(text, { text = it }, label = { Text(tr("Texto")) }, minLines = 2)
+                OutlinedTextField(z, { z = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(180.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = {
                         val f = vm.newPhotoFile()
                         pending = f
                         camera.launch(FileProvider.getUriForFile(context, context.packageName + ".notes", f))
-                    }) { Text("Tirar foto") }
-                    OutlinedButton(onClick = { gallery.launch("image/*") }) { Text("Da galeria") }
-                    if (photo != null) OutlinedButton(onClick = { photo = null }) { Text("Remover foto") }
+                    }) { Text(tr("Tirar foto")) }
+                    OutlinedButton(onClick = { gallery.launch("image/*") }) { Text(tr("Da galeria")) }
+                    if (photo != null) OutlinedButton(onClick = { photo = null }) { Text(tr("Remover foto")) }
                 }
                 thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 260.dp)) }
             }
@@ -99,14 +101,14 @@ fun NoteCard(vm: ProjectViewModel, note: FieldNote, onEdit: () -> Unit, onClose:
     val thumb = remember(note.photo) { note.photo?.let { thumbnail(File(vm.notesDir, it), 600) } }
     Card(modifier) {
         Column(Modifier.padding(12.dp)) {
-            Text("Anotação ${note.id} · ${note.time}", style = MaterialTheme.typography.titleSmall)
+            Text(tr("Anotação {0} · {1}", note.id, note.time), style = MaterialTheme.typography.titleSmall)
             if (note.text.isNotEmpty()) Text(note.text)
             Text("E ${StationFormat.lengthValue(note.x)} · N ${StationFormat.lengthValue(note.y)}" + (if (note.z.isNaN()) "" else " · cota ${StationFormat.lengthValue(note.z)}"),
                 style = MaterialTheme.typography.bodySmall)
             thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 220.dp)) }
             Row {
-                TextButton(onClick = onEdit) { Text("Editar") }
-                TextButton(onClick = onClose) { Text("Fechar") }
+                TextButton(onClick = onEdit) { Text(tr("Editar")) }
+                TextButton(onClick = onClose) { Text(tr("Fechar")) }
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -43,12 +45,12 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
         // Wide, so the matrix fits on a tablet.
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
-        title = { Text("Comparação cruzada") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        title = { Text(tr("Comparação cruzada")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Marque as superfícies na ordem das etapas: terreno original primeiro, levantamentos no meio, projeto por último.",
+                    tr("Marque as superfícies na ordem das etapas: terreno original primeiro, levantamentos no meio, projeto por último."),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 project.surfaces.forEach { s ->
@@ -64,9 +66,9 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                     }
                 }
                 Row {
-                    OutlinedButton(onClick = { vm.computeMatrix() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text("Calcular matriz") }
+                    OutlinedButton(onClick = { vm.computeMatrix() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text(tr("Calcular matriz")) }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { vm.computeStages() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text("Calcular etapas") }
+                    OutlinedButton(onClick = { vm.computeStages() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text(tr("Calcular etapas")) }
                 }
                 vm.tasks.forEach { LoadProgress(it) }
                 vm.compareMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -75,23 +77,23 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                 if (inMatrix.size >= 2) {
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider()
-                    Text("Matriz: saldo linha − coluna (m³). Toque numa célula para ver o mapa.", style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Matriz: saldo linha − coluna (m³). Toque numa célula para ver o mapa."), style = MaterialTheme.typography.labelLarge)
                     Matrix(vm, inMatrix, onShown)
                 }
                 vm.stageProgress?.let { p ->
                     Spacer(Modifier.height(8.dp))
                     HorizontalDivider()
-                    Text("Etapas", style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Etapas"), style = MaterialTheme.typography.labelLarge)
                     p.periods.forEachIndexed { k, period ->
-                        Text("Período ${k + 1}: ${short(period.from)} → ${short(period.to)}", style = MaterialTheme.typography.bodyMedium)
+                        Text(tr("Período {0}: {1} → {2}", k + 1, short(period.from), short(period.to)), style = MaterialTheme.typography.bodyMedium)
                         Text("   corte ${m3(period.cut)} · aterro ${m3(period.fill)} · movimentado ${m3(period.cut + period.fill)}",
                             style = MaterialTheme.typography.bodySmall)
                     }
-                    Text("Executado até ${short(marked.getOrNull(marked.size - 2) ?: "")}: " +
+                    Text(tr("Executado até {0}: ", short(marked.getOrNull(marked.size - 2) ?: "")) +
                         m3(p.periods.sumOf { it.cut + it.fill }), style = MaterialTheme.typography.bodyMedium)
-                    Text("Falta até o projeto: corte ${m3(p.remainingCut)} · aterro ${m3(p.remainingFill)}", style = MaterialTheme.typography.bodyMedium)
-                    Text("Total terreno → projeto: corte ${m3(p.totalCut)} · aterro ${m3(p.totalFill)}", style = MaterialTheme.typography.bodySmall)
-                    Text("Concluído: " + StationFormat.decimal(p.done * 100, 1) + " % (pelo volume movimentado)",
+                    Text(tr("Falta até o projeto: corte {0} · aterro {1}", m3(p.remainingCut), m3(p.remainingFill)), style = MaterialTheme.typography.bodyMedium)
+                    Text(tr("Total terreno → projeto: corte {0} · aterro {1}", m3(p.totalCut), m3(p.totalFill)), style = MaterialTheme.typography.bodySmall)
+                    Text(tr("Concluído: ") + StationFormat.decimal(p.done * 100, 1) + tr(" % (pelo volume movimentado)"),
                         style = MaterialTheme.typography.titleSmall)
                 }
             }
@@ -118,7 +120,7 @@ private fun Matrix(vm: ProjectViewModel, names: List<String>, onShown: () -> Uni
                     ) {
                         when {
                             r == c -> Text("—")
-                            d == null -> Text("sem área comum", style = MaterialTheme.typography.labelSmall)
+                            d == null -> Text(tr("sem área comum"), style = MaterialTheme.typography.labelSmall)
                             else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text((if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(abs(d.netVolume), 0),
                                     color = Color(0xFF000000 or (if (d.netVolume >= 0) DifferenceImage.FILL else DifferenceImage.CUT).toLong()),

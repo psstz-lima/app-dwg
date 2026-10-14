@@ -62,7 +62,7 @@ object TerrainAnalysis {
         val area = DoubleArray(CLASSES.size)
         val cell = g.cellSize * g.cellSize
         for (s in slopes) if (!s.isNaN()) area[classOf(s.toDouble())] += cell
-        return CLASSES.mapIndexed { k, (from, name, color) -> SlopeClass(from, CLASSES.getOrNull(k + 1)?.first, name, color, area[k]) }
+        return CLASSES.mapIndexed { k, (from, name, color) -> SlopeClass(from, CLASSES.getOrNull(k + 1)?.first, tr(name), color, area[k]) }
     }
 
     /** Downhill direction (radians, counterclockwise from east) of each cell, NaN where flat or missing. */

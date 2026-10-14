@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -225,7 +227,7 @@ class ProjectDoc(
         fun looksLikeProject(head: String) = head.trimStart().startsWith("{") && head.contains("\"app\"")
 
         fun fromJson(o: JSONObject): ProjectDoc {
-            require(o.optString("app") in setOf(APP_TAG, OLD_APP_TAG)) { "não é um projeto do Gromatic" }
+            require(o.optString("app") in setOf(APP_TAG, OLD_APP_TAG)) { tr("não é um projeto do Gromatic") }
             fun strings(name: String) = o.optJSONArray(name)?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty()
             val files = o.optJSONArray("files")?.let { a ->
                 List(a.length()) { a.getJSONObject(it).let { f -> f.getString("label") to f.getString("uri") } }

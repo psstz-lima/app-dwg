@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -30,7 +32,9 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
 
 /** A web map tile server. [bulk] says whether its terms allow downloading an area ahead of time. */
-data class BasemapSource(val id: String, val label: String, val url: String, val maxZoom: Int, val bulk: Boolean, val credit: String) {
+data class BasemapSource(val id: String, private val labelPt: String, val url: String, val maxZoom: Int, val bulk: Boolean, private val creditPt: String) {
+    val label: String get() = tr(labelPt)
+    val credit: String get() = tr(creditPt)
     /** Esri sends a flat grey "map data not yet available" tile where it has no imagery. */
     val greyPlaceholders get() = id.startsWith("esri")
     /** OpenStreetMap asks apps to refresh cached tiles after a week and to keep few connections open. */
@@ -245,16 +249,16 @@ class BasemapStore(context: Context) {
             }
             workers.forEach { it.join() }
             withContext(Dispatchers.Main) {
-                lastResult = if (!isActive) "Download interrompido."
-                else if (failed.get() == 0) "${tiles.size} tiles prontos para uso offline."
-                else "${tiles.size - failed.get()} de ${tiles.size} tiles baixados (${failed.get()} falharam — sem internet?)."
+                lastResult = if (!isActive) tr("Download interrompido.")
+                else if (failed.get() == 0) tr("{0} tiles prontos para uso offline.", tiles.size)
+                else tr("{0} de {1} tiles baixados ({2} falharam — sem internet?).", tiles.size - failed.get(), tiles.size, failed.get())
                 progress = null
                 version++
             }
         }
     }
 
-    fun cancelDownload() { downloadJob?.cancel(); progress = null; lastResult = "Download interrompido." }
+    fun cancelDownload() { downloadJob?.cancel(); progress = null; lastResult = tr("Download interrompido.") }
 
     /** Disk used by the saved tiles of every source, in bytes. */
     fun diskUsage(): Long = root.walkBottomUp().filter { it.isFile }.sumOf { it.length() }

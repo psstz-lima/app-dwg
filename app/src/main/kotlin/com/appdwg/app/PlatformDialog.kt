@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,28 +84,28 @@ fun PlatformDialog(
         confirmButton = {
             TextButton(enabled = valid && v.platformOutline.size >= 3 && vm.tasks.isEmpty(), onClick = {
                 v.platformParams = params(); vm.designPlatform()
-            }) { Text("Calcular") }
+            }) { Text(tr("Calcular")) }
         },
         dismissButton = {
             Row {
-                if (vm.platform != null) OutlinedButton(onClick = { vm.removePlatform() }) { Text("Remover projeto") }
-                TextButton(onClick = { if (valid) v.platformParams = params(); onDismiss() }) { Text("Fechar") }
+                if (vm.platform != null) OutlinedButton(onClick = { vm.removePlatform() }) { Text(tr("Remover projeto")) }
+                TextButton(onClick = { if (valid) v.platformParams = params(); onDismiss() }) { Text(tr("Fechar")) }
             }
         },
-        title = { Text("Projeto de plataforma") },
+        title = { Text(tr("Projeto de plataforma")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Contorno: ${v.platformOutline.size} vértice(s)", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Contorno: {0} vértice(s)", v.platformOutline.size), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { if (valid) v.platformParams = params(); onDraw() }) { Text("Desenhar na planta") }
+                    OutlinedButton(onClick = { if (valid) v.platformParams = params(); onDraw() }) { Text(tr("Desenhar na planta")) }
                     OutlinedButton(enabled = vm.userPoints.size >= 3, onClick = {
                         v.platformOutline = vm.userPoints.map { Point2(it.x, it.y) }
                         useVertex = vm.userPoints.all { !it.z.isNaN() }
-                    }) { Text("Usar pontos _POINTS (${vm.userPoints.size})") }
+                    }) { Text(tr("Usar pontos _POINTS ({0})", vm.userPoints.size)) }
                 }
                 val names = project.surfaces.map { it.name }.filter { it != PLATFORM_LABEL }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Terreno", Modifier.width(120.dp))
+                    Text(tr("Terreno"), Modifier.width(120.dp))
                     var open by remember { mutableStateOf(false) }
                     Box {
                         TextButton(onClick = { open = true }) { Text(v.platformTerrain ?: names.firstOrNull() ?: "—", maxLines = 1) }
@@ -113,35 +115,35 @@ fun PlatformDialog(
                     }
                 }
                 HorizontalDivider()
-                Text("Cota da plataforma", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Cota da plataforma"), style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(elevation, { elevation = it }, label = { Text("Cota no 1º vértice (${StationFormat.lengthUnit}; vazio = média do terreno)") },
+                    OutlinedTextField(elevation, { elevation = it }, label = { Text(tr("Cota no 1º vértice ({0}; vazio = média do terreno)", StationFormat.lengthUnit)) },
                         singleLine = true, modifier = Modifier.width(320.dp), keyboardOptions = decimal, enabled = !useVertex)
-                    OutlinedTextField(grade, { grade = it }, label = { Text("Inclinação %") }, singleLine = true, modifier = Modifier.width(140.dp),
+                    OutlinedTextField(grade, { grade = it }, label = { Text(tr("Inclinação %")) }, singleLine = true, modifier = Modifier.width(140.dp),
                         keyboardOptions = decimal, enabled = !useVertex)
-                    OutlinedTextField(azimuth, { azimuth = it }, label = { Text("Direção (azimute °)") }, singleLine = true,
+                    OutlinedTextField(azimuth, { azimuth = it }, label = { Text(tr("Direção (azimute °)")) }, singleLine = true,
                         modifier = Modifier.width(170.dp), keyboardOptions = decimal, enabled = !useVertex)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = useVertex, onCheckedChange = { useVertex = it })
-                    Text("Usar a cota de cada ponto _POINTS como cota do vértice", style = MaterialTheme.typography.bodySmall)
+                    Text(tr("Usar a cota de cada ponto _POINTS como cota do vértice"), style = MaterialTheme.typography.bodySmall)
                 }
                 HorizontalDivider()
-                SlopeRow("Corte", "c", fields) { k, value -> fields = fields + (k to value) }
-                SlopeRow("Aterro", "f", fields) { k, value -> fields = fields + (k to value) }
-                Text("Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Alturas das bermas: uma altura para todas (ex.: 8) " +
-                    "ou a altura de cada berma, da plataforma para fora, separadas por ; (ex.: 6; 8; 10; a última se repete). 0 = sem bermas. " +
-                    "A inclinação interna da berma (%) cai para o pé do talude de cima, levando a água para a canaleta.", style = MaterialTheme.typography.bodySmall)
+                SlopeRow(tr("Corte"), "c", fields) { k, value -> fields = fields + (k to value) }
+                SlopeRow(tr("Aterro"), "f", fields) { k, value -> fields = fields + (k to value) }
+                Text(tr("Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Alturas das bermas: uma altura para todas (ex.: 8) ") +
+                    tr("ou a altura de cada berma, da plataforma para fora, separadas por ; (ex.: 6; 8; 10; a última se repete). 0 = sem bermas. ") +
+                    tr("A inclinação interna da berma (%) cai para o pé do talude de cima, levando a água para a canaleta."), style = MaterialTheme.typography.bodySmall)
                 vm.tasks.forEach { LoadProgress(it) }
                 vm.platformMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.platformVolumes?.let { d ->
                     HorizontalDivider()
-                    Text("Resultado contra ${d.baseName}", style = MaterialTheme.typography.labelLarge)
-                    Text("Corte ${StationFormat.volume(d.cutVolume)} · Aterro ${StationFormat.volume(d.fillVolume)} · " +
-                        "Saldo ${(if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(kotlin.math.abs(d.netVolume))}")
-                    Text("Área do projeto (até o offset): ${StationFormat.area(d.cutArea + d.fillArea, 0)} · malha ${StationFormat.length(d.cellSize, 2)}",
+                    Text(tr("Resultado contra {0}", d.baseName), style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Corte {0} · Aterro {1} · ", StationFormat.volume(d.cutVolume), StationFormat.volume(d.fillVolume)) +
+                        tr("Saldo {0}", (if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(kotlin.math.abs(d.netVolume))))
+                    Text(tr("Área do projeto (até o offset): {0} · malha {1}", StationFormat.area(d.cutArea + d.fillArea, 0), StationFormat.length(d.cellSize, 2)),
                         style = MaterialTheme.typography.bodySmall)
-                    Text("A superfície \"$PLATFORM_LABEL\" já entra na seção, no perfil, no comparativo e na exportação (LandXML com breaklines e limite; DXF com borda, offset e bermas).",
+                    Text(tr("A superfície \"{0}\" já entra na seção, no perfil, no comparativo e na exportação (LandXML com breaklines e limite; DXF com borda, offset e bermas).", PLATFORM_LABEL),
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -154,7 +156,7 @@ private fun SlopeRow(title: String, prefix: String, fields: Map<String, String>,
     val decimal = KeyboardOptions(keyboardType = KeyboardType.Text)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, Modifier.width(70.dp), style = MaterialTheme.typography.labelLarge)
-        listOf("r" to "Talude H:V", "h" to "Alturas das bermas (${StationFormat.lengthUnit})", "w" to "Largura berma (${StationFormat.lengthUnit})", "f" to "Inclinação interna %").forEach { (k, label) ->
+        listOf("r" to tr("Talude H:V"), "h" to tr("Alturas das bermas ({0})", StationFormat.lengthUnit), "w" to tr("Largura berma ({0})", StationFormat.lengthUnit), "f" to tr("Inclinação interna %")).forEach { (k, label) ->
             OutlinedTextField(fields[prefix + k]!!, { onChange(prefix + k, it) }, label = { Text(label) }, singleLine = true,
                 modifier = Modifier.width(if (k == "h") 230.dp else 170.dp), keyboardOptions = decimal,
                 isError = if (k == "h") heights(fields[prefix + k]!!) == null else StationFormat.number(fields[prefix + k]!!) == null)

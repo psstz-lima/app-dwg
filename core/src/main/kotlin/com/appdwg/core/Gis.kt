@@ -128,7 +128,7 @@ object Gis {
     fun readShapefile(shp: ByteArray, dbf: ByteArray?, toPlan: GeoToPlan): List<GisFeature> {
         val attrs = dbf?.let { readDbf(it) }.orEmpty()
         val b = ByteBuffer.wrap(shp)
-        require(shp.size >= 100 && b.order(ByteOrder.BIG_ENDIAN).getInt(0) == 9994) { "não é um arquivo .shp" }
+        require(shp.size >= 100 && b.order(ByteOrder.BIG_ENDIAN).getInt(0) == 9994) { tr("não é um arquivo .shp") }
         val out = ArrayList<GisFeature>()
         var pos = 100
         var rec = 0

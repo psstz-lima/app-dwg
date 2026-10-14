@@ -18,7 +18,7 @@ data class AsBuiltRow(
     val delta: Double? get() = design?.let { point.z - it }
 }
 
-enum class AsBuiltStatus(val label: String) { OK("OK"), ABOVE("Acima"), BELOW("Abaixo"), OUTSIDE("Fora do projeto") }
+enum class AsBuiltStatus(private val labelPt: String) { OK("OK"), ABOVE("Acima"), BELOW("Abaixo"), OUTSIDE("Fora do projeto"); val label: String get() = tr(labelPt) }
 
 data class AsBuiltReport(
     val surface: String,

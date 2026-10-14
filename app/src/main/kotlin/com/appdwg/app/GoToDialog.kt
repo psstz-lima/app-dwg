@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,11 +49,11 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
     val hits = remember(project, query) { Search.find(project, query) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
-        title = { Text("Ir para") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        title = { Text(tr("Ir para")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(query, { query = it }, label = { Text("Buscar ponto, texto ou alinhamento") }, singleLine = true,
+                OutlinedTextField(query, { query = it }, label = { Text(tr("Buscar ponto, texto ou alinhamento")) }, singleLine = true,
                     modifier = Modifier.fillMaxWidth())
                 hits.forEach { h ->
                     Row(Modifier.fillMaxWidth().clickable { onGo(h.position) }.padding(vertical = 6.dp)) {
@@ -59,10 +61,10 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                         Text(h.label, maxLines = 1)
                     }
                 }
-                if (query.isNotBlank() && hits.isEmpty()) Text("Nada encontrado.", style = MaterialTheme.typography.bodySmall)
+                if (query.isNotBlank() && hits.isEmpty()) Text(tr("Nada encontrado."), style = MaterialTheme.typography.bodySmall)
                 if (project.alignments.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
-                    Text("Estaca e afastamento", style = MaterialTheme.typography.labelLarge)
+                    Text(tr("Estaca e afastamento"), style = MaterialTheme.typography.labelLarge)
                     if (project.alignments.size > 1) {
                         var open by remember { mutableStateOf(false) }
                         TextButton(onClick = { open = true }) { Text(project.alignments[alignment].name) }
@@ -71,9 +73,9 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(station, { station = it }, label = { Text("Estaca (12+5,40)") }, singleLine = true, modifier = Modifier.width(180.dp))
+                        OutlinedTextField(station, { station = it }, label = { Text(tr("Estaca (12+5,40)")) }, singleLine = true, modifier = Modifier.width(180.dp))
                         Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(offset, { offset = it }, label = { Text("Afast. (+D/−E)") }, singleLine = true, modifier = Modifier.width(140.dp),
+                        OutlinedTextField(offset, { offset = it }, label = { Text(tr("Afast. (+D/−E)")) }, singleLine = true, modifier = Modifier.width(140.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
                         Spacer(Modifier.width(8.dp))
                         val a = project.alignments[alignment]
@@ -89,7 +91,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                     }
                 }
                 Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
-                Text("Coordenada", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Coordenada"), style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val decimal = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     OutlinedTextField(east, { east = it }, label = { Text("E") }, singleLine = true, modifier = Modifier.width(180.dp), keyboardOptions = decimal)

@@ -135,7 +135,7 @@ object PointGen {
                 val lx = i * dx; val ly = j * dy
                 if (inside(local, lx, ly)) {
                     out += Point2(origin.x + lx * c - ly * s, origin.y + lx * s + ly * c)
-                    require(out.size <= max) { "malha com mais de $max pontos: aumente o espaçamento" }
+                    require(out.size <= max) { tr("malha com mais de {0} pontos: aumente o espaçamento", max) }
                 }
                 i++
             }

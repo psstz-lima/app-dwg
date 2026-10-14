@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -179,10 +181,10 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     val onBar = if (g.choice == ThemeChoice.SUN) Color.White else g.text
                     if (compact) {
                         // Phones: the main action plus a menu with the rest.
-                        if (state is ProjectState.Loaded) GButton("Salvar", { save() }, primary = true) else GButton("Abrir", openFile)
+                        if (state is ProjectState.Loaded) GButton(tr("Salvar"), { save() }, primary = true) else GButton(tr("Abrir"), openFile)
                         val gear = remember(g.iconStroke) { GIcon.SETTINGS.vector(g.iconStroke) }
                         androidx.compose.material3.IconButton(onClick = { showAppearance = true }) {
-                            androidx.compose.material3.Icon(gear, "Configurações", tint = onBar)
+                            androidx.compose.material3.Icon(gear, tr("Configurações"), tint = onBar)
                         }
                         var menu by remember { mutableStateOf(false) }
                         Box {
@@ -192,23 +194,23 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                             androidx.compose.material3.DropdownMenu(menu, onDismissRequest = { menu = false }) {
                                 @Composable fun item(label: String, action: () -> Unit) =
                                     androidx.compose.material3.DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() })
-                                if (state is ProjectState.Loaded) item("Abrir", openFile)
-                                if (hasDrive) item("Abrir do Google Drive", openFromDrive)
-                                if (state is ProjectState.Loaded && hasDrive) item("Salvar no Google Drive") { saveAs(true) }
-                                if (viewModel.recent.isNotEmpty()) item("Recentes") { showRecent = true }
-                                if (state is ProjectState.Loaded) item("Salvar como") { saveAs(false) }
-                                item("Configurações") { showAppearance = true }
+                                if (state is ProjectState.Loaded) item(tr("Abrir"), openFile)
+                                if (hasDrive) item(tr("Abrir do Google Drive"), openFromDrive)
+                                if (state is ProjectState.Loaded && hasDrive) item(tr("Salvar no Google Drive")) { saveAs(true) }
+                                if (viewModel.recent.isNotEmpty()) item(tr("Recentes")) { showRecent = true }
+                                if (state is ProjectState.Loaded) item(tr("Salvar como")) { saveAs(false) }
+                                item(tr("Configurações")) { showAppearance = true }
                             }
                         }
                     } else {
-                        if (viewModel.recent.isNotEmpty()) GButton("Recentes", { showRecent = true })
+                        if (viewModel.recent.isNotEmpty()) GButton(tr("Recentes"), { showRecent = true })
                         // Abrir and Salvar como offer the device or Google Drive.
-                        DropButton("Abrir", hasDrive, openFile, openFromDrive)
+                        DropButton(tr("Abrir"), hasDrive, openFile, openFromDrive)
                         if (state is ProjectState.Loaded) {
-                            DropButton("Salvar como", hasDrive, { saveAs(false) }, { saveAs(true) })
-                            GButton("Salvar", { save() }, primary = true)
+                            DropButton(tr("Salvar como"), hasDrive, { saveAs(false) }, { saveAs(true) })
+                            GButton(tr("Salvar"), { save() }, primary = true)
                         }
-                        GButton("Configurações", { showAppearance = true }, icon = GIcon.SETTINGS, outlined = true)
+                        GButton(tr("Configurações"), { showAppearance = true }, icon = GIcon.SETTINGS, outlined = true)
                     }
                 }
             }
@@ -226,15 +228,15 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (showRecent) {
             AlertDialog(
                 onDismissRequest = { showRecent = false },
-                confirmButton = { GButton("Fechar", { showRecent = false }) },
-                title = { Text("Arquivos recentes") },
+                confirmButton = { GButton(tr("Fechar"), { showRecent = false }) },
+                title = { Text(tr("Arquivos recentes")) },
                 text = {
                     // Each file is a button that opens it, with its own Remover button.
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         viewModel.recent.forEach { (name, uri) ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 RecentButton(name, Modifier.weight(1f), cloud = CloudDocs.isDrive(uri)) { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }
-                                GButton("Remover", { viewModel.forgetRecent(uri) }, outlined = true)
+                                GButton(tr("Remover"), { viewModel.forgetRecent(uri) }, outlined = true)
                             }
                         }
                     }
@@ -244,13 +246,13 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         confirm?.let { action ->
             AlertDialog(
                 onDismissRequest = { confirm = null },
-                title = { Text("Salvar alterações?") },
-                text = { Text("O projeto tem alterações que ainda não foram salvas (camadas, pontos, medições, arquivos adicionados…).") },
-                confirmButton = { GButton("Salvar", { confirm = null; save(action) }, primary = true) },
+                title = { Text(tr("Salvar alterações?")) },
+                text = { Text(tr("O projeto tem alterações que ainda não foram salvas (camadas, pontos, medições, arquivos adicionados…).")) },
+                confirmButton = { GButton(tr("Salvar"), { confirm = null; save(action) }, primary = true) },
                 dismissButton = {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GButton("Descartar", { confirm = null; action() })
-                        GButton("Cancelar", { confirm = null })
+                        GButton(tr("Descartar"), { confirm = null; action() })
+                        GButton(tr("Cancelar"), { confirm = null })
                     }
                 },
             )
@@ -281,7 +283,7 @@ private fun ElevationLegend(sf: com.appdwg.core.Surface) {
     val max = sf.maxElevation ?: return
     Card {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Text("Cotas · " + sf.name.substringAfterLast('|'), style = MaterialTheme.typography.labelMedium)
+            Text(tr("Cotas · ") + sf.name.substringAfterLast('|'), style = MaterialTheme.typography.labelMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(StationFormat.lengthValue(min, 1), style = MaterialTheme.typography.labelSmall)
                 androidx.compose.foundation.Canvas(Modifier.width(160.dp).height(12.dp)) {
@@ -298,8 +300,8 @@ private fun ElevationLegend(sf: com.appdwg.core.Surface) {
 private fun FreeHint(modifier: Modifier, onPro: () -> Unit) {
     Card(modifier.widthIn(max = 480.dp).clickable(onClick = onPro)) {
         Column(Modifier.padding(12.dp)) {
-            Text("Versão grátis: visualização da planta", style = MaterialTheme.typography.titleSmall)
-            Text("Estaca, cotas, 3D, seções, medições e as demais ferramentas estão no Gromatic Pro. Toque para conhecer.",
+            Text(tr("Versão grátis: visualização da planta"), style = MaterialTheme.typography.titleSmall)
+            Text(tr("Estaca, cotas, 3D, seções, medições e as demais ferramentas estão no Gromatic Pro. Toque para conhecer."),
                 style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -312,16 +314,16 @@ private fun EmptyState(openFile: () -> Unit, openDrive: (() -> Unit)?) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Abra um arquivo LandXML ou DXF", style = MaterialTheme.typography.titleLarge)
+        Text(tr("Abra um arquivo LandXML ou DXF"), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         Text(
-            "No Civil 3D, use Saída > Exportar para LandXML (.xml) ou salve como DXF (.dxf) e copie o arquivo para o aparelho.",
+            tr("No Civil 3D, use Saída > Exportar para LandXML (.xml) ou salve como DXF (.dxf) e copie o arquivo para o aparelho."),
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(onClick = openFile) { Text("Abrir arquivo") }
-            openDrive?.let { androidx.compose.material3.OutlinedButton(onClick = it) { Text("☁ Abrir do Google Drive") } }
+            Button(onClick = openFile) { Text(tr("Abrir arquivo")) }
+            openDrive?.let { androidx.compose.material3.OutlinedButton(onClick = it) { Text(tr("☁ Abrir do Google Drive")) } }
         }
     }
 }
@@ -336,9 +338,9 @@ private fun Message(text: String, openFile: () -> Unit, locate: (() -> Unit)? = 
         Text(text, textAlign = TextAlign.Center)
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (locate != null) Button(onClick = locate) { Text("Localizar desenho") }
-            if (locate != null) OutlinedButton(onClick = openFile) { Text("Abrir outro arquivo") }
-            else Button(onClick = openFile) { Text("Abrir outro arquivo") }
+            if (locate != null) Button(onClick = locate) { Text(tr("Localizar desenho")) }
+            if (locate != null) OutlinedButton(onClick = openFile) { Text(tr("Abrir outro arquivo")) }
+            else Button(onClick = openFile) { Text(tr("Abrir outro arquivo")) }
         }
     }
 }
@@ -591,7 +593,7 @@ private fun ProjectScreen(
         if (!showProfile || sectionAxis == null) null
         else {
             val axis = if (roadPvis == null) sectionAxis else com.appdwg.core.Alignment(sectionAxis.name, sectionAxis.startStation, sectionAxis.elements,
-                com.appdwg.core.Profile("Greide", com.appdwg.core.AlignmentBuilder.curvesFromK(roadPvis, v.roadParams.kValue).mapIndexed { i, pv ->
+                com.appdwg.core.Profile(tr("Greide"), com.appdwg.core.AlignmentBuilder.curvesFromK(roadPvis, v.roadParams.kValue).mapIndexed { i, pv ->
                     roadPvis[i].takeIf { it.curveLength > 0 } ?: pv
                 }))
             LongProfile.of(axis, project.surfaces.filter { it.name !in frozenLayers && !it.name.startsWith(ROAD_LABEL) })
@@ -647,37 +649,37 @@ private fun ProjectScreen(
     val bulletinLabel = androidx.compose.ui.res.stringResource(R.string.bm_tool)
     val isPro = vm.pro.isPro
     fun allTools(): List<RailTool> = buildList {
-        if (!show3d) add(RailTool(GIcon.MEASURE, "Medir", measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
-        add(RailTool(GIcon.POINTS, "Pontos", addingPoints) { showPoints = true })
-        if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) add(RailTool(GIcon.LINES, "Linhas", editing) {
+        if (!show3d) add(RailTool(GIcon.MEASURE, tr("Medir"), measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
+        add(RailTool(GIcon.POINTS, tr("Pontos"), addingPoints) { showPoints = true })
+        if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) add(RailTool(GIcon.LINES, tr("Linhas"), editing) {
             editing = !editing; measuring = false; showSection = false; showProfile = false; show3d = false
             edit.pick = EditPick.SELECT
         })
-        if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) add(RailTool(GIcon.LAYERS, "Camadas") { showLayers = true })
+        if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) add(RailTool(GIcon.LAYERS, tr("Camadas")) { showLayers = true })
         if (project.surfaces.isNotEmpty()) {
-            add(RailTool(GIcon.CONTOURS, "Curvas", showContours) { showContourDialog = true })
-            add(RailTool(GIcon.IMAGE, "Imagem", vm.drape != null && vm.drapeVisible) { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true })
+            add(RailTool(GIcon.CONTOURS, tr("Curvas"), showContours) { showContourDialog = true })
+            add(RailTool(GIcon.IMAGE, tr("Imagem"), vm.drape != null && vm.drapeVisible) { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true })
         }
-        add(RailTool(GIcon.COMPARE, "Comparar", differenceOverlay != null) { showCompare = true })
+        add(RailTool(GIcon.COMPARE, tr("Comparar"), differenceOverlay != null) { showCompare = true })
         if (project.surfaces.isNotEmpty()) {
             add(RailTool(GIcon.PLATFORM, "Plataforma", drawingPlatform || vm.platform != null) { showPlatform = true })
-            add(RailTool(GIcon.ROAD, "Estrada", drawingRoad || v.roadBuilt) { showRoad = true })
+            add(RailTool(GIcon.ROAD, tr("Estrada"), drawingRoad || v.roadBuilt) { showRoad = true })
         }
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel) { showSurfaceEdit = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
-        add(RailTool(GIcon.MODELS, "Modelos") { showModels = true })
-        add(RailTool(GIcon.NOTE, "Anotar", addingNote) { addingNote = true; measuring = false; show3d = false })
+        add(RailTool(GIcon.MODELS, tr("Modelos")) { showModels = true })
+        add(RailTool(GIcon.NOTE, tr("Anotar"), addingNote) { addingNote = true; measuring = false; show3d = false })
         add(RailTool(GIcon.GPS, "GPS", vm.gnss.connected) { showGps = true })
         add(RailTool(GIcon.CALIBRATE, calibLabel, v.calibrationOn) { showCalibration = true })
-        add(RailTool(GIcon.CALC, "Cálculos") { showCalc = true })
-        add(RailTool(GIcon.MAP, "Mapa", vm.basemap.enabled) { showBasemap = true })
-        add(RailTool(GIcon.GOTO, "Ir para") { showGoTo = true })
-        add(RailTool(GIcon.EXPORT, "Exportar") { showExport = true })
-        if (vm.hasReferences) add(RailTool(GIcon.REFS, "Referências") { showReferences = true })
-        if (project.warnings.isNotEmpty()) add(RailTool(GIcon.WARNING, "Avisos") { showWarnings = true })
+        add(RailTool(GIcon.CALC, tr("Cálculos")) { showCalc = true })
+        add(RailTool(GIcon.MAP, tr("Mapa"), vm.basemap.enabled) { showBasemap = true })
+        add(RailTool(GIcon.GOTO, tr("Ir para")) { showGoTo = true })
+        add(RailTool(GIcon.EXPORT, tr("Exportar")) { showExport = true })
+        if (vm.hasReferences) add(RailTool(GIcon.REFS, tr("Referências")) { showReferences = true })
+        if (project.warnings.isNotEmpty()) add(RailTool(GIcon.WARNING, tr("Avisos")) { showWarnings = true })
     }
     // The free version shows every tool with a padlock; touching one opens the Gromatic Pro screen.
     fun railTools(): List<RailTool> = allTools().let { all ->
@@ -708,7 +710,7 @@ private fun ProjectScreen(
             FreeHint(Modifier.align(Alignment.BottomCenter).padding(12.dp)) { vm.proRequested = true }
         } else if (current == null) {
             Text(
-                "Toque na planta para ver estaca, afastamento e cotas",
+                tr("Toque na planta para ver estaca, afastamento e cotas"),
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                 style = MaterialTheme.typography.labelMedium,
             )
@@ -718,7 +720,7 @@ private fun ProjectScreen(
                 Card(Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 8.dp).widthIn(max = 380.dp)) {
                     Column(Modifier.padding(12.dp)) {
                         Text(m.name, style = MaterialTheme.typography.titleSmall)
-                        Line("Camada", m.layer)
+                        Line(tr("Camada"), m.layer)
                         m.props.forEach { (k, value) -> Line(k, value) }
                     }
                 }
@@ -883,20 +885,20 @@ private fun ProjectScreen(
             Column(Modifier.align(Alignment.TopStart).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val views = buildList {
-                        add("Planta" to (!show3d && !showSection && !showProfile))
+                        add(tr("Planta") to (!show3d && !showSection && !showProfile))
                         if (has3d) add("3D" to show3d)
-                        if (project.alignments.isNotEmpty()) { add("Seção" to (showSection && !show3d)); add("Perfil" to (showProfile && !show3d)) }
+                        if (project.alignments.isNotEmpty()) { add(tr("Seção") to (showSection && !show3d)); add(tr("Perfil") to (showProfile && !show3d)) }
                     }
                     ViewSwitch(views, locked = { i -> !isPro && i > 0 }, onPick = { i ->
                         if (!isPro && i > 0) { vm.proRequested = true; return@ViewSwitch }
                         when (views[i].first) {
-                            "Planta" -> { show3d = false; showSection = false; showProfile = false }
+                            tr("Planta") -> { show3d = false; showSection = false; showProfile = false }
                             "3D" -> { show3d = true; showSection = false; showProfile = false }
-                            "Seção" -> {
+                            tr("Seção") -> {
                                 tapped?.let { t -> sectionAxis?.stationOffset(t)?.let { sectionStation = it.station } }
                                 show3d = false; showSection = true; showProfile = false; measuring = false; tapped = null
                             }
-                            "Perfil" -> {
+                            tr("Perfil") -> {
                                 tapped?.let { t -> sectionAxis?.stationOffset(t)?.let { profileCursor = it.station } }
                                 show3d = false; showProfile = true; showSection = false; measuring = false; tapped = null
                             }
@@ -908,8 +910,8 @@ private fun ProjectScreen(
                 if (showContours && !show3d) {
                     Card {
                         Text(
-                            contourDrawn?.let { "Curvas de nível a cada ${StationFormat.length(it, if (it < 1) 2 else 0)} (mestras a cada 5)" }
-                                ?: "Curvas densas demais neste zoom: aproxime ou aumente o intervalo",
+                            contourDrawn?.let { tr("Curvas de nível a cada {0} (mestras a cada 5)", StationFormat.length(it, if (it < 1) 2 else 0)) }
+                                ?: tr("Curvas densas demais neste zoom: aproxime ou aumente o intervalo"),
                             Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -935,7 +937,7 @@ private fun ProjectScreen(
             }
                 if (show3d) {
                     Text(
-                        "1 dedo gira · 2 dedos movem · pinça aproxima",
+                        tr("1 dedo gira · 2 dedos movem · pinça aproxima"),
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
                         style = MaterialTheme.typography.labelMedium, color = g.text,
                     )
@@ -945,9 +947,9 @@ private fun ProjectScreen(
                 } else if (addingNote) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Toque na planta onde fica a anotação.", style = MaterialTheme.typography.bodyMedium)
-                            if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text("Na posição do GPS") }
-                            TextButton(onClick = { addingNote = false }) { Text("Cancelar") }
+                            Text(tr("Toque na planta onde fica a anotação."), style = MaterialTheme.typography.bodyMedium)
+                            if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text(tr("Na posição do GPS")) }
+                            TextButton(onClick = { addingNote = false }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (openNote != null && !wide) {
@@ -956,67 +958,67 @@ private fun ProjectScreen(
                 } else if (roadTargetPick != null) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Toque na linha que o bordo da pista deve seguir.", style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { roadTargetPick = null; showRoad = true }) { Text("Cancelar") }
+                            Text(tr("Toque na linha que o bordo da pista deve seguir."), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { roadTargetPick = null; showRoad = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingRoad) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Toque os PIs do eixo, do início ao fim (${v.roadParams.pis.size}).", style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text("Desfazer") }
-                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text("Limpar") }
-                            TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text("Concluir") }
+                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}).", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
+                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
+                            TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (modelPickFor != null) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(when (alignPick) { 1 -> "Toque onde fica o ponto A do modelo."; 2 -> "Toque onde fica o ponto B do modelo."
-                                else -> "Toque o ponto de inserção do modelo." } + " O toque encaixa em pontos e vértices.", style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { modelPickFor = null; showModels = true }) { Text("Cancelar") }
+                            Text(when (alignPick) { 1 -> tr("Toque onde fica o ponto A do modelo."); 2 -> tr("Toque onde fica o ponto B do modelo.")
+                                else -> tr("Toque o ponto de inserção do modelo.") } + tr(" O toque encaixa em pontos e vértices."), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { modelPickFor = null; showModels = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genReview) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${gen.preview.size} ponto(s) em ciano.", style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { genReview = false; showGen = true }) { Text("Ajustar") }
-                            TextButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text("Criar") }
-                            TextButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text("Cancelar") }
+                            Text(tr("{0} ponto(s) em ciano.", gen.preview.size), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { genReview = false; showGen = true }) { Text(tr("Ajustar")) }
+                            TextButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text(tr("Criar")) }
+                            TextButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genPick != null) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(when (genPick) {
-                                GenPick.AREA_DRAW -> "Toque os vértices do polígono da malha (${gen.drawnArea.size})."
-                                GenPick.AREA_LINE -> "Toque numa polilinha fechada."
-                                GenPick.ROTATION -> "Toque na linha que dá a direção da malha."
-                                else -> "Toque na linha, polilinha 3D ou eixo."
+                                GenPick.AREA_DRAW -> tr("Toque os vértices do polígono da malha ({0}).", gen.drawnArea.size)
+                                GenPick.AREA_LINE -> tr("Toque numa polilinha fechada.")
+                                GenPick.ROTATION -> tr("Toque na linha que dá a direção da malha.")
+                                else -> tr("Toque na linha, polilinha 3D ou eixo.")
                             }, style = MaterialTheme.typography.bodyMedium)
                             if (genPick == GenPick.AREA_DRAW) {
-                                TextButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text("Desfazer") }
-                                TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text("Limpar") }
+                                TextButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Desfazer")) }
+                                TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
                             }
-                            TextButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) "Concluir" else "Cancelar") }
+                            TextButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) tr("Concluir") else tr("Cancelar")) }
                         }
                     }
                 } else if (drawingPlatform) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Toque os vértices da plataforma (${platformOutline.size}). O toque encaixa em pontos e vértices.",
+                            Text(tr("Toque os vértices da plataforma ({0}). O toque encaixa em pontos e vértices.", platformOutline.size),
                                 style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text("Desfazer") }
-                            TextButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text("Limpar") }
-                            TextButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text("Concluir") }
+                            TextButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text(tr("Desfazer")) }
+                            TextButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text(tr("Limpar")) }
+                            TextButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (addingPoints) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Toque na planta para criar um ponto (cota da superfície).", style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { addingPoints = false }) { Text("Concluir") }
+                            Text(tr("Toque na planta para criar um ponto (cota da superfície)."), style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = { addingPoints = false }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (showProfile && longProfile != null) {
@@ -1053,7 +1055,7 @@ private fun ProjectScreen(
         }
         if (wide && !full) SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
-            if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + " da leitura") }
+            if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
             if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.fillMaxWidth())
             if (measuring) MeasureCard(measurement, onUndo = { measurePoints = measurePoints.dropLast(1) }, onClear = { measurePoints = emptyList() },
                 onDone = { measuring = false }, modifier = Modifier.fillMaxWidth())
@@ -1069,7 +1071,7 @@ private fun ProjectScreen(
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text(m.name, style = MaterialTheme.typography.titleSmall)
-                        Line("Camada", m.layer)
+                        Line(tr("Camada"), m.layer)
                         m.props.forEach { (k, value) -> Line(k, value) }
                     }
                 }
@@ -1081,7 +1083,7 @@ private fun ProjectScreen(
             if ((vm.analysisMode == 1 || vm.analysisMode == 3) && !show3d) SlopeLegend(vm, Modifier)
             if (!isPro) FreeHint(Modifier.fillMaxWidth()) { vm.proRequested = true }
             else if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
-                Text("Toque na planta para ver estaca, afastamento e cotas.", style = MaterialTheme.typography.bodyMedium, color = g.muted)
+                Text(tr("Toque na planta para ver estaca, afastamento e cotas."), style = MaterialTheme.typography.bodyMedium, color = g.muted)
             }
         }
     }
@@ -1098,23 +1100,23 @@ private fun ProjectScreen(
                     val e = StationFormat.lengthValue(p.position.x, digits); val n = StationFormat.lengthValue(p.position.y, digits)
                     val z = p.terrainElevation?.let { StationFormat.lengthValue(it, minOf(digits, 3)) }
                     add(FooterItem("E $e   N $n" + (z?.let { "   Z $it" } ?: "")) { close ->
-                        MenuTitle("Coordenadas (${StationFormat.lengthUnit})")
-                        MenuLine("Copiar E N" + if (z != null) " Z" else "") {
+                        MenuTitle(tr("Coordenadas ({0})", StationFormat.lengthUnit))
+                        MenuLine(tr("Copiar E N") + if (z != null) " Z" else "") {
                             clipboard.setText(androidx.compose.ui.text.AnnotatedString(listOfNotNull(e, n, z).joinToString(" "))); close()
                         }
-                        MenuTitle("Casas decimais")
+                        MenuTitle(tr("Casas decimais"))
                         for (d in listOf(0, 1, 2, 3, 4)) MenuLine(d.toString(), checked = d == digits) { v.coordDigits = d }
-                        MenuLine("Ir para coordenada ou estaca…") { close(); showGoTo = true }
+                        MenuLine(tr("Ir para coordenada ou estaca…")) { close(); showGoTo = true }
                     })
                     p.alignment?.takeIf { !it.stationOffset.outside }?.let { a ->
                         add(FooterItem(StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset)) { close ->
                             MenuTitle(a.name)
-                            MenuLine("Ir para estaca…") { close(); showGoTo = true }
-                            MenuLine("Seção nesta estaca") {
+                            MenuLine(tr("Ir para estaca…")) { close(); showGoTo = true }
+                            MenuLine(tr("Seção nesta estaca")) {
                                 close(); sectionAlignment = project.alignments.indexOfFirst { it.name == a.name }.coerceAtLeast(0)
                                 sectionStation = a.stationOffset.station; showSection = true; showProfile = false; show3d = false
                             }
-                            MenuLine("Perfil neste ponto") {
+                            MenuLine(tr("Perfil neste ponto")) {
                                 close(); profileCursor = a.stationOffset.station; showProfile = true; showSection = false; show3d = false
                             }
                         })
@@ -1122,97 +1124,97 @@ private fun ProjectScreen(
                 }
                 metersPerInch?.let { mpi ->
                     add(FooterItem("1:" + niceScale(mpi / 0.0254)) { close ->
-                        MenuTitle("Escala da planta")
+                        MenuTitle(tr("Escala da planta"))
                         for (nScale in listOf(100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000)) MenuLine("1:" + StationFormat.grouped(nScale.toDouble(), 0)) {
                             close(); planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 1.0, scale = xdpi / (nScale * 0.0254))
                         }
-                        MenuLine("Ajustar à tela") { close(); planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 0.0) }
+                        MenuLine(tr("Ajustar à tela")) { close(); planZoom = ZoomRequest((planZoom?.id ?: 0) + 1, 0.0) }
                     })
                 }
             },
             right = if (!isPro) buildList {
                 add(FooterItem(StationFormat.lengthUnit) { close ->
-                    MenuTitle("Unidades")
+                    MenuTitle(tr("Unidades"))
                     for (u in UnitChoice.entries) MenuLine(u.label, checked = vm.units.choice == u) { close(); vm.units.choose(u) }
                 })
-                add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: "Auto") { close ->
-                    MenuTitle("Idioma")
+                add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: tr("Auto")) { close ->
+                    MenuTitle(tr("Idioma"))
                     for (l in LanguageChoice.entries) MenuLine(l.label, checked = vm.languages.choice == l) { close(); vm.languages.choose(l) }
                 })
-                add(FooterItem("Tema") { close ->
+                add(FooterItem(tr("Tema")) { close ->
                     for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }
                 })
-                add(FooterItem("Grátis", dot = g.accent) { close ->
-                    MenuTitle("Versão grátis: abrir e ver a planta")
-                    MenuLine("Conhecer o Gromatic Pro…") { close(); vm.proRequested = true }
+                add(FooterItem(tr("Grátis"), dot = g.accent) { close ->
+                    MenuTitle(tr("Versão grátis: abrir e ver a planta"))
+                    MenuLine(tr("Conhecer o Gromatic Pro…")) { close(); vm.proRequested = true }
                 })
             } else buildList {
                 // Files of the project (mosaic): each one on or off, and more added, without leaving the plan.
                 val files = vm.sourceFiles
-                add(FooterItem(if (files.isEmpty()) "Arquivos" else "Arquivos ${files.count { it.label !in vm.hiddenFiles } + 1}/${files.size + 1}") { close ->
-                    MenuTitle("Arquivos do projeto")
+                add(FooterItem(if (files.isEmpty()) tr("Arquivos") else tr("Arquivos {0}/{1}", files.count { it.label !in vm.hiddenFiles } + 1, files.size + 1)) { close ->
+                    MenuTitle(tr("Arquivos do projeto"))
                     MenuLine(fileName, checked = true, enabled = false) {}
                     for (f in files) MenuLine(f.label, checked = f.label !in vm.hiddenFiles) { vm.setFileVisible(f.label, f.label in vm.hiddenFiles) }
-                    MenuLine("Adicionar arquivos…") { close(); addFiles(false) }
-                    if (hasDriveApp) MenuLine("Adicionar do Google Drive…") { close(); addFiles(true) }
-                    if (files.isNotEmpty()) MenuLine("Remover ou comparar…") { close(); showCompare = true }
+                    MenuLine(tr("Adicionar arquivos…")) { close(); addFiles(false) }
+                    if (hasDriveApp) MenuLine(tr("Adicionar do Google Drive…")) { close(); addFiles(true) }
+                    if (files.isNotEmpty()) MenuLine(tr("Remover ou comparar…")) { close(); showCompare = true }
                 })
                 // Drawing settings without leaving the plan.
                 val layers = project.layers + (if (vm.userPoints.isNotEmpty()) listOf(com.appdwg.core.POINTS_LAYER) else emptyList())
-                if (layers.isNotEmpty()) add(FooterItem("Camadas ${layers.count { it !in hidden }}/${layers.size}") { close ->
-                    MenuLine("Ligar todas") { offLayers = ArrayList(); frozenLayers = ArrayList() }
-                    MenuLine("Desligar todas") { offLayers = ArrayList(layers) }
+                if (layers.isNotEmpty()) add(FooterItem(tr("Camadas {0}/{1}", layers.count { it !in hidden }, layers.size)) { close ->
+                    MenuLine(tr("Ligar todas")) { offLayers = ArrayList(); frozenLayers = ArrayList() }
+                    MenuLine(tr("Desligar todas")) { offLayers = ArrayList(layers) }
                     for (l in layers.take(60)) MenuLine(l.substringAfterLast('|'), checked = l !in hidden) {
                         offLayers = ArrayList(offLayers.toSet().toggle(l, l !in offLayers)); if (l in frozenLayers) frozenLayers = ArrayList(frozenLayers - l)
                     }
-                    if (layers.size > 60) MenuLine("Todas as camadas…") { close(); showLayers = true }
+                    if (layers.size > 60) MenuLine(tr("Todas as camadas…")) { close(); showLayers = true }
                 })
                 if (project.surfaces.isNotEmpty()) {
                     val shownSurfaces = project.surfaces.map { it.name }.filter { it !in hidden }
-                    add(FooterItem(if (shownSurfaces.size == 1) shownSurfaces.single().substringAfterLast('|') else "Superfícies ${shownSurfaces.size}/${project.surfaces.size}") { close ->
-                        MenuTitle("Superfície mostrada")
-                        MenuLine("Todas", checked = shownSurfaces.size == project.surfaces.size) {
+                    add(FooterItem(if (shownSurfaces.size == 1) shownSurfaces.single().substringAfterLast('|') else tr("Superfícies {0}/{1}", shownSurfaces.size, project.surfaces.size)) { close ->
+                        MenuTitle(tr("Superfície mostrada"))
+                        MenuLine(tr("Todas"), checked = shownSurfaces.size == project.surfaces.size) {
                             offLayers = ArrayList(offLayers - project.surfaces.map { it.name }.toSet()); frozenLayers = ArrayList(frozenLayers - project.surfaces.map { it.name }.toSet())
                         }
-                        for (sf in project.surfaces) MenuLine("Só " + sf.name.substringAfterLast('|'), checked = shownSurfaces == listOf(sf.name)) {
+                        for (sf in project.surfaces) MenuLine(tr("Só ") + sf.name.substringAfterLast('|'), checked = shownSurfaces == listOf(sf.name)) {
                             offLayers = ArrayList((offLayers.toSet() + project.surfaces.map { it.name }) - sf.name); frozenLayers = ArrayList(frozenLayers - sf.name)
                         }
                         // Display style of each surface, as in Civil 3D: the mesh off with the elevations still shown.
                         for (sf in project.surfaces) {
                             val st = v.styleOf(sf.name)
                             fun set(n: SurfaceStyle) = v.setStyle(sf.name, n)
-                            MenuTitle("Estilo · " + sf.name.substringAfterLast('|'))
-                            MenuLine("Triângulos (malha)", checked = st.triangles) { set(st.copy(triangles = !st.triangles)) }
-                            MenuLine("Borda", checked = st.border) { set(st.copy(border = !st.border)) }
-                            MenuLine("Curvas de nível", checked = st.contours && showContours) {
+                            MenuTitle(tr("Estilo · ") + sf.name.substringAfterLast('|'))
+                            MenuLine(tr("Triângulos (malha)"), checked = st.triangles) { set(st.copy(triangles = !st.triangles)) }
+                            MenuLine(tr("Borda"), checked = st.border) { set(st.copy(border = !st.border)) }
+                            MenuLine(tr("Curvas de nível"), checked = st.contours && showContours) {
                                 if (!showContours) { showContours = true; set(st.copy(contours = true)) } else set(st.copy(contours = !st.contours))
                             }
-                            MenuLine("Elevações em cores", checked = st.elevation == ElevationPaint.COLORS) { set(st.copy(elevation = ElevationPaint.COLORS)) }
-                            MenuLine("Só sombreamento", checked = st.elevation == ElevationPaint.SHADE) { set(st.copy(elevation = ElevationPaint.SHADE)) }
-                            MenuLine("Sem elevações", checked = st.elevation == ElevationPaint.NONE) { set(st.copy(elevation = ElevationPaint.NONE)) }
-                            MenuLine("Legenda de cotas", checked = st.legend) { set(st.copy(legend = !st.legend, elevation = if (!st.legend) ElevationPaint.COLORS else st.elevation)) }
+                            MenuLine(tr("Elevações em cores"), checked = st.elevation == ElevationPaint.COLORS) { set(st.copy(elevation = ElevationPaint.COLORS)) }
+                            MenuLine(tr("Só sombreamento"), checked = st.elevation == ElevationPaint.SHADE) { set(st.copy(elevation = ElevationPaint.SHADE)) }
+                            MenuLine(tr("Sem elevações"), checked = st.elevation == ElevationPaint.NONE) { set(st.copy(elevation = ElevationPaint.NONE)) }
+                            MenuLine(tr("Legenda de cotas"), checked = st.legend) { set(st.copy(legend = !st.legend, elevation = if (!st.legend) ElevationPaint.COLORS else st.elevation)) }
                         }
                     })
-                    add(FooterItem(if (showContours) "Curvas " + (contourDrawn?.let { StationFormat.length(it, if (StationFormat.toLength(it) < 0.99) 1 else 0) } ?: "") else "Curvas: não") { close ->
-                        MenuLine("Mostrar curvas de nível", checked = showContours) { showContours = !showContours }
-                        MenuTitle("Intervalo")
+                    add(FooterItem(if (showContours) tr("Curvas ") + (contourDrawn?.let { StationFormat.length(it, if (StationFormat.toLength(it) < 0.99) 1 else 0) } ?: "") else tr("Curvas: não")) { close ->
+                        MenuLine(tr("Mostrar curvas de nível"), checked = showContours) { showContours = !showContours }
+                        MenuTitle(tr("Intervalo"))
                         val steps = if (com.appdwg.core.Display.imperial) listOf(0.0, 1.0, 2.0, 5.0, 10.0, 20.0).map { it * StationFormat.FOOT } else listOf(0.0, 0.5, 1.0, 2.0, 5.0, 10.0)
-                        for (iv in steps) MenuLine(if (iv == 0.0) "Automático" else StationFormat.length(iv, if (StationFormat.toLength(iv) < 0.99) 1 else 0),
+                        for (iv in steps) MenuLine(if (iv == 0.0) tr("Automático") else StationFormat.length(iv, if (StationFormat.toLength(iv) < 0.99) 1 else 0),
                             checked = showContours && contourInterval == iv) { contourInterval = iv; showContours = true }
                     })
                 }
-                if (project.cgPoints.isNotEmpty() || vm.userPoints.isNotEmpty()) add(FooterItem(if (v.pointLabels) "Rótulos: sim" else "Rótulos: não") { _ ->
-                    MenuLine("Nome, descrição e cota dos pontos", checked = v.pointLabels) { v.pointLabels = !v.pointLabels }
+                if (project.cgPoints.isNotEmpty() || vm.userPoints.isNotEmpty()) add(FooterItem(if (v.pointLabels) tr("Rótulos: sim") else tr("Rótulos: não")) { _ ->
+                    MenuLine(tr("Nome, descrição e cota dos pontos"), checked = v.pointLabels) { v.pointLabels = !v.pointLabels }
                 })
                 add(FooterItem(StationFormat.lengthUnit) { close ->
-                    MenuTitle("Unidades")
+                    MenuTitle(tr("Unidades"))
                     for (u in UnitChoice.entries) MenuLine(u.label, checked = vm.units.choice == u) { close(); vm.units.choose(u) }
                 })
-                add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: "Auto") { close ->
-                    MenuTitle("Idioma")
+                add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: tr("Auto")) { close ->
+                    MenuTitle(tr("Idioma"))
                     for (l in LanguageChoice.entries) MenuLine(l.label, checked = vm.languages.choice == l) { close(); vm.languages.choose(l) }
                 })
-                add(FooterItem("Tema") { close ->
+                add(FooterItem(tr("Tema")) { close ->
                     for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }
                 })
                 add(FooterItem(crs.epsg?.let { "EPSG $it" } ?: crs.name.take(28)) { close ->
@@ -1227,15 +1229,15 @@ private fun ProjectScreen(
                             MenuLine(c.name, checked = c.id == crs.id) { close(); vm.chooseCrs(c) }
                         }
                     }
-                    MenuLine("Escolher sistema de coordenadas…") { close(); showCrs = true }
+                    MenuLine(tr("Escolher sistema de coordenadas…")) { close(); showCrs = true }
                 })
                 val fix = gnssFix
-                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: "GPS desligado",
+                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: tr("GPS desligado"),
                     dot = if (fix == null) g.muted else if (fix.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(fix.quality)) { close ->
-                    MenuLine(if (fix == null) "Conectar GPS…" else "GPS…") { close(); showGps = true }
-                    MenuLine("Calibração e geoide…") { close(); showCalibration = true }
-                    MenuLine("Seguir a posição na planta", checked = gpsFollow) { gpsFollow = !gpsFollow }
-                    if (fix != null) MenuLine("Desconectar") { close(); vm.gnss.disconnect() }
+                    MenuLine(if (fix == null) tr("Conectar GPS…") else "GPS…") { close(); showGps = true }
+                    MenuLine(tr("Calibração e geoide…")) { close(); showCalibration = true }
+                    MenuLine(tr("Seguir a posição na planta"), checked = gpsFollow) { gpsFollow = !gpsFollow }
+                    if (fix != null) MenuLine(tr("Desconectar")) { close(); vm.gnss.disconnect() }
                 })
             },
         )
@@ -1371,12 +1373,12 @@ private fun ProjectScreen(
     if (showContourDialog) {
         AlertDialog(
             onDismissRequest = { showContourDialog = false },
-            confirmButton = { TextButton(onClick = { showContourDialog = false }) { Text("Fechar") } },
-            dismissButton = { TextButton(onClick = { showContours = false; showContourDialog = false }) { Text("Desligar") } },
-            title = { Text("Curvas de nível") },
+            confirmButton = { TextButton(onClick = { showContourDialog = false }) { Text(tr("Fechar")) } },
+            dismissButton = { TextButton(onClick = { showContours = false; showContourDialog = false }) { Text(tr("Desligar")) } },
+            title = { Text(tr("Curvas de nível")) },
             text = {
                 Column {
-                    Text("Intervalo")
+                    Text(tr("Intervalo"))
                     Row {
                         // Round intervals in the shown unit (1, 2, 5… ft in imperial), kept in metres.
                         (if (com.appdwg.core.Display.imperial) listOf(0.0, 1.0, 2.0, 5.0, 10.0, 20.0).map { it * StationFormat.FOOT }
@@ -1384,12 +1386,12 @@ private fun ProjectScreen(
                             androidx.compose.material3.FilterChip(
                                 selected = showContours && contourInterval == i,
                                 onClick = { contourInterval = i; showContours = true },
-                                label = { Text(if (i == 0.0) "Auto" else StationFormat.length(i, if (StationFormat.toLength(i) < 0.99) 1 else 0)) },
+                                label = { Text(if (i == 0.0) tr("Auto") else StationFormat.length(i, if (StationFormat.toLength(i) < 0.99) 1 else 0)) },
                                 modifier = Modifier.padding(end = 6.dp),
                             )
                         }
                     }
-                    Text("\"Auto\" escolhe o intervalo pelo zoom. As curvas são calculadas para a área visível.",
+                    Text(tr("\"Auto\" escolhe o intervalo pelo zoom. As curvas são calculadas para a área visível."),
                         style = MaterialTheme.typography.bodySmall)
                 }
             },
@@ -1481,8 +1483,8 @@ private fun ProjectScreen(
     if (showWarnings) {
         AlertDialog(
             onDismissRequest = { showWarnings = false },
-            confirmButton = { TextButton(onClick = { showWarnings = false }) { Text("Fechar") } },
-            title = { Text("Avisos da leitura") },
+            confirmButton = { TextButton(onClick = { showWarnings = false }) { Text(tr("Fechar")) } },
+            title = { Text(tr("Avisos da leitura")) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     project.warnings.forEach { Text("• $it", Modifier.padding(vertical = 2.dp)) }
@@ -1498,14 +1500,14 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
     val d = vm.drape
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onPick) { Text(if (d == null) "Escolher" else "Trocar") }
-                if (d != null) OutlinedButton(onClick = { vm.removeDrape(); onDismiss() }) { Text("Remover") }
+                TextButton(onClick = onPick) { Text(if (d == null) tr("Escolher") else tr("Trocar")) }
+                if (d != null) OutlinedButton(onClick = { vm.removeDrape(); onDismiss() }) { Text(tr("Remover")) }
             }
         },
-        title = { Text("Imagem sobre a superfície") },
+        title = { Text(tr("Imagem sobre a superfície")) },
         text = {
             Column {
                 if (d != null) {
@@ -1514,7 +1516,7 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
                         Text(d.name, maxLines = 1)
                     }
                 } else if (vm.tasks.isEmpty()) {
-                    Text("Escolha um TIFF, JPG ou PNG. Para posicionar um JPG ou PNG, selecione junto o arquivo de georreferência (.jgw, .pgw ou .tfw).")
+                    Text(tr("Escolha um TIFF, JPG ou PNG. Para posicionar um JPG ou PNG, selecione junto o arquivo de georreferência (.jgw, .pgw ou .tfw)."))
                 }
                 vm.drapeMessage?.let {
                     Spacer(Modifier.height(8.dp))
@@ -1536,19 +1538,19 @@ private fun InfoCard(info: PointInfo, difference: String?, marked: List<Pair<Str
             val a = info.alignment
             if (a != null) {
                 Text(a.name, style = MaterialTheme.typography.titleSmall)
-                Line("Estaca", StationFormat.estaca(a.stationOffset.station) +
+                Line(tr("Estaca"), StationFormat.estaca(a.stationOffset.station) +
                     "  (${StationFormat.length(a.stationOffset.station)})")
-                Line("Afastamento", StationFormat.offset(a.stationOffset.offset) +
-                    if (a.stationOffset.outside) "  (fora do eixo)" else "")
-                a.designElevation?.let { Line("Greide no eixo", StationFormat.length(it, 3)) }
-                a.terrainOnAxis?.let { Line("Terreno no eixo", StationFormat.length(it, 3)) }
+                Line(tr("Afastamento"), StationFormat.offset(a.stationOffset.offset) +
+                    if (a.stationOffset.outside) tr("  (fora do eixo)") else "")
+                a.designElevation?.let { Line(tr("Greide no eixo"), StationFormat.length(it, 3)) }
+                a.terrainOnAxis?.let { Line(tr("Terreno no eixo"), StationFormat.length(it, 3)) }
                 a.cutFill?.let {
-                    Line(if (it >= 0) "Aterro" else "Corte", StationFormat.length(abs(it), 3))
+                    Line(if (it >= 0) tr("Aterro") else tr("Corte"), StationFormat.length(abs(it), 3))
                 }
             }
-            difference?.let { Line("B − A no ponto", it) }
+            difference?.let { Line(tr("B − A no ponto"), it) }
             marked.forEach { (name, z) -> Line(name.substringAfterLast('|'), z) }
-            Line("Terreno no ponto", info.terrainElevation?.let { StationFormat.length(it, 3) } ?: "fora da superfície")
+            Line(tr("Terreno no ponto"), info.terrainElevation?.let { StationFormat.length(it, 3) } ?: tr("fora da superfície"))
             Line("E / N", StationFormat.lengthValue(info.position.x) + " / " + StationFormat.lengthValue(info.position.y))
         }
     }
@@ -1585,7 +1587,7 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
     d ?: return null
     val za = project.surfaces.firstOrNull { it.name == d.baseName }?.elevationAt(p)
     val zb = project.surfaces.firstOrNull { it.name == d.otherName }?.elevationAt(p)
-    if (za == null || zb == null) return "fora de uma das superfícies"
+    if (za == null || zb == null) return tr("fora de uma das superfícies")
     val v = zb - za
     return signedLength(v) + when {
         v > 0.0005 -> " (aterro)"
@@ -1600,38 +1602,38 @@ private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit
     // Taps on the card must not reach the plan underneath and add a point.
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(12.dp)) {
-            Text("Medir", style = MaterialTheme.typography.titleSmall)
+            Text(tr("Medir"), style = MaterialTheme.typography.titleSmall)
             val leg = m?.legs?.lastOrNull()
             if (m == null || leg == null) {
                 Text(
-                    "Toque na planta para marcar os pontos. O toque encaixa em pontos e vértices próximos." +
-                        if (m != null) " Marque o próximo ponto." else "",
+                    tr("Toque na planta para marcar os pontos. O toque encaixa em pontos e vértices próximos.") +
+                        if (m != null) tr(" Marque o próximo ponto.") else "",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
-                if (m.legs.size > 1) Text("Último trecho", style = MaterialTheme.typography.labelMedium)
-                Line("Distância", StationFormat.length(leg.distance, 3))
-                Line("Azimute", Measure.dms(leg.azimuth))
+                if (m.legs.size > 1) Text(tr("Último trecho"), style = MaterialTheme.typography.labelMedium)
+                Line(tr("Distância"), StationFormat.length(leg.distance, 3))
+                Line(tr("Azimute"), Measure.dms(leg.azimuth))
                 leg.rise?.let { r ->
-                    Line("Desnível", signedLength(r))
-                    leg.slopePercent?.let { Line("Inclinação", signed(it, 2) + " %") }
+                    Line(tr("Desnível"), signedLength(r))
+                    leg.slopePercent?.let { Line(tr("Inclinação"), signed(it, 2) + " %") }
                 }
                 if (m.legs.size > 1) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Total (${m.legs.size + 1} pontos)", style = MaterialTheme.typography.labelMedium)
-                    Line("Comprimento", StationFormat.length(m.length, 3))
-                    m.rise?.let { r -> Line("Desnível 1º → último", signedLength(r)) }
+                    Text(tr("Total ({0} pontos)", m.legs.size + 1), style = MaterialTheme.typography.labelMedium)
+                    Line(tr("Comprimento"), StationFormat.length(m.length, 3))
+                    m.rise?.let { r -> Line(tr("Desnível 1º → último"), signedLength(r)) }
                 }
-                m.slopeLength?.let { Line("Comprimento inclinado", StationFormat.length(it, 3)) }
-                m.area?.let { Line("Área", Measure.area(it)) }
-                m.perimeter?.let { Line("Perímetro", StationFormat.length(it, 3)) }
+                m.slopeLength?.let { Line(tr("Comprimento inclinado"), StationFormat.length(it, 3)) }
+                m.area?.let { Line(tr("Área"), Measure.area(it)) }
+                m.perimeter?.let { Line(tr("Perímetro"), StationFormat.length(it, 3)) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (m != null) {
-                    TextButton(onClick = onUndo) { Text("Desfazer") }
-                    TextButton(onClick = onClear) { Text("Limpar") }
+                    TextButton(onClick = onUndo) { Text(tr("Desfazer")) }
+                    TextButton(onClick = onClear) { Text(tr("Limpar")) }
                 }
-                TextButton(onClick = onDone) { Text("Concluir") }
+                TextButton(onClick = onDone) { Text(tr("Concluir")) }
             }
         }
     }
@@ -1651,7 +1653,7 @@ private fun Line(label: String, value: String) {
 }
 
 private fun summary(p: LandXmlProject): String = buildList {
-    if (p.surfaces.isNotEmpty()) add(plural(p.surfaces.size, "superfície", "superfícies"))
+    if (p.surfaces.isNotEmpty()) add(plural(p.surfaces.size, tr("superfície"), tr("superfícies")))
     if (p.alignments.isNotEmpty()) add(plural(p.alignments.size, "alinhamento", "alinhamentos"))
     if (p.cgPoints.isNotEmpty()) add(plural(p.cgPoints.size, "ponto", "pontos"))
     if (p.points.isNotEmpty()) add(plural(p.points.size, "ponto _POINTS", "pontos _POINTS"))
@@ -1687,21 +1689,21 @@ private fun LayersDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onAllOn) { Text("Ligar todas") }
-                TextButton(onClick = onAllOff) { Text("Desligar todas") }
+                TextButton(onClick = onAllOn) { Text(tr("Ligar todas")) }
+                TextButton(onClick = onAllOff) { Text(tr("Desligar todas")) }
             }
         },
-        title = { Text("Camadas") },
+        title = { Text(tr("Camadas")) },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Cor", Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall)
-                    Text("Nome", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
-                    Text("Ligada", Modifier.width(64.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
-                    Text("Congelada", Modifier.width(76.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                    Text(tr("Cor"), Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall)
+                    Text(tr("Nome"), Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
+                    Text(tr("Ligada"), Modifier.width(64.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
+                    Text(tr("Congelada"), Modifier.width(76.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
                 }
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     project.layers.forEach { layer ->
@@ -1734,11 +1736,11 @@ private fun LayersDialog(
     editing?.let { layer ->
         AlertDialog(
             onDismissRequest = { editing = null },
-            confirmButton = { TextButton(onClick = { editing = null }) { Text("Fechar") } },
+            confirmButton = { TextButton(onClick = { editing = null }) { Text(tr("Fechar")) } },
             dismissButton = {
-                TextButton(onClick = { onColor(layer, null); editing = null }) { Text("Cor original") }
+                TextButton(onClick = { onColor(layer, null); editing = null }) { Text(tr("Cor original")) }
             },
-            title = { Text("Cor de $layer") },
+            title = { Text(tr("Cor de {0}", layer)) },
             text = {
                 Column {
                     PALETTE.chunked(6).forEach { row ->
@@ -1788,8 +1790,8 @@ private fun DropButton(text: String, drive: Boolean, onDevice: () -> Unit, onDri
     Box {
         GButton("$text ▾", { open = true })
         androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
-            androidx.compose.material3.DropdownMenuItem(text = { Text("Neste aparelho") }, onClick = { open = false; onDevice() })
-            androidx.compose.material3.DropdownMenuItem(text = { Text("Google Drive") }, leadingIcon = { Text("☁") }, onClick = { open = false; onDrive() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text(tr("Neste aparelho")) }, onClick = { open = false; onDevice() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text(tr("Google Drive")) }, leadingIcon = { Text("☁") }, onClick = { open = false; onDrive() })
         }
     }
 }

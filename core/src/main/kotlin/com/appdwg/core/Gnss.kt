@@ -14,8 +14,11 @@ import kotlin.math.sinh
 import kotlin.math.sqrt
 
 /** GNSS solution quality, from the GGA fix indicator. */
-enum class FixQuality(val label: String) {
+enum class FixQuality(private val labelPt: String) {
     NONE("sem posição"), GPS("autônomo"), DGPS("DGPS"), PPS("PPS"), RTK_FIXED("RTK fixo"), RTK_FLOAT("RTK flutuante"), ESTIMATED("estimado"), MANUAL("manual"), SIMULATED("simulado");
+
+    val label: String get() = tr(labelPt)
+
 
     companion object {
         fun of(code: Int) = when (code) { 1 -> GPS; 2 -> DGPS; 3 -> PPS; 4 -> RTK_FIXED; 5 -> RTK_FLOAT; 6 -> ESTIMATED; 7 -> MANUAL; 8 -> SIMULATED; else -> NONE }
@@ -177,9 +180,9 @@ class NtripClient(
         val status = head.lineSequence().firstOrNull().orEmpty()
         when {
             status.startsWith("ICY 200") || status.contains(" 200") -> {}
-            status.contains("401") -> error("caster recusou usuário/senha (401)")
-            status.startsWith("SOURCETABLE") || head.contains("text/plain") -> error("mountpoint \"${settings.mountpoint}\" não existe no caster")
-            else -> error("resposta inesperada do caster: ${status.take(60)}")
+            status.contains("401") -> error(tr("caster recusou usuário/senha (401)"))
+            status.startsWith("SOURCETABLE") || head.contains("text/plain") -> error(tr("mountpoint \"{0}\" não existe no caster", settings.mountpoint))
+            else -> error(tr("resposta inesperada do caster: {0}", status.take(60)))
         }
         var lastGga = 0L
         val buf = ByteArray(4096)

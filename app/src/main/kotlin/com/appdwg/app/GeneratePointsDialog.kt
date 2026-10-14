@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,10 +43,10 @@ import com.appdwg.core.StationFormat
 import kotlin.math.atan2
 
 /** Where the elevation of generated points comes from. */
-enum class ZSource(val label: String) { LINE("Da linha 3D"), SURFACE("Da superfície"), FIXED("Fixa") }
+enum class ZSource(private val labelPt: String) { LINE("Da linha 3D"), SURFACE("Da superfície"), FIXED("Fixa"); val label: String get() = tr(labelPt) }
 
 /** Where the grid is laid. */
-enum class GridArea(val label: String) { DRAWN("Polígono desenhado"), LINE("Polilinha fechada"), VIEW("Área visível"), SURFACE("Limite da superfície") }
+enum class GridArea(private val labelPt: String) { DRAWN("Polígono desenhado"), LINE("Polilinha fechada"), VIEW("Área visível"), SURFACE("Limite da superfície"); val label: String get() = tr(labelPt) }
 
 /** Settings of "generate points", kept while the user picks things on the plan. */
 class GenState {
@@ -79,7 +81,7 @@ private fun len(s: String) = StationFormat.parseLength(s)
 /** Builds the points the settings describe, numbered after the existing ones; null with a reason. */
 fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoint>, viewport: Bounds?): Pair<List<CogoPoint>?, String?> {
     val surface = project.surfaces.firstOrNull { it.name == g.surface } ?: project.surfaces.firstOrNull()
-    val ref = len(g.refHeight) ?: return null to "Altura referencial inválida."
+    val ref = len(g.refHeight) ?: return null to tr("Altura referencial inválida.")
     val fixed = len(g.fixedZ)
     fun z(p: Point2, lineZ: Double?): Double? = when (g.zSource) {
         ZSource.LINE -> lineZ
@@ -89,14 +91,14 @@ fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoin
     var next = PointFile.nextNumber(existing).toLong()
     val out = ArrayList<CogoPoint>()
     if (!g.grid) {
-        val lineRef = g.line ?: return null to "Toque numa linha ou eixo na planta."
-        val path = PointGen.path(project, lineRef) ?: return null to "Linha não encontrada."
-        val spacing = len(g.spacing)?.takeIf { it > 0 } ?: return null to "Espaçamento inválido."
-        val offsets = PointGen.parseOffsets(g.offsets) ?: return null to "Offsets inválidos (ex.: -3,5; 0; 3,5)."
-        if (g.zSource == ZSource.LINE && path.zs == null) return null to "A linha não é 3D: escolha cota da superfície ou fixa."
+        val lineRef = g.line ?: return null to tr("Toque numa linha ou eixo na planta.")
+        val path = PointGen.path(project, lineRef) ?: return null to tr("Linha não encontrada.")
+        val spacing = len(g.spacing)?.takeIf { it > 0 } ?: return null to tr("Espaçamento inválido.")
+        val offsets = PointGen.parseOffsets(g.offsets) ?: return null to tr("Offsets inválidos (ex.: -3,5; 0; 3,5).")
+        if (g.zSource == ZSource.LINE && path.zs == null) return null to tr("A linha não é 3D: escolha cota da superfície ou fixa.")
         val isAxis = lineRef is LineRef.Axis
-        val from = if (isAxis) g.from.takeIf { it.isNotBlank() }?.let { StationFormat.parse(it) ?: return null to "Estaca inicial inválida." } else null
-        val to = if (isAxis) g.to.takeIf { it.isNotBlank() }?.let { StationFormat.parse(it) ?: return null to "Estaca final inválida." } else null
+        val from = if (isAxis) g.from.takeIf { it.isNotBlank() }?.let { StationFormat.parse(it) ?: return null to tr("Estaca inicial inválida.") } else null
+        val to = if (isAxis) g.to.takeIf { it.isNotBlank() }?.let { StationFormat.parse(it) ?: return null to tr("Estaca final inválida.") } else null
         for (lp in PointGen.alongLine(path, spacing, offsets, g.includeVertices, from, to)) {
             val zz = z(lp.position, lp.lineZ) ?: Double.NaN
             val where = if (isAxis) "E ${StationFormat.estaca(lp.distance)}" + (if (lp.offset != 0.0) " " + StationFormat.offset(lp.offset) else "")
@@ -104,20 +106,20 @@ fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoin
             out += CogoPoint((next++).toString(), listOf(g.prefix.trim(), where).filter { it.isNotEmpty() }.joinToString(" "), lp.position.x, lp.position.y, zz)
         }
     } else {
-        val dx = len(g.dx)?.takeIf { it > 0 } ?: return null to "Espaçamento X inválido."
-        val dy = len(g.dy)?.takeIf { it > 0 } ?: return null to "Espaçamento Y inválido."
-        val rot = num(g.rotation) ?: return null to "Rotação inválida."
-        if (g.zSource == ZSource.LINE) return null to "Na malha, use cota da superfície ou fixa."
+        val dx = len(g.dx)?.takeIf { it > 0 } ?: return null to tr("Espaçamento X inválido.")
+        val dy = len(g.dy)?.takeIf { it > 0 } ?: return null to tr("Espaçamento Y inválido.")
+        val rot = num(g.rotation) ?: return null to tr("Rotação inválida.")
+        if (g.zSource == ZSource.LINE) return null to tr("Na malha, use cota da superfície ou fixa.")
         val area: List<Point2> = when (g.area) {
-            GridArea.DRAWN -> g.drawnArea.takeIf { it.size >= 3 } ?: return null to "Desenhe o polígono da malha."
+            GridArea.DRAWN -> g.drawnArea.takeIf { it.size >= 3 } ?: return null to tr("Desenhe o polígono da malha.")
             GridArea.LINE -> {
-                val pth = g.areaLine?.let { PointGen.path(project, it) } ?: return null to "Toque numa polilinha fechada."
-                List(pth.xs.size) { Point2(pth.xs[it], pth.ys[it]) }.takeIf { it.size >= 3 } ?: return null to "A polilinha precisa de 3 vértices."
+                val pth = g.areaLine?.let { PointGen.path(project, it) } ?: return null to tr("Toque numa polilinha fechada.")
+                List(pth.xs.size) { Point2(pth.xs[it], pth.ys[it]) }.takeIf { it.size >= 3 } ?: return null to tr("A polilinha precisa de 3 vértices.")
             }
             GridArea.VIEW -> viewport?.let { b -> listOf(Point2(b.minX, b.minY), Point2(b.maxX, b.minY), Point2(b.maxX, b.maxY), Point2(b.minX, b.maxY)) }
-                ?: return null to "Área visível indisponível."
+                ?: return null to tr("Área visível indisponível.")
             GridArea.SURFACE -> surface?.bounds?.let { b -> listOf(Point2(b.minX, b.minY), Point2(b.maxX, b.minY), Point2(b.maxX, b.maxY), Point2(b.minX, b.maxY)) }
-                ?: return null to "Escolha uma superfície."
+                ?: return null to tr("Escolha uma superfície.")
         }
         val pts = try { PointGen.grid(area, dx, dy, rot) } catch (e: IllegalArgumentException) { return null to e.message }
         for (p in pts) {
@@ -126,7 +128,7 @@ fun generatePoints(g: GenState, project: LandXmlProject, existing: List<CogoPoin
             out += CogoPoint((next++).toString(), g.prefix.trim(), p.x, p.y, z(p, null) ?: Double.NaN)
         }
     }
-    if (out.isEmpty()) return null to "Nenhum ponto gerado com essas opções."
+    if (out.isEmpty()) return null to tr("Nenhum ponto gerado com essas opções.")
     return out to null
 }
 
@@ -153,37 +155,37 @@ fun GeneratePointsDialog(
                     val (pts, why) = generatePoints(g, project, existing, viewport)
                     g.preview = pts.orEmpty(); g.message = why
                     if (pts != null) onPreview()
-                }) { Text("Pré-visualizar") }
-                TextButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }) { Text("Criar ${g.preview.size} pontos") }
+                }) { Text(tr("Pré-visualizar")) }
+                TextButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }) { Text(tr("Criar {0} pontos", g.preview.size)) }
             }
         },
-        dismissButton = { TextButton(onClick = { g.preview = emptyList(); onDismiss() }) { Text("Fechar") } },
-        title = { Text("Gerar pontos (camada _POINTS)") },
+        dismissButton = { TextButton(onClick = { g.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
+        title = { Text(tr("Gerar pontos (camada _POINTS)")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = !g.grid, onClick = { g.grid = false; g.preview = emptyList() }, label = { Text("Sobre linha") })
-                    FilterChip(selected = g.grid, onClick = { g.grid = true; g.preview = emptyList(); if (g.zSource == ZSource.LINE) g.zSource = ZSource.SURFACE }, label = { Text("Malha") })
+                    FilterChip(selected = !g.grid, onClick = { g.grid = false; g.preview = emptyList() }, label = { Text(tr("Sobre linha")) })
+                    FilterChip(selected = g.grid, onClick = { g.grid = true; g.preview = emptyList(); if (g.zSource == ZSource.LINE) g.zSource = ZSource.SURFACE }, label = { Text(tr("Malha")) })
                 }
                 if (!g.grid) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onPick(GenPick.LINE) }) { Text(if (g.line == null) "Tocar na linha" else "Trocar linha") }
+                        OutlinedButton(onClick = { onPick(GenPick.LINE) }) { Text(if (g.line == null) tr("Tocar na linha") else tr("Trocar linha")) }
                         Text(when (val l = g.line) {
-                            null -> "nenhuma linha escolhida"
-                            is LineRef.Axis -> "Eixo ${project.alignments.getOrNull(l.index)?.name}"
-                            is LineRef.Drawing -> project.polylines.getOrNull(l.index)?.let { "Linha na camada ${it.layer}" + if (it.zs != null) " (3D)" else "" } ?: "?"
+                            null -> tr("nenhuma linha escolhida")
+                            is LineRef.Axis -> tr("Eixo {0}", project.alignments.getOrNull(l.index)?.name)
+                            is LineRef.Drawing -> project.polylines.getOrNull(l.index)?.let { tr("Linha na camada {0}", it.layer) + if (it.zs != null) " (3D)" else "" } ?: "?"
                         }, style = MaterialTheme.typography.bodyMedium)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(g.spacing, { g.spacing = it }, label = { Text("Distância entre pontos (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
-                        OutlinedTextField(g.offsets, { g.offsets = it }, label = { Text("Offsets (+D / −E), ex.: -3,5; 0; 3,5") }, singleLine = true, modifier = Modifier.width(330.dp), keyboardOptions = text)
+                        OutlinedTextField(g.spacing, { g.spacing = it }, label = { Text(tr("Distância entre pontos ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
+                        OutlinedTextField(g.offsets, { g.offsets = it }, label = { Text(tr("Offsets (+D / −E), ex.: -3,5; 0; 3,5")) }, singleLine = true, modifier = Modifier.width(330.dp), keyboardOptions = text)
                         Checkbox(checked = g.includeVertices, onCheckedChange = { g.includeVertices = it })
-                        Text("Incluir vértices", style = MaterialTheme.typography.bodySmall)
+                        Text(tr("Incluir vértices"), style = MaterialTheme.typography.bodySmall)
                     }
                     if (g.line is LineRef.Axis) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(g.from, { g.from = it }, label = { Text("Estaca inicial (opcional)") }, singleLine = true, modifier = Modifier.width(220.dp))
-                            OutlinedTextField(g.to, { g.to = it }, label = { Text("Estaca final (opcional)") }, singleLine = true, modifier = Modifier.width(220.dp))
+                            OutlinedTextField(g.from, { g.from = it }, label = { Text(tr("Estaca inicial (opcional)")) }, singleLine = true, modifier = Modifier.width(220.dp))
+                            OutlinedTextField(g.to, { g.to = it }, label = { Text(tr("Estaca final (opcional)")) }, singleLine = true, modifier = Modifier.width(220.dp))
                         }
                     }
                 } else {
@@ -192,23 +194,23 @@ fun GeneratePointsDialog(
                     }
                     when (g.area) {
                         GridArea.DRAWN -> OutlinedButton(onClick = { onPick(GenPick.AREA_DRAW) }) {
-                            Text(if (g.drawnArea.size >= 3) "Redesenhar polígono (${g.drawnArea.size} vértices)" else "Desenhar polígono na planta")
+                            Text(if (g.drawnArea.size >= 3) tr("Redesenhar polígono ({0} vértices)", g.drawnArea.size) else tr("Desenhar polígono na planta"))
                         }
                         GridArea.LINE -> OutlinedButton(onClick = { onPick(GenPick.AREA_LINE) }) {
-                            Text(if (g.areaLine == null) "Tocar na polilinha fechada" else "Trocar polilinha")
+                            Text(if (g.areaLine == null) tr("Tocar na polilinha fechada") else tr("Trocar polilinha"))
                         }
                         else -> {}
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(g.dx, { g.dx = it }, label = { Text("Espaçamento X (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
-                        OutlinedTextField(g.dy, { g.dy = it }, label = { Text("Espaçamento Y (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
-                        OutlinedTextField(g.rotation, { g.rotation = it }, label = { Text("Rotação (°)") }, singleLine = true, modifier = Modifier.width(130.dp), keyboardOptions = text)
-                        TextButton(onClick = { onPick(GenPick.ROTATION) }) { Text("Alinhar a uma linha") }
+                        OutlinedTextField(g.dx, { g.dx = it }, label = { Text(tr("Espaçamento X ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
+                        OutlinedTextField(g.dy, { g.dy = it }, label = { Text(tr("Espaçamento Y ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
+                        OutlinedTextField(g.rotation, { g.rotation = it }, label = { Text(tr("Rotação (°)")) }, singleLine = true, modifier = Modifier.width(130.dp), keyboardOptions = text)
+                        TextButton(onClick = { onPick(GenPick.ROTATION) }) { Text(tr("Alinhar a uma linha")) }
                     }
                 }
                 HorizontalDivider()
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Cota", Modifier.width(50.dp))
+                    Text(tr("Cota"), Modifier.width(50.dp))
                     ZSource.entries.forEach { z ->
                         if (z == ZSource.LINE && (g.grid || path?.zs == null)) return@forEach
                         FilterChip(selected = g.zSource == z, onClick = { g.zSource = z }, label = { Text(z.label) })
@@ -217,21 +219,21 @@ fun GeneratePointsDialog(
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
-                            TextButton(onClick = { open = true }) { Text(g.surface ?: names.firstOrNull() ?: "sem superfície", maxLines = 1) }
+                            TextButton(onClick = { open = true }) { Text(g.surface ?: names.firstOrNull() ?: tr("sem superfície"), maxLines = 1) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { g.surface = n; open = false }) }
                             }
                         }
                     }
                     if (g.zSource == ZSource.FIXED) {
-                        OutlinedTextField(g.fixedZ, { g.fixedZ = it }, label = { Text("Cota (${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(140.dp), keyboardOptions = text)
+                        OutlinedTextField(g.fixedZ, { g.fixedZ = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(140.dp), keyboardOptions = text)
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(g.refHeight, { g.refHeight = it }, label = { Text("Altura referencial (+/− ${StationFormat.lengthUnit})") }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
-                    OutlinedTextField(g.prefix, { g.prefix = it }, label = { Text("Prefixo da descrição") }, singleLine = true, modifier = Modifier.width(220.dp))
+                    OutlinedTextField(g.refHeight, { g.refHeight = it }, label = { Text(tr("Altura referencial (+/− {0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
+                    OutlinedTextField(g.prefix, { g.prefix = it }, label = { Text(tr("Prefixo da descrição")) }, singleLine = true, modifier = Modifier.width(220.dp))
                 }
-                Text("Numeração continua a partir do ponto ${PointFile.nextNumber(existing)}.", style = MaterialTheme.typography.bodySmall)
+                Text(tr("Numeração continua a partir do ponto {0}.", PointFile.nextNumber(existing)), style = MaterialTheme.typography.bodySmall)
                 g.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },

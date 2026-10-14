@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -159,10 +161,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val total = reportedSize(uri)?.takeIf { it > 0 }
         val dir = java.io.File(getApplication<Application>().cacheDir, "cloud").apply { mkdirs() }
         val file = java.io.File(dir, Integer.toHexString(uri.toString().hashCode()))
-        task.step("Aguardando o Google Drive…")
+        task.step(tr("Aguardando o Google Drive…"))
         val job = coroutineContext[Job]!!
         try {
-            (getApplication<Application>().contentResolver.openInputStream(uri) ?: error("arquivo indisponível")).use { inp ->
+            (getApplication<Application>().contentResolver.openInputStream(uri) ?: error(tr("arquivo indisponível"))).use { inp ->
                 file.outputStream().use { out ->
                     val buf = ByteArray(1 shl 16)
                     var done = 0L
@@ -177,7 +179,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         if (done - shown >= 1 shl 18) {
                             shown = done
                             fun mb(b: Long) = StationFormat.decimal(b / 1048576.0, 1)
-                            task.step("Baixando do Google Drive · " + mb(done) + (total?.let { " de " + mb(it) } ?: "") + " MB",
+                            task.step(tr("Baixando do Google Drive · ") + mb(done) + (total?.let { " de " + mb(it) } ?: "") + " MB",
                                 total?.let { (done.toFloat() / it).coerceAtMost(1f) })
                         }
                     }
@@ -233,7 +235,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val picture = named.firstOrNull { it !== world }
         drapeMessage = null
         if (picture == null) {
-            drapeMessage = "Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência."
+            drapeMessage = tr("Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência.")
             return
         }
         val (uri, name) = picture
@@ -246,32 +248,32 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun drapeNow(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>) {
         run {
             try {
-                val pic = tracked("Imagem $name") { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
-                    ?: error("formato de imagem não reconhecido")
+                val pic = tracked(tr("Imagem {0}", name)) { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
+                    ?: error(tr("formato de imagem não reconhecido"))
                 val surfaces = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) }
-                val area = surfaces ?: project.bounds ?: error("projeto sem área")
+                val area = surfaces ?: project.bounds ?: error(tr("projeto sem área"))
                 val worldText = world?.let { (w, _) ->
                     withContext(Dispatchers.IO) {
                         getApplication<Application>().contentResolver.openInputStream(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) }
                     }
                 }
                 val (bounds, placement) = when {
-                    worldText != null -> WorldFile.extent(worldText, pic.sourceWidth, pic.sourceHeight) to "posicionada pelo arquivo ${world?.second}"
-                    pic.extent != null -> pic.extent to "posicionada pelo GeoTIFF"
-                    else -> area to "esticada sobre a superfície (a imagem não tem georreferência)"
+                    worldText != null -> WorldFile.extent(worldText, pic.sourceWidth, pic.sourceHeight) to tr("posicionada pelo arquivo {0}", world?.second)
+                    pic.extent != null -> pic.extent to tr("posicionada pelo GeoTIFF")
+                    else -> area to tr("esticada sobre a superfície (a imagem não tem georreferência)")
                 }
                 drape = Drape(name, bounds, pic.image, placement)
                 drapeUris = uris
                 drapeVisible = true
                 drapeMessage = if (!overlaps(bounds, area)) {
-                    "A imagem foi $placement, mas não cai sobre a superfície. Confira se as duas estão no mesmo sistema de coordenadas."
+                    tr("A imagem foi {0}, mas não cai sobre a superfície. Confira se as duas estão no mesmo sistema de coordenadas.", placement)
                 } else {
-                    "Imagem $placement."
+                    tr("Imagem {0}.", placement)
                 }
             } catch (e: OutOfMemoryError) {
-                drapeMessage = "Imagem grande demais para a memória deste aparelho."
+                drapeMessage = tr("Imagem grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                drapeMessage = "Não foi possível usar a imagem: ${e.message ?: e.javaClass.simpleName}"
+                drapeMessage = tr("Não foi possível usar a imagem: {0}", e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -327,12 +329,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val name = displayName(uri)
         run {
             try {
-                val drawing = tracked("Adicionando $name") { t ->
+                val drawing = tracked(tr("Adicionando {0}", name)) { t ->
                     if (CloudDocs.isDrive(uri.toString())) download(uri, t)
                     withContext(Dispatchers.IO) { read(uri, t) }
                 }
                 if (drawing.surfaces.isEmpty() && drawing.alignments.isEmpty() && drawing.cgPoints.isEmpty() && drawing.polylines.isEmpty()) {
-                    compareMessage = "$name não tem superfície, alinhamento, ponto nem linha."
+                    compareMessage = tr("{0} não tem superfície, alinhamento, ponto nem linha.", name)
                     return
                 }
                 // Unique label, so the same file name added twice still reads apart.
@@ -343,15 +345,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 refreshJob?.cancel()
                 refreshNow()
                 compareMessage = "$name adicionado: " + listOfNotNull(
-                    drawing.surfaces.size.takeIf { it > 0 }?.let { "$it superfície(s)" },
+                    drawing.surfaces.size.takeIf { it > 0 }?.let { tr("{0} superfície(s)", it) },
                     drawing.alignments.size.takeIf { it > 0 }?.let { "$it alinhamento(s)" },
                     drawing.cgPoints.size.takeIf { it > 0 }?.let { "$it ponto(s)" },
                     drawing.polylines.size.takeIf { it > 0 }?.let { "${it} linha(s)" },
                 ).joinToString(", ") + "."
             } catch (e: OutOfMemoryError) {
-                compareMessage = "Arquivo grande demais para a memória deste aparelho."
+                compareMessage = tr("Arquivo grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                compareMessage = "Não foi possível ler $name: ${e.message ?: e.javaClass.simpleName}"
+                compareMessage = tr("Não foi possível ler {0}: {1}", name, e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -405,13 +407,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         compareMessage = null
         viewModelScope.launch {
             try {
-                matrix = tracked("Comparação cruzada") { t ->
+                matrix = tracked(tr("Comparação cruzada")) { t ->
                     withContext(Dispatchers.Default) {
                         val out = LinkedHashMap<Pair<String, String>, SurfaceDifference>()
                         val pairs = surfaces.size * (surfaces.size - 1) / 2
                         var k = 0
                         for (i in surfaces.indices) for (j in i + 1 until surfaces.size) {
-                            t.step("Par ${++k} de $pairs", k.toFloat() / pairs)
+                            t.step(tr("Par {0} de {1}", ++k, pairs), k.toFloat() / pairs)
                             SurfaceCompare.difference(surfaces[i], surfaces[j], maxCells = 500_000)
                                 ?.let { out[surfaces[i].name to surfaces[j].name] = it }
                         }
@@ -419,7 +421,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } catch (e: OutOfMemoryError) {
-                compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+                compareMessage = tr("Superfícies grandes demais para comparar neste aparelho.")
             }
         }
     }
@@ -446,11 +448,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         compareMessage = null
         viewModelScope.launch {
             try {
-                val p = tracked("Comparação por etapas") { withContext(Dispatchers.Default) { SurfaceCompare.stages(surfaces) } }
+                val p = tracked(tr("Comparação por etapas")) { withContext(Dispatchers.Default) { SurfaceCompare.stages(surfaces) } }
                 stageProgress = p
-                if (p == null) compareMessage = "Há etapas que não se sobrepõem."
+                if (p == null) compareMessage = tr("Há etapas que não se sobrepõem.")
             } catch (e: OutOfMemoryError) {
-                compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+                compareMessage = tr("Superfícies grandes demais para comparar neste aparelho.")
             }
         }
     }
@@ -467,14 +469,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun compareNow(a: Surface, b: Surface) {
         run {
             try {
-                val result = tracked("Comparando superfícies") { t ->
+                val result = tracked(tr("Comparando superfícies")) { t ->
                     withContext(Dispatchers.Default) {
-                        t.step("Calculando diferença e volumes")
+                        t.step(tr("Calculando diferença e volumes"))
                         SurfaceCompare.difference(a, b)?.let { it to DifferenceImage.of(it) }
                     }
                 }
                 if (result == null) {
-                    compareMessage = "As duas superfícies não se sobrepõem."
+                    compareMessage = tr("As duas superfícies não se sobrepõem.")
                     clearDifference()
                 } else {
                     difference = result.first
@@ -482,7 +484,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     differenceVisible = true
                 }
             } catch (e: OutOfMemoryError) {
-                compareMessage = "Superfícies grandes demais para comparar neste aparelho."
+                compareMessage = tr("Superfícies grandes demais para comparar neste aparelho.")
             }
         }
     }
@@ -503,7 +505,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val result = withContext(Dispatchers.IO) {
                     val bytes = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: error("arquivo indisponível")
+                        ?: error(tr("arquivo indisponível"))
                     // Civil 3D writes ANSI on Windows; UTF-8 when the bytes are valid UTF-8.
                     val text = runCatching {
                         Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
@@ -516,10 +518,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 userPoints = byNumber.values.toList()
                 val skipped = result.skipped
                 pointsMessage = "$name: ${result.points.size} ponto(s) importado(s)." + if (skipped.isEmpty()) "" else
-                    " ${skipped.size} linha(s) ignorada(s) por não estarem no formato número, descrição, E, N, cota: " +
+                    tr(" {0} linha(s) ignorada(s) por não estarem no formato número, descrição, E, N, cota: ", skipped.size) +
                         skipped.take(8).joinToString(", ") { "linha ${it.first}" } + if (skipped.size > 8) "…" else ""
             } catch (e: Exception) {
-                pointsMessage = "Não foi possível ler $name: ${e.message ?: e.javaClass.simpleName}"
+                pointsMessage = tr("Não foi possível ler {0}: {1}", name, e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -532,11 +534,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openOutputStream(target, "wt")?.use {
                         it.write(PointFile.write(points).toByteArray(Charsets.UTF_8))
-                    } ?: error("destino indisponível")
+                    } ?: error(tr("destino indisponível"))
                 }
                 "${points.size} ponto(s) exportado(s) para ${displayName(target)}."
             } catch (e: Exception) {
-                "Não foi possível exportar: ${e.message ?: e.javaClass.simpleName}"
+                tr("Não foi possível exportar: {0}", e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -548,7 +550,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun addGenerated(points: List<CogoPoint>) {
         userPoints = userPoints + points
         lastGenerated = points
-        pointsMessage = "${points.size} ponto(s) gerado(s) na camada $POINTS_LAYER."
+        pointsMessage = tr("{0} ponto(s) gerado(s) na camada {1}.", points.size, POINTS_LAYER)
     }
 
     fun undoGenerated() {
@@ -573,7 +575,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun surfaceFromPoints() {
         val pts = userPoints.filter { !it.z.isNaN() }
         if (pts.size < 3) {
-            pointsMessage = "São precisos 3 pontos com cota para gerar uma superfície."
+            pointsMessage = tr("São precisos 3 pontos com cota para gerar uma superfície.")
             return
         }
         viewModelScope.launch { surfaceFromPointsNow() }
@@ -584,7 +586,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         if (pts.size < 3) return
         run {
             try {
-                val label = "$POINTS_LAYER superfície"
+                val label = tr("{0} superfície", POINTS_LAYER)
                 val surface = withContext(Dispatchers.Default) {
                     // Named like its entry, so it shows as just the label.
                     AeccPointCache.triangulate(
@@ -596,9 +598,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     AddedFile(label, LandXmlProject(null, null, listOf(surface), emptyList(), emptyList(), emptyList()), null)
                 refreshJob?.cancel()
                 refreshNow()
-                pointsMessage = "Superfície \"$label\" gerada com ${pts.size} pontos (${surface.triangleCount} triângulos)."
+                pointsMessage = tr("Superfície \"{0}\" gerada com {1} pontos ({2} triângulos).", label, pts.size, surface.triangleCount)
             } catch (e: Exception) {
-                pointsMessage = "Não foi possível gerar a superfície: ${e.message ?: e.javaClass.simpleName}"
+                pointsMessage = tr("Não foi possível gerar a superfície: {0}", e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -667,9 +669,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.edit().putString("xref:$path", uri.toString()).apply()
                 refreshProject()
             } catch (e: OutOfMemoryError) {
-                referenceMessage = "Desenho grande demais para a memória deste aparelho."
+                referenceMessage = tr("Desenho grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                referenceMessage = "Não foi possível ler ${displayName(uri)}: ${e.message ?: e.javaClass.simpleName}"
+                referenceMessage = tr("Não foi possível ler {0}: {1}", displayName(uri), e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -681,15 +683,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             referenceMessage = try {
                 withContext(Dispatchers.IO) {
-                    val input = resolver.openInputStream(source) ?: error("arquivo original indisponível")
-                    val output = resolver.openOutputStream(target, "wt") ?: error("destino indisponível")
+                    val input = resolver.openInputStream(source) ?: error(tr("arquivo original indisponível"))
+                    val output = resolver.openOutputStream(target, "wt") ?: error(tr("destino indisponível"))
                     input.bufferedReader(Charsets.UTF_8).use { r ->
                         output.bufferedWriter(Charsets.UTF_8).use { w -> Xrefs.rewritePaths(r, w, pathEdits) }
                     }
                 }
-                "Cópia salva em ${displayName(target)} com ${pathEdits.size} caminho(s) alterado(s)."
+                tr("Cópia salva em {0} com {1} caminho(s) alterado(s).", displayName(target), pathEdits.size)
             } catch (e: Exception) {
-                "Não foi possível salvar: ${e.message ?: e.javaClass.simpleName}"
+                tr("Não foi possível salvar: {0}", e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -766,7 +768,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val b = base ?: return
         val current = state as? ProjectState.Loaded ?: return
         run {
-            val (project, terrain) = tracked("Atualizando referências") { withContext(Dispatchers.Default) {
+            val (project, terrain) = tracked(tr("Atualizando referências")) { withContext(Dispatchers.Default) {
                 var p = b.copy(
                     images = b.images.filter { it.file !in detached },
                     xrefs = b.xrefs.filter { it.name !in detached },
@@ -830,17 +832,17 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         rasterError = null
         viewModelScope.launch {
             try {
-                val bitmap = tracked("Imagem ${displayName(uri)}") { t -> withContext(Dispatchers.IO) { decodeRaster(uri, t) } }
+                val bitmap = tracked(tr("Imagem {0}", displayName(uri))) { t -> withContext(Dispatchers.IO) { decodeRaster(uri, t) } }
                 if (bitmap != null) {
                     rasters = rasters + (file to bitmap)
                     prefs.edit().putString(file, uri.toString()).apply()
                 } else {
-                    rasterError = "Formato de imagem não reconhecido."
+                    rasterError = tr("Formato de imagem não reconhecido.")
                 }
             } catch (e: OutOfMemoryError) {
-                rasterError = "Imagem grande demais para a memória deste aparelho."
+                rasterError = tr("Imagem grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                rasterError = "Não foi possível ler a imagem: ${e.message ?: e.javaClass.simpleName}"
+                rasterError = tr("Não foi possível ler a imagem: {0}", e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -850,7 +852,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         for (image in project.images) {
             val uri = prefs.getString(image.file, null)?.let(Uri::parse) ?: continue
             viewModelScope.launch {
-                val bitmap = tracked("Imagem ${image.fileName}") { t ->
+                val bitmap = tracked(tr("Imagem {0}", image.fileName)) { t ->
                     withContext(Dispatchers.IO) { runCatching { decodeRaster(uri, t) }.getOrNull() }
                 }
                 if (bitmap != null) rasters = rasters + (image.file to bitmap)
@@ -873,16 +875,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             text.startsWith("II*\u0000") || text.startsWith("MM\u0000*") || text.startsWith("II+\u0000") || text.startsWith("MM\u0000+") ->
                 return decodeTiff(uri, task)
             displayName(uri).endsWith(".ecw", ignoreCase = true) ->
-                error("ECW é um formato fechado (Hexagon) sem leitor livre para Android. Converta para TIFF ou JPG no QGIS (Exportar > Salvar como)")
+                error(tr("ECW é um formato fechado (Hexagon) sem leitor livre para Android. Converta para TIFF ou JPG no QGIS (Exportar > Salvar como)"))
             displayName(uri).endsWith(".jp2", ignoreCase = true) ->
-                error("JPEG 2000 não é suportado. Converta para TIFF ou JPG")
+                error(tr("JPEG 2000 não é suportado. Converta para TIFF ou JPG"))
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0) return null
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
-        task.step("Decodificando imagem")
+        task.step(tr("Decodificando imagem"))
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
@@ -918,7 +920,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportNotesCsv(target: Uri) {
         val list = notes
-        writeTo(target, "CSV de anotações") { it.write(("\uFEFF" + NotesExport.csv(list)).toByteArray(Charsets.UTF_8)) }
+        writeTo(target, tr("CSV de anotações")) { it.write(("\uFEFF" + NotesExport.csv(list)).toByteArray(Charsets.UTF_8)) }
     }
 
     fun exportNotesKmz(target: Uri) {
@@ -926,7 +928,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val list = notes
         val dir = notesDir
         val name = (state as? ProjectState.Loaded)?.fileName ?: "Gromatic"
-        writeTo(target, "KMZ de anotações") { out -> NotesExport.kmz(list, crs, name, out) { f -> java.io.File(dir, f).takeIf { it.exists() }?.readBytes() } }
+        writeTo(target, tr("KMZ de anotações")) { out -> NotesExport.kmz(list, crs, name, out) { f -> java.io.File(dir, f).takeIf { it.exists() }?.readBytes() } }
     }
 
     /** Receiver connection; lives with the view model so rotating the screen keeps it. */
@@ -1055,7 +1057,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun roadAxis(rp: RoadParams, project: LandXmlProject): Alignment? {
         if (rp.alignmentIndex >= 0) return project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }.getOrNull(rp.alignmentIndex)
         if (rp.pis.size < 2) return null
-        return AlignmentBuilder.fromPis("Eixo", rp.pis.mapIndexed { i, p ->
+        return AlignmentBuilder.fromPis(tr("Eixo"), rp.pis.mapIndexed { i, p ->
             if (i == 0 || i == rp.pis.size - 1) Pi(p) else Pi(p, rp.radius, rp.spiral)
         })
     }
@@ -1067,24 +1069,24 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         roadMessage = null
         val terrain = project.surfaces.firstOrNull { it.name == rp.terrain }
             ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) && !it.name.startsWith(PLATFORM_LABEL) }
-            ?: run { roadMessage = "Abra ou adicione uma superfície de terreno."; return }
+            ?: run { roadMessage = tr("Abra ou adicione uma superfície de terreno."); return }
         val axis0 = roadAxis(rp, project) ?: run {
-            roadMessage = if (rp.alignmentIndex >= 0) "Alinhamento escolhido não existe mais." else "Desenhe o eixo com 2 PIs ou mais."
+            roadMessage = if (rp.alignmentIndex >= 0) tr("Alinhamento escolhido não existe mais.") else tr("Desenhe o eixo com 2 PIs ou mais.")
             return
         }
         val profile = when {
-            rp.pvis.size >= 2 -> Profile("Greide", AlignmentBuilder.curvesFromK(rp.pvis.sortedBy { it.station }, rp.kValue).mapIndexed { i, p ->
+            rp.pvis.size >= 2 -> Profile(tr("Greide"), AlignmentBuilder.curvesFromK(rp.pvis.sortedBy { it.station }, rp.kValue).mapIndexed { i, p ->
                 // A curve length typed by the user wins over K.
                 rp.pvis.sortedBy { it.station }[i].takeIf { it.curveLength > 0 } ?: p
             })
             axis0.profile != null -> axis0.profile
-            else -> { roadMessage = "Defina o greide: ao menos 2 PVIs (estaca e cota)."; return }
+            else -> { roadMessage = tr("Defina o greide: ao menos 2 PVIs (estaca e cota)."); return }
         }
         val axis = Alignment(axis0.name + ROAD_SUFFIX, axis0.startStation, axis0.elements, profile)
         try {
-            val r = tracked("Projetando estrada") { t ->
+            val r = tracked(tr("Projetando estrada")) { t ->
                 withContext(Dispatchers.Default) {
-                    t.step("Seções e taludes")
+                    t.step(tr("Seções e taludes"))
                     val tpl = Template(rp.left, rp.right, rp.cut, rp.fill, rp.pavement)
                     val regions = listOf(Region(axis.startStation, axis.endStation, tpl)) + rp.regions.sortedBy { it.from }.map { r ->
                         Region(r.from, axis.endStation, tpl.copy(left = r.left, right = r.right), r.transition, r.leftTarget, r.rightTarget)
@@ -1104,11 +1106,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 differenceImage = withContext(Dispatchers.Default) { DifferenceImage.of(d) }
                 differenceVisible = true
             }
-            roadMessage = if (r.unresolved > 0) "${r.unresolved} seção(ões) com talude que não encontrou o terreno." else null
+            roadMessage = if (r.unresolved > 0) tr("{0} seção(ões) com talude que não encontrou o terreno.", r.unresolved) else null
         } catch (e: OutOfMemoryError) {
-            roadMessage = "Memória insuficiente para projetar."
+            roadMessage = tr("Memória insuficiente para projetar.")
         } catch (e: Exception) {
-            roadMessage = "Não foi possível projetar: ${e.message ?: e.javaClass.simpleName}"
+            roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
         }
     }
 
@@ -1131,7 +1133,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: ""
         val text = buildString {
             // CSV stays in metres (for spreadsheets and other programs), as the header says.
-            append("Estaca;Estaca (m);Terreno eixo (m);Greide (m);Corte/aterro eixo (m);Bordo E afast. (m);Bordo E cota (m);Bordo D afast. (m);Bordo D cota (m);" +
+            append(tr("Estaca;Estaca (m);Terreno eixo (m);Greide (m);Corte/aterro eixo (m);Bordo E afast. (m);Bordo E cota (m);Bordo D afast. (m);Bordo D cota (m);") +
                 "Offset E tipo;Offset E afast. (m);Offset E cota (m);Offset D tipo;Offset D afast. (m);Offset D cota (m);Área corte (m2);Área aterro (m2)\r\n")
             for (s in r.sections) {
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
@@ -1147,7 +1149,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             for (row in r.volumes) append("${StationFormat.estacaMetric(row.station)};${n(row.cut)};${n(row.fill)};${n(row.accumulated)}\r\n")
             append("Total;${n(r.totalCut)};${n(r.totalFill)};\r\n")
         }
-        writeTo(target, "nota de serviço") { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
+        writeTo(target, tr("nota de serviço")) { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
     }
 
     /** Service note as a PDF table, A4 landscape, a page per 30 stations. */
@@ -1155,12 +1157,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val r = road ?: return
         val u = com.appdwg.core.ReportUnits()
         fun n(v: Double?) = v?.let { u.l(it) } ?: ""
-        writeTo(target, "nota de serviço (PDF)") { out ->
+        writeTo(target, tr("nota de serviço (PDF)")) { out ->
             val doc = android.graphics.pdf.PdfDocument()
             val paint = android.graphics.Paint().apply { textSize = 7.5f; isAntiAlias = true }
             val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true }
-            val head = listOf("Estaca", "Terreno (${u.len})", "Greide (${u.len})", "C/A eixo (${u.len})", "Bordo E (af./cota)", "Bordo D (af./cota)",
-                "Offset E (tipo af./cota)", "Offset D (tipo af./cota)", "Área C (${u.area})", "Área A (${u.area})")
+            val head = listOf(tr("Estaca"), tr("Terreno ({0})", u.len), tr("Greide ({0})", u.len), tr("C/A eixo ({0})", u.len), tr("Bordo E (af./cota)"), tr("Bordo D (af./cota)"),
+                tr("Offset E (tipo af./cota)"), tr("Offset D (tipo af./cota)"), tr("Área C ({0})", u.area), tr("Área A ({0})", u.area))
             val colX = floatArrayOf(20f, 80f, 130f, 180f, 230f, 330f, 430f, 570f, 710f, 760f)
             val rows = r.sections.map { s ->
                 val be = s.top.firstOrNull { it.code == "bordo" && it.offset < 0 }; val bd = s.top.lastOrNull { it.code == "bordo" && it.offset > 0 }
@@ -1172,8 +1174,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             rows.chunked(30).forEachIndexed { pi, chunk ->
                 val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(842, 595, pi + 1).create())
                 val c = page.canvas
-                c.drawText("Nota de serviço — $title — eixo ${r.alignment.name}", 20f, 30f, android.graphics.Paint(bold).apply { textSize = 11f })
-                c.drawText("Corte total ${u.vu(r.totalCut)} · Aterro total ${u.vu(r.totalFill)} · página ${pi + 1}", 20f, 45f, paint)
+                c.drawText(tr("Nota de serviço — {0} — eixo {1}", title, r.alignment.name), 20f, 30f, android.graphics.Paint(bold).apply { textSize = 11f })
+                c.drawText(tr("Corte total {0} · Aterro total {1} · página {2}", u.vu(r.totalCut), u.vu(r.totalFill), pi + 1), 20f, 45f, paint)
                 var y = 65f
                 head.forEachIndexed { k, h -> c.drawText(h, colX[k], y, bold) }
                 y += 14f
@@ -1539,40 +1541,40 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun addModel(uris: List<Uri>, at: Point2?) {
         val named = uris.map { it to displayName(it) }
         val main = named.firstOrNull { it.second.substringAfterLast('.').lowercase() in MODEL_EXTENSIONS }
-            ?: run { modelMessage = "Escolha um arquivo OBJ, STL, PLY, glTF/GLB ou IFC."; return }
+            ?: run { modelMessage = tr("Escolha um arquivo OBJ, STL, PLY, glTF/GLB ou IFC."); return }
         uris.forEach { u -> runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
         modelMessage = null
         viewModelScope.launch {
             try {
                 val placementFor: (Model3D) -> ModelPlacement = { m -> defaultPlacement(m, at) }
-                val entry = tracked("Lendo modelo ${main.second}") { t ->
+                val entry = tracked(tr("Lendo modelo {0}", main.second)) { t ->
                     withContext(Dispatchers.Default) { loadModel(main.first, main.second, named, t)?.let { m -> ModelEntry(main.second, uris, m, placementFor(m)) } }
                 } ?: return@launch
                 models = models + entry
                 refreshJob?.cancel(); refreshNow()
                 val m = entry.model
-                modelMessage = "${main.second}: ${m.meshes.size} elemento(s), ${m.triangleCount} triângulos" +
-                    (if (m.georef != null) ", posicionado pela georreferência do IFC" else "") + "." +
-                    (if (m.warnings.isNotEmpty()) " Avisos: " + m.warnings.take(5).joinToString("; ") else "")
+                modelMessage = tr("{0}: {1} elemento(s), {2} triângulos", main.second, m.meshes.size, m.triangleCount) +
+                    (if (m.georef != null) tr(", posicionado pela georreferência do IFC") else "") + "." +
+                    (if (m.warnings.isNotEmpty()) tr(" Avisos: ") + m.warnings.take(5).joinToString("; ") else "")
             } catch (e: OutOfMemoryError) {
-                modelMessage = "Modelo grande demais para a memória deste aparelho."
+                modelMessage = tr("Modelo grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                modelMessage = "Não foi possível ler ${main.second}: ${e.message ?: e.javaClass.simpleName}"
+                modelMessage = tr("Não foi possível ler {0}: {1}", main.second, e.message ?: e.javaClass.simpleName)
             }
         }
     }
 
     private fun loadModel(uri: Uri, name: String, named: List<Pair<Uri, String>>, task: LoadTask): Model3D? {
         val resolver = getApplication<Application>().contentResolver
-        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("arquivo indisponível")
-        task.step("Montando a geometria")
+        val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error(tr("arquivo indisponível"))
+        task.step(tr("Montando a geometria"))
         val model = ModelReader.read(bytes, name) { other ->
             // Companion files are matched by name among the ones chosen with the model.
             named.firstOrNull { it.second.equals(other.substringAfterLast('/').substringAfterLast('\\'), ignoreCase = true) }
                 ?.let { (u, _) -> resolver.openInputStream(u)?.use { it.readBytes() } }
         }
-        require(model.meshes.isNotEmpty()) { "nenhuma geometria encontrada" + if (model.warnings.isNotEmpty()) " (" + model.warnings.joinToString("; ") + ")" else "" }
-        require(model.triangleCount <= MAX_MODEL_TRIANGLES) { "modelo com ${model.triangleCount} triângulos; o limite neste aparelho é $MAX_MODEL_TRIANGLES. Simplifique o modelo." }
+        require(model.meshes.isNotEmpty()) { tr("nenhuma geometria encontrada") + if (model.warnings.isNotEmpty()) " (" + model.warnings.joinToString("; ") + ")" else "" }
+        require(model.triangleCount <= MAX_MODEL_TRIANGLES) { tr("modelo com {0} triângulos; o limite neste aparelho é {1}. Simplifique o modelo.", model.triangleCount, MAX_MODEL_TRIANGLES) }
         return model
     }
 
@@ -1616,26 +1618,26 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val project = (state as? ProjectState.Loaded)?.project ?: return
         val terrain = project.surfaces.firstOrNull { it.name == v.platformTerrain }
             ?: project.surfaces.firstOrNull { !it.name.startsWith(PLATFORM_LABEL) }
-        if (terrain == null) { platformMessage = "Abra ou adicione uma superfície de terreno."; return }
-        if (v.platformOutline.size < 3) { platformMessage = "Desenhe a plataforma com 3 vértices ou mais."; return }
+        if (terrain == null) { platformMessage = tr("Abra ou adicione uma superfície de terreno."); return }
+        if (v.platformOutline.size < 3) { platformMessage = tr("Desenhe a plataforma com 3 vértices ou mais."); return }
         val pp = v.platformParams
         val outline = v.platformOutline
         val vertexZ = if (pp.useVertexElevations) outline.map { p -> userPoints.firstOrNull { it.x == p.x && it.y == p.y }?.z ?: Double.NaN } else null
-        if (vertexZ != null && vertexZ.any { it.isNaN() }) { platformMessage = "Há vértices sem cota de ponto; desmarque \"usar a cota de cada ponto\"."; return }
+        if (vertexZ != null && vertexZ.any { it.isNaN() }) { platformMessage = tr("Há vértices sem cota de ponto; desmarque \"usar a cota de cada ponto\"."); return }
         val base = pp.elevation ?: outline.mapNotNull { terrain.elevationAt(it) }.average().takeIf { !it.isNaN() }
-            ?: run { platformMessage = "A plataforma está fora do terreno."; return }
+            ?: run { platformMessage = tr("A plataforma está fora do terreno."); return }
         platformMessage = null
         try {
-            val result = tracked("Projetando plataforma") { t ->
+            val result = tracked(tr("Projetando plataforma")) { t ->
                 withContext(Dispatchers.Default) {
-                    t.step("Taludes e bermas")
+                    t.step(tr("Taludes e bermas"))
                     val d = PlatformDesign(
                         outline, base, pp.gradePercent, pp.gradeAzimuth, vertexZ,
                         cut = SlopeRule(pp.cutRatio, pp.cutBenchHeight, pp.cutBenchWidth, pp.cutBenchFall, pp.cutHeights),
                         fill = SlopeRule(pp.fillRatio, pp.fillBenchHeight, pp.fillBenchWidth, pp.fillBenchFall, pp.fillHeights),
                     )
                     val r = Platform.design(d, terrain, PLATFORM_LABEL)
-                    t.step("Volumes")
+                    t.step(tr("Volumes"))
                     r to SurfaceCompare.difference(terrain, r.surface)
                 }
             }
@@ -1654,11 +1656,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 v.compareBase = terrain.name; v.compareOther = PLATFORM_LABEL
             }
             platformMessage = if (result.first.unresolved > 0)
-                "${result.first.unresolved} perfil(is) de talude não encontraram o terreno (saem da superfície ou passam de 300 m)." else null
+                tr("{0} perfil(is) de talude não encontraram o terreno (saem da superfície ou passam de 300 m).", result.first.unresolved) else null
         } catch (e: OutOfMemoryError) {
-            platformMessage = "Memória insuficiente para projetar."
+            platformMessage = tr("Memória insuficiente para projetar.")
         } catch (e: Exception) {
-            platformMessage = "Não foi possível projetar: ${e.message ?: e.javaClass.simpleName}"
+            platformMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
         }
     }
 
@@ -1698,14 +1700,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Writes [bytes] in pieces, showing the amount sent on [task]. */
     private fun writeWithProgress(target: Uri, bytes: ByteArray, task: LoadTask, cloud: Boolean) {
-        (getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error("destino indisponível")).use { out ->
+        (getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error(tr("destino indisponível"))).use { out ->
             var done = 0
             while (done < bytes.size) {
                 val n = minOf(1 shl 16, bytes.size - done)
                 out.write(bytes, done, n)
                 done += n
                 fun mb(b: Int) = StationFormat.decimal(b / 1048576.0, 1)
-                task.step((if (cloud) "Enviando · " else "Gravando · ") + mb(done) + " de " + mb(bytes.size) + " MB", done.toFloat() / bytes.size)
+                task.step((if (cloud) tr("Enviando · ") else tr("Gravando · ")) + mb(done) + " de " + mb(bytes.size) + " MB", done.toFloat() / bytes.size)
             }
         }
     }
@@ -1714,26 +1716,26 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             exportMessage = try {
                 val cloud = CloudDocs.isDrive(target.toString())
-                tracked(if (cloud) "Exportando $what para o Google Drive" else "Exportando $what") { t ->
+                tracked(if (cloud) tr("Exportando {0} para o Google Drive", what) else tr("Exportando {0}", what)) { t ->
                     withContext(Dispatchers.IO) {
-                        val raw = getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error("destino indisponível")
+                        val raw = getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error(tr("destino indisponível"))
                         // Bytes written so far, shown while the file is made and sent.
                         val counting = object : java.io.FilterOutputStream(raw) {
                             var done = 0L
                             override fun write(b: ByteArray, off: Int, len: Int) {
                                 out.write(b, off, len); done += len
-                                t.step((if (cloud) "Enviando · " else "Gravando · ") + StationFormat.decimal(done / 1048576.0, 1) + " MB")
+                                t.step((if (cloud) tr("Enviando · ") else tr("Gravando · ")) + StationFormat.decimal(done / 1048576.0, 1) + " MB")
                             }
                         }
                         counting.buffered(1 shl 16).use { block(it) }
                     }
                 }
-                if (cloud) "$what exportado para o Google Drive (${displayName(target)}); o app Drive termina o envio em segundo plano."
-                else "$what exportado para ${displayName(target)}."
+                if (cloud) tr("{0} exportado para o Google Drive ({1}); o app Drive termina o envio em segundo plano.", what, displayName(target))
+                else tr("{0} exportado para {1}.", what, displayName(target))
             } catch (e: OutOfMemoryError) {
-                "Memória insuficiente para exportar $what."
+                tr("Memória insuficiente para exportar {0}.", what)
             } catch (e: Exception) {
-                "Não foi possível exportar $what: ${e.message ?: e.javaClass.simpleName}"
+                tr("Não foi possível exportar {0}: {1}", what, e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -1841,7 +1843,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         // BOM so Excel reads the accents.
-        writeTo(target, "CSV de volumes") { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
+        writeTo(target, tr("CSV de volumes")) { it.write(("\uFEFF" + text).toByteArray(Charsets.UTF_8)) }
     }
 
     val hasVolumes get() = difference != null || matrix.isNotEmpty() || stageProgress != null
@@ -1886,7 +1888,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun currentDoc(): ProjectDoc? {
         val main = sourceUri ?: return null
         val v = view ?: return null
-        val generated = addedFiles.any { it.uri == null && it.label == "$POINTS_LAYER superfície" }
+        val generated = addedFiles.any { it.uri == null && it.label.startsWith("$POINTS_LAYER ") }
         return ProjectDoc(
             main = main.toString(),
             mainName = displayName(main),
@@ -1928,7 +1930,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val json = doc.toJson()
                 val bytes = json.toString(2).toByteArray(Charsets.UTF_8)
                 val cloud = CloudDocs.isDrive(target.toString())
-                tracked(if (cloud) "Enviando ao Google Drive" else "Salvando projeto") { t ->
+                tracked(if (cloud) tr("Enviando ao Google Drive") else tr("Salvando projeto")) { t ->
                     withContext(Dispatchers.IO) { writeWithProgress(target, bytes, t, cloud) }
                 }
                 runCatching {
@@ -1941,10 +1943,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 CloudDocs.noteUsed(getApplication(), target)
                 remember(target)
                 then()
-                if (CloudDocs.isDrive(target.toString())) "Projeto salvo no Google Drive (${displayName(target)}); o app Drive termina o envio em segundo plano."
-                else "Projeto salvo em ${displayName(target)}."
+                if (CloudDocs.isDrive(target.toString())) tr("Projeto salvo no Google Drive ({0}); o app Drive termina o envio em segundo plano.", displayName(target))
+                else tr("Projeto salvo em {0}.", displayName(target))
             } catch (e: Exception) {
-                "Não foi possível salvar o projeto: ${e.message ?: e.javaClass.simpleName}"
+                tr("Não foi possível salvar o projeto: {0}", e.message ?: e.javaClass.simpleName)
             }
         }
     }
@@ -1994,16 +1996,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 val name = displayName(uri)
-                val task = LoadTask("Abrindo $name") { openJob?.cancel() }
+                val task = LoadTask(tr("Abrindo {0}", name)) { openJob?.cancel() }
                 state = ProjectState.Loading(name, task)
                 try {
                     download(uri, task)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     state = before
-                    projectMessage = "Download cancelado."
+                    projectMessage = tr("Download cancelado.")
                     return@launch
                 } catch (e: Exception) {
-                    state = ProjectState.Failed(name, "Não foi possível baixar do Google Drive: ${e.message ?: e.javaClass.simpleName}")
+                    state = ProjectState.Failed(name, tr("Não foi possível baixar do Google Drive: {0}", e.message ?: e.javaClass.simpleName))
                     return@launch
                 }
             }
@@ -2034,11 +2036,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val doc = try {
             withContext(Dispatchers.IO) {
                 val text = input(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                    ?: error("arquivo indisponível")
+                    ?: error(tr("arquivo indisponível"))
                 ProjectDoc.fromJson(JSONObject(text))
             }
         } catch (e: Exception) {
-            state = ProjectState.Failed(name, "Não foi possível ler o projeto: ${e.message ?: e.javaClass.simpleName}")
+            state = ProjectState.Failed(name, tr("Não foi possível ler o projeto: {0}", e.message ?: e.javaClass.simpleName))
             return
         }
         openProjectDoc(uri, doc, doc.main)
@@ -2066,9 +2068,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val s = state
             if (s is ProjectState.Failed) {
                 relocating = uri to doc
-                val drawing = doc.mainName?.let { "o desenho \"$it\"" } ?: "um desenho"
-                state = s.copy(message = "O projeto $name usa $drawing, mas o app não consegue abri-lo " +
-                    "(o arquivo mudou de lugar ou o app foi reinstalado).\n\nToque em \"Localizar desenho\" e escolha o arquivo; depois salve o projeto.")
+                val drawing = doc.mainName?.let { "o desenho \"$it\"" } ?: tr("um desenho")
+                state = s.copy(message = tr("O projeto {0} usa {1}, mas o app não consegue abri-lo ", name, drawing) +
+                    tr("(o arquivo mudou de lugar ou o app foi reinstalado).\n\nToque em \"Localizar desenho\" e escolha o arquivo; depois salve o projeto."))
             }
             return
         }
@@ -2097,7 +2099,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val named = list.map { it to displayName(it) }
             val main = named.firstOrNull { it.second.substringAfterLast('.').lowercase() in MODEL_EXTENSIONS } ?: continue
             try {
-                val m = tracked("Lendo modelo ${main.second}") { t -> withContext(Dispatchers.Default) { loadModel(main.first, main.second, named, t) } } ?: continue
+                val m = tracked(tr("Lendo modelo {0}", main.second)) { t -> withContext(Dispatchers.Default) { loadModel(main.first, main.second, named, t) } } ?: continue
                 models = models + ModelEntry(main.second, list, m, placement)
             } catch (e: Exception) {
                 problems += main.second
@@ -2131,13 +2133,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
         projectUri = uri
         savedJson = currentDoc()?.toJson()?.toString()
-        projectMessage = if (problems.isEmpty()) "Projeto $name aberto." else
-            "Projeto $name aberto, mas não foi possível abrir: ${problems.joinToString(", ")}."
+        projectMessage = if (problems.isEmpty()) tr("Projeto {0} aberto.", name) else
+            tr("Projeto {0} aberto, mas não foi possível abrir: {1}.", name, problems.joinToString(", "))
     }
 
     private suspend fun openNow(uri: Uri): Boolean {
         val name = displayName(uri)
-        val task = LoadTask("Abrindo $name")
+        val task = LoadTask(tr("Abrindo {0}", name))
         state = ProjectState.Loading(name, task)
         run {
             state = try {
@@ -2146,10 +2148,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     val p = read(uri, task)
                     val t1 = System.nanoTime()
                     // Builds each surface's lookup index now, so the first tap on the plan is instant.
-                    if (p.surfaces.isNotEmpty()) task.step("Preparando consulta de cotas")
+                    if (p.surfaces.isNotEmpty()) task.step(tr("Preparando consulta de cotas"))
                     p.surfaces.forEach { s -> s.bounds?.let { s.elevationAt(it.center) } }
                     val t2 = System.nanoTime()
-                    if (p.surfaces.isNotEmpty()) task.step("Gerando imagem do terreno")
+                    if (p.surfaces.isNotEmpty()) task.step(tr("Gerando imagem do terreno"))
                     val images = p.surfaces.mapNotNull { TerrainImage.of(it) }
                     android.util.Log.i("Gromatic", "abrir $name: leitura ${(t1 - t0) / 1_000_000} ms, índice ${(t2 - t1) / 1_000_000} ms, " +
                         "imagem ${(System.nanoTime() - t2) / 1_000_000} ms")
@@ -2158,7 +2160,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 if (project.surfaces.isEmpty() && project.alignments.isEmpty() && project.cgPoints.isEmpty() &&
                     project.polylines.isEmpty()
                 ) {
-                    ProjectState.Failed(name, "Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?")
+                    ProjectState.Failed(name, tr("Nenhuma superfície, alinhamento ou ponto encontrado. O arquivo é um LandXML, DXF ou cache de pontos do Civil 3D (.aecc.pnt)?"))
                 } else {
                     rasters = emptyMap()
                     drape = null
@@ -2203,9 +2205,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     ProjectState.Loaded(name, project, terrain)
                 }
             } catch (e: OutOfMemoryError) {
-                ProjectState.Failed(name, "Arquivo grande demais para a memória deste aparelho.")
+                ProjectState.Failed(name, tr("Arquivo grande demais para a memória deste aparelho."))
             } catch (e: Exception) {
-                ProjectState.Failed(name, "Não foi possível ler o arquivo: ${e.message ?: e.javaClass.simpleName}")
+                ProjectState.Failed(name, tr("Não foi possível ler o arquivo: {0}", e.message ?: e.javaClass.simpleName))
             }
         }
         return state is ProjectState.Loaded
@@ -2234,8 +2236,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun read(uri: Uri, task: LoadTask? = null): LandXmlProject {
         val resolver = getApplication<Application>().contentResolver
         val size = fileSize(uri)
-        val raw = input(uri) ?: error("arquivo indisponível")
-        val input = if (task == null) raw else CountingInputStream(raw, size) { task.step("Lendo arquivo", it) }
+        val raw = input(uri) ?: error(tr("arquivo indisponível"))
+        val input = if (task == null) raw else CountingInputStream(raw, size) { task.step(tr("Lendo arquivo"), it) }
         return input.buffered().use { stream ->
             // Sniffs the content rather than trusting the file name, which e-mail apps often drop.
             stream.mark(HEAD_SIZE)
@@ -2248,7 +2250,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             when {
                 // Shapefile: a ZIP holding .shp (+ .dbf, .prj), or a bare .shp (geometry only).
                 text.startsWith("PK\u0003\u0004") && fileName.endsWith(".zip", true) -> {
-                    val parts = com.appdwg.core.Gis.unzipShapefiles(stream.readBytes()).ifEmpty { error("o ZIP não tem arquivo .shp") }
+                    val parts = com.appdwg.core.Gis.unzipShapefiles(stream.readBytes()).ifEmpty { error(tr("o ZIP não tem arquivo .shp")) }
                     // Each shapefile on its own layer (its name), all in one drawing.
                     val drawings = parts.map { sp ->
                         gisProject(sp.name, com.appdwg.core.Gis.prjEpsg(sp.prj), if (sp.prj == null) null else com.appdwg.core.Gis.prjIsGeographic(sp.prj)) { toPlan ->
@@ -2266,8 +2268,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     val json = stream.readBytes().toString(Charsets.UTF_8)
                     return@use gisProject(layer, null, null) { toPlan -> com.appdwg.core.Gis.readGeoJson(json, toPlan) }
                 }
-                text.startsWith("AC10") -> error("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML")
-                text.startsWith("AutoCAD Binary DXF") -> error("DXF binário. Salve o DXF no formato ASCII")
+                text.startsWith("AC10") -> error(tr("arquivo DWG. No AutoCAD/Civil 3D, salve como DXF (Salvar como > DXF) ou exporte para LandXML"))
+                text.startsWith("AutoCAD Binary DXF") -> error(tr("DXF binário. Salve o DXF no formato ASCII"))
                 DxfReader.looksLikeDxf(text) ->
                     return@use DxfReader(stream.reader(Charsets.UTF_8).buffered(1 shl 16)).read { task?.step(it) }
                 AeccPointCache.looksLikePointCache(head, size) ->
@@ -2282,7 +2284,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun decodeTiff(uri: Uri, task: LoadTask): Picture {
         val resolver = getApplication<Application>().contentResolver
-        val fd = resolver.openFileDescriptor(uri, "r") ?: error("arquivo indisponível")
+        val fd = resolver.openFileDescriptor(uri, "r") ?: error(tr("arquivo indisponível"))
         return fd.use {
             FileInputStream(it.fileDescriptor).channel.use { channel ->
                 val input = object : RandomInput {
@@ -2292,7 +2294,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         var pos = position
                         while (bb.hasRemaining()) {
                             val n = channel.read(bb, pos)
-                            if (n < 0) error("fim inesperado do arquivo")
+                            if (n < 0) error(tr("fim inesperado do arquivo"))
                             pos += n
                         }
                     }
@@ -2303,7 +2305,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
                         Raster(b.width, b.height, px).also { b.recycle() }
                     }
-                }.read(MAX_RASTER) { task.step("Decodificando TIFF", it) }
+                }.read(MAX_RASTER) { task.step(tr("Decodificando TIFF"), it) }
                 val bitmap = Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888)
                 Picture(bitmap.asImageBitmap(), raster.extent, raster.sourceWidth, raster.sourceHeight)
             }

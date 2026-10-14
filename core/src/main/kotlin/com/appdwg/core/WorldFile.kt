@@ -12,13 +12,13 @@ object WorldFile {
      */
     fun extent(text: String, width: Int, height: Int): Bounds {
         val v = text.split(Regex("\\s+")).filter { it.isNotEmpty() }.take(6)
-            .map { it.replace(',', '.').toDoubleOrNull() ?: error("arquivo de georreferência inválido") }
-        require(v.size == 6) { "arquivo de georreferência inválido: precisa de 6 números" }
+            .map { it.replace(',', '.').toDoubleOrNull() ?: error(tr("arquivo de georreferência inválido")) }
+        require(v.size == 6) { tr("arquivo de georreferência inválido: precisa de 6 números") }
         val (a, d, b, e) = v
         val c = v[4]
         val f = v[5]
-        require(d == 0.0 && b == 0.0) { "imagem rotacionada não é suportada" }
-        require(a > 0 && e < 0) { "arquivo de georreferência inválido" }
+        require(d == 0.0 && b == 0.0) { tr("imagem rotacionada não é suportada") }
+        require(a > 0 && e < 0) { tr("arquivo de georreferência inválido") }
         val minX = c - a / 2
         val maxY = f - e / 2
         return Bounds(minX, maxY + height * e, minX + width * a, maxY)

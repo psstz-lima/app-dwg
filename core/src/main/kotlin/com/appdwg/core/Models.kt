@@ -93,8 +93,8 @@ object ModelReader {
             ext == "stl" || head.startsWith("solid") && ext != "obj" -> readStl(bytes)
             ext == "obj" -> readObj(String(bytes, Charsets.UTF_8), open)
             ext == "fbx" || ext == "dwg" || ext == "rvt" || ext == "skp" ->
-                error("formato $ext não é lido diretamente: exporte o modelo em OBJ, glTF/GLB ou IFC")
-            else -> error("formato de modelo não reconhecido (use OBJ, STL, PLY, glTF/GLB ou IFC)")
+                error(tr("formato {0} não é lido diretamente: exporte o modelo em OBJ, glTF/GLB ou IFC", ext))
+            else -> error(tr("formato de modelo não reconhecido (use OBJ, STL, PLY, glTF/GLB ou IFC)"))
         }
     }
 
@@ -115,7 +115,7 @@ object ModelReader {
                 "o", "g" -> group = parts.drop(1).joinToString(" ").ifEmpty { "OBJ" }
                 "usemtl" -> material = parts.getOrElse(1) { "" }
                 "mtllib" -> open(parts.drop(1).joinToString(" "))?.let { colors += readMtl(String(it, Charsets.UTF_8)) }
-                    ?: warnings.add("Arquivo de materiais ${parts.drop(1).joinToString(" ")} não encontrado: cores padrão.")
+                    ?: warnings.add(tr("Arquivo de materiais {0} não encontrado: cores padrão.", parts.drop(1).joinToString(" ")))
                 "f" -> {
                     val idx = parts.drop(1).map { tok ->
                         val i = tok.substringBefore('/').toInt()
@@ -129,8 +129,8 @@ object ModelReader {
         }
         val positions = v.toDoubleArray()
         val meshes = groups.map { (key, tri) ->
-            compact(key.first, key.first, positions, tri.toIntArray(), colors[key.second] ?: DEFAULT_COLOR, mapOf("Grupo" to key.first) +
-                if (key.second.isNotEmpty()) mapOf("Material" to key.second) else emptyMap())
+            compact(key.first, key.first, positions, tri.toIntArray(), colors[key.second] ?: DEFAULT_COLOR, mapOf(tr("Grupo") to key.first) +
+                if (key.second.isNotEmpty()) mapOf(tr("Material") to key.second) else emptyMap())
         }
         return Model3D(meshes, warnings)
     }
@@ -185,7 +185,7 @@ object ModelReader {
 
     fun readPly(bytes: ByteArray): Model3D {
         val headerEnd = String(bytes, 0, minOf(bytes.size, 65536), Charsets.ISO_8859_1).indexOf("end_header")
-        require(headerEnd > 0) { "PLY sem cabeçalho" }
+        require(headerEnd > 0) { tr("PLY sem cabeçalho") }
         val header = String(bytes, 0, headerEnd, Charsets.ISO_8859_1).lines()
         val format = header.first { it.startsWith("format") }.split(" ")[1]
         var vertices = 0; var faces = 0
@@ -230,7 +230,7 @@ object ModelReader {
                 "uint", "uint32" -> (b.getInt(o).toLong() and 0xFFFFFFFFL).toDouble().also { o += 4 }
                 "float", "float32" -> b.getFloat(o).toDouble().also { o += 4 }
                 "double", "float64" -> b.getDouble(o).also { o += 8 }
-                else -> error("tipo PLY $type não suportado")
+                else -> error(tr("tipo PLY {0} não suportado", type))
             }
             for (i in 0 until vertices) {
                 val vals = vProps.map { read(it.second) }
@@ -292,9 +292,9 @@ object Gltf {
         val buffers = (root["buffers"] as? List<*>).orEmpty().map { buf ->
             val uri = (buf as Map<*, *>)["uri"] as? String
             when {
-                uri == null -> open("") ?: error("GLB sem dados binários")
+                uri == null -> open("") ?: error(tr("GLB sem dados binários"))
                 uri.startsWith("data:") -> java.util.Base64.getDecoder().decode(uri.substringAfter(","))
-                else -> open(uri) ?: error("arquivo $uri do glTF não encontrado (escolha o .glb ou junte os arquivos)")
+                else -> open(uri) ?: error(tr("arquivo {0} do glTF não encontrado (escolha o .glb ou junte os arquivos)", uri))
             }
         }
         val views = (root["bufferViews"] as? List<*>).orEmpty().map { it as Map<*, *> }
@@ -338,7 +338,7 @@ object Gltf {
                 val name = mesh["name"] as? String ?: (node["name"] as? String ?: "mesh $mi")
                 for (p in (mesh["primitives"] as List<*>)) {
                     val prim = p as Map<*, *>
-                    if (((prim["mode"] as? Number)?.toInt() ?: 4) != 4) { warnings += "Primitiva não triangular ignorada em $name."; continue }
+                    if (((prim["mode"] as? Number)?.toInt() ?: 4) != 4) { warnings += tr("Primitiva não triangular ignorada em {0}.", name); continue }
                     val pos = read(((prim["attributes"] as Map<*, *>)["POSITION"] as Number).toInt())
                     val idx = (prim["indices"] as? Number)?.let { read(it.toInt()).map { v -> v.toInt() }.toIntArray() } ?: IntArray(pos.size / 3) { it }
                     // glTF is Y-up; the project is Z-up.
@@ -348,7 +348,7 @@ object Gltf {
                         world[3 * i] = q[0]; world[3 * i + 1] = -q[2]; world[3 * i + 2] = q[1]
                     }
                     val color = (prim["material"] as? Number)?.toInt()?.let { materials.getOrNull(it) } ?: 0xB0BEC5
-                    out += ModelMesh("glTF|$name", name, world, idx, color, mapOf("Malha" to name))
+                    out += ModelMesh("glTF|$name", name, world, idx, color, mapOf(tr("Malha") to name))
                 }
             }
             (node["children"] as? List<*>)?.forEach { visit((it as Number).toInt(), m) }
@@ -541,7 +541,7 @@ object Ifc {
                     val fe = e(f) ?: continue
                     val outer = list(fe.args[0]).map { b -> e(b) }.let { bs -> bs.firstOrNull { b -> b?.type == "IFCFACEOUTERBOUND" } ?: bs.firstOrNull() } ?: continue
                     val loop = e(outer.args[0]) ?: continue
-                    if (loop.type != "IFCPOLYLOOP") { warn("Face com contorno ${loop.type}"); continue }
+                    if (loop.type != "IFCPOLYLOOP") { warn(tr("Face com contorno {0}", loop.type)); continue }
                     val pts = list(loop.args[0]).map(::point)
                     face(if (outer.args.getOrNull(1) == false) pts.reversed() else pts)
                 }
@@ -582,10 +582,10 @@ object Ifc {
                     if (depth < 16) list(e(map.args[1])?.args?.getOrNull(3)).forEach { sub -> item(sub, mm, pos, tri, depth + 1) }
                 }
                 "IFCBOOLEANRESULT", "IFCBOOLEANCLIPPINGRESULT" -> {
-                    warn("Recorte booleano (mostrado sem o recorte)")
+                    warn(tr("Recorte booleano (mostrado sem o recorte)"))
                     item(it.args[1], m, pos, tri, depth + 1)
                 }
-                else -> warn("Geometria ${it.type} não suportada")
+                else -> warn(tr("Geometria {0} não suportada", it.type))
             }
         }
 
@@ -604,7 +604,7 @@ object Ifc {
             val body = reps.filter { str(it.args.getOrNull(1)) == "Body" }.ifEmpty { reps.filter { str(it.args.getOrNull(1)) != "Axis" && str(it.args.getOrNull(1)) != "FootPrint" } }
             val m = placement(en.args[5])
             val type = en.type.removePrefix("IFC").let { t -> t.substring(0, 1) + t.substring(1).lowercase() }
-            val storey = storeyOf[id] ?: "sem pavimento"
+            val storey = storeyOf[id] ?: tr("sem pavimento")
             val pos = ArrayList<Double>(); val tri = ArrayList<Int>()
             var color: Int? = null
             for (rep in body) for (it in list(rep.args.getOrNull(3))) {
@@ -614,8 +614,8 @@ object Ifc {
             if (tri.isEmpty()) continue
             meshes += ModelMesh("IFC|$storey|$type", str(en.args.getOrNull(2)) ?: type, pos.toDoubleArray(), tri.toIntArray(),
                 color ?: TYPE_COLORS[en.type] ?: 0xB0BEC5,
-                listOfNotNull("Tipo" to type, str(en.args.getOrNull(2))?.let { "Nome" to it }, str(en.args.getOrNull(0))?.let { "GlobalId" to it },
-                    "Pavimento" to storey).toMap())
+                listOfNotNull(tr("Tipo") to type, str(en.args.getOrNull(2))?.let { tr("Nome") to it }, str(en.args.getOrNull(0))?.let { "GlobalId" to it },
+                    tr("Pavimento") to storey).toMap())
         }
         return Model3D(meshes, warnings.map { (w, n) -> if (n > 1) "$w ($n vezes)" else w }, unit, georef)
     }
@@ -652,12 +652,12 @@ object Ifc {
                 val pts = when (curve.type) {
                     "IFCPOLYLINE" -> list(curve.args[0]).map { q -> point(q).let { Point2(it[0], it[1]) } }
                     "IFCINDEXEDPOLYCURVE" -> list(e(curve.args[0])?.args?.firstOrNull()).map { q -> list(q).map(num).let { Point2(it[0], it[1]) } }
-                    else -> { warn("Perfil com curva ${curve.type}"); return null }
+                    else -> { warn(tr("Perfil com curva {0}", curve.type)); return null }
                 }
-                if (p.type == "IFCARBITRARYPROFILEDEFWITHVOIDS") warn("Perfil com vazios (mostrado cheio)")
+                if (p.type == "IFCARBITRARYPROFILEDEFWITHVOIDS") warn(tr("Perfil com vazios (mostrado cheio)"))
                 pts.dropLast(if (pts.size > 1 && pts.first() == pts.last()) 1 else 0)
             }
-            else -> { warn("Perfil ${p.type} não suportado"); null }
+            else -> { warn(tr("Perfil {0} não suportado", p.type)); null }
         }
     }
 

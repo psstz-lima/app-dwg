@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,7 +74,7 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
                     }
                 }
                 OutlinedButton(onClick = {
-                    editing = current.copy(id = "custom_" + System.currentTimeMillis(), name = current.name + " (cópia)", epsg = null, custom = true, local = false)
+                    editing = current.copy(id = "custom_" + System.currentTimeMillis(), name = current.name + tr(" (cópia)"), epsg = null, custom = true, local = false)
                 }) { Text(stringResource(R.string.crs_new)) }
 
                 HorizontalDivider()

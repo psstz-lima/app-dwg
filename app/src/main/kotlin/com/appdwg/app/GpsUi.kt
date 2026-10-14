@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -78,8 +80,8 @@ fun GpsDialog(
         onDismissRequest = { save(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
-        confirmButton = { TextButton(onClick = { save(); onDismiss() }) { Text("Fechar") } },
-        dismissButton = { if (gnss.connected) TextButton(onClick = { gnss.disconnect() }) { Text("Desconectar") } },
+        confirmButton = { TextButton(onClick = { save(); onDismiss() }) { Text(tr("Fechar")) } },
+        dismissButton = { if (gnss.connected) TextButton(onClick = { gnss.disconnect() }) { Text(tr("Desconectar")) } },
         title = { Text("GPS / GNSS") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -88,44 +90,44 @@ fun GpsDialog(
                 }
                 when (source) {
                     GnssSource.BLUETOOTH -> {
-                        Text("Pareie a antena (ex.: Hi-Target V200) nas configurações de Bluetooth do Android e escolha-a aqui. Ela deve enviar NMEA (GGA, GST).",
+                        Text(tr("Pareie a antena (ex.: Hi-Target V200) nas configurações de Bluetooth do Android e escolha-a aqui. Ela deve enviar NMEA (GGA, GST)."),
                             style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = { onNeedPermissions(GnssSource.BLUETOOTH) { devices = gnss.bondedDevices() } }) { Text("Listar antenas pareadas") }
+                        OutlinedButton(onClick = { onNeedPermissions(GnssSource.BLUETOOTH) { devices = gnss.bondedDevices() } }) { Text(tr("Listar antenas pareadas")) }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             devices.forEach { (name, addr) -> FilterChip(selected = device == addr, onClick = { device = addr }, label = { Text(name) }) }
                         }
-                        OutlinedButton(enabled = device != null, onClick = { save(); onNeedPermissions(GnssSource.BLUETOOTH) { gnss.connectBluetooth(device!!) } }) { Text("Conectar à antena") }
+                        OutlinedButton(enabled = device != null, onClick = { save(); onNeedPermissions(GnssSource.BLUETOOTH) { gnss.connectBluetooth(device!!) } }) { Text(tr("Conectar à antena")) }
                     }
-                    GnssSource.INTERNAL -> OutlinedButton(onClick = { save(); onNeedPermissions(GnssSource.INTERNAL) { gnss.connectInternal() } }) { Text("Usar o GPS do aparelho") }
-                    GnssSource.REPLAY -> OutlinedButton(onClick = { save(); onPickReplay() }) { Text("Escolher arquivo NMEA gravado") }
+                    GnssSource.INTERNAL -> OutlinedButton(onClick = { save(); onNeedPermissions(GnssSource.INTERNAL) { gnss.connectInternal() } }) { Text(tr("Usar o GPS do aparelho")) }
+                    GnssSource.REPLAY -> OutlinedButton(onClick = { save(); onPickReplay() }) { Text(tr("Escolher arquivo NMEA gravado")) }
                 }
                 Text(gnss.status, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Sistema: ${crs.name}", style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = onCrs) { Text("Trocar…") }
+                    Text(tr("Sistema: {0}", crs.name), style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(onClick = onCrs) { Text(tr("Trocar…")) }
                     Checkbox(checked = follow, onCheckedChange = onFollow)
-                    Text("Seguir a posição na planta")
+                    Text(tr("Seguir a posição na planta"))
                 }
                 HorizontalDivider()
-                Text("Correções NTRIP (RTK pela internet)", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Correções NTRIP (RTK pela internet)"), style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(host, { host = it }, label = { Text("Caster (endereço)") }, singleLine = true, modifier = Modifier.width(240.dp))
-                    OutlinedTextField(port, { port = it }, label = { Text("Porta") }, singleLine = true, modifier = Modifier.width(100.dp),
+                    OutlinedTextField(host, { host = it }, label = { Text(tr("Caster (endereço)")) }, singleLine = true, modifier = Modifier.width(240.dp))
+                    OutlinedTextField(port, { port = it }, label = { Text(tr("Porta")) }, singleLine = true, modifier = Modifier.width(100.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                     OutlinedTextField(mount, { mount = it }, label = { Text("Mountpoint") }, singleLine = true, modifier = Modifier.width(160.dp))
-                    OutlinedTextField(user, { user = it }, label = { Text("Usuário") }, singleLine = true, modifier = Modifier.width(150.dp))
-                    OutlinedTextField(pass, { pass = it }, label = { Text("Senha") }, singleLine = true, modifier = Modifier.width(150.dp),
+                    OutlinedTextField(user, { user = it }, label = { Text(tr("Usuário")) }, singleLine = true, modifier = Modifier.width(150.dp))
+                    OutlinedTextField(pass, { pass = it }, label = { Text(tr("Senha")) }, singleLine = true, modifier = Modifier.width(150.dp),
                         visualTransformation = PasswordVisualTransformation())
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val p = port.toIntOrNull()
                     OutlinedButton(enabled = host.isNotBlank() && mount.isNotBlank() && p != null, onClick = {
                         save(); gnss.startNtrip(NtripSettings(host.trim(), p!!, mount.trim(), user, pass))
-                    }) { Text("Iniciar NTRIP") }
-                    if (gnss.ntripStatus != null) TextButton(onClick = { gnss.stopNtrip() }) { Text("Parar") }
+                    }) { Text(tr("Iniciar NTRIP")) }
+                    if (gnss.ntripStatus != null) TextButton(onClick = { gnss.stopNtrip() }) { Text(tr("Parar")) }
                     gnss.ntripStatus?.let { Text("$it · ${gnss.rtcmBytes / 1024} kB", style = MaterialTheme.typography.bodySmall) }
                 }
-                Text("As correções vão para a antena pelo Bluetooth; a posição (GGA) volta ao caster a cada 10 s.", style = MaterialTheme.typography.bodySmall)
+                Text(tr("As correções vão para a antena pelo Bluetooth; a posição (GGA) volta ao caster a cada 10 s."), style = MaterialTheme.typography.bodySmall)
             }
         },
     )
@@ -139,11 +141,11 @@ fun GpsCard(gnss: GnssManager, east: Double, north: Double, height: Double?, cal
         Column(Modifier.padding(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("● ", color = fixColor(f.quality))
-                Text(f.quality.label + (f.satellites?.let { " · $it satélites" } ?: "") + (f.correctionAge?.let { " · idade ${StationFormat.decimal(it, 0)} s" } ?: ""),
+                Text(f.quality.label + (f.satellites?.let { tr(" · {0} satélites", it) } ?: "") + (f.correctionAge?.let { tr(" · idade {0} s", StationFormat.decimal(it, 0)) } ?: ""),
                     style = MaterialTheme.typography.labelLarge)
             }
             val prec = listOfNotNull(f.sigmaH?.let { "H ${StationFormat.lengthValue(it)}" }, f.sigmaV?.let { "V ${StationFormat.lengthValue(it)}" })
-            Text(if (prec.isNotEmpty()) "Precisão " + prec.joinToString(" · ") + " " + StationFormat.lengthUnit else f.hdop?.let { "HDOP ${StationFormat.decimal(it, 1)}" } ?: "",
+            Text(if (prec.isNotEmpty()) tr("Precisão ") + prec.joinToString(" · ") + " " + StationFormat.lengthUnit else f.hdop?.let { "HDOP ${StationFormat.decimal(it, 1)}" } ?: "",
                 style = MaterialTheme.typography.bodySmall)
             Text("E ${StationFormat.lengthValue(east)} · N ${StationFormat.lengthValue(north)}" + (height?.let { " · cota ${StationFormat.lengthValue(it)}" } ?: "") +
                 if (calibrated) " · calibrado" else "",
@@ -152,7 +154,7 @@ fun GpsCard(gnss: GnssManager, east: Double, north: Double, height: Double?, cal
                 Text("${a.name}: ${StationFormat.estaca(a.stationOffset.station)} · ${StationFormat.offset(a.stationOffset.offset)}", style = MaterialTheme.typography.bodySmall)
             }
             info?.terrainElevation?.let { t ->
-                Text("Terreno ${StationFormat.lengthValue(t)}" + (height?.let { z -> val d = z - t; " · antena ${if (d >= 0) "+" else "−"}${StationFormat.length(abs(d), 3)}" } ?: ""),
+                Text(tr("Terreno {0}", StationFormat.lengthValue(t)) + (height?.let { z -> val d = z - t; " · antena ${if (d >= 0) "+" else "−"}${StationFormat.length(abs(d), 3)}" } ?: ""),
                     style = MaterialTheme.typography.bodySmall)
             }
         }

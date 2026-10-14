@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.rememberScrollState
 
 import androidx.compose.foundation.horizontalScroll
@@ -92,7 +94,7 @@ fun SectionPanel(
                 // Scrolls sideways on a narrow panel (phone) instead of squashing the controls.
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Seção", style = MaterialTheme.typography.titleSmall)
+                    Text(tr("Seção"), style = MaterialTheme.typography.titleSmall)
                     if (alignmentNames.size > 1) {
                         var open by remember { mutableStateOf(false) }
                         TextButton(onClick = { open = true }) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
@@ -108,15 +110,15 @@ fun SectionPanel(
                     TextButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }) { Text("−20") }
                     StationField(station, onStation)
                     TextButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
-                    Text("Largura", style = MaterialTheme.typography.labelMedium)
+                    Text(tr("Largura"), style = MaterialTheme.typography.labelMedium)
                     SECTION_WIDTHS.forEach { w ->
                         FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±" + StationFormat.lengthValue(w, 0)) })
                     }
                 }
-                TextButton(onClick = onClose) { Text("Fechar") }
+                TextButton(onClick = onClose) { Text(tr("Fechar")) }
             }
             if (section == null) {
-                Text("Sem seção nesta estaca.", Modifier.padding(16.dp))
+                Text(tr("Sem seção nesta estaca."), Modifier.padding(16.dp))
             } else {
                 SectionChart(section, Modifier.fillMaxWidth().weight(1f))
             }
@@ -189,7 +191,7 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
 
         val values = s.lines.flatMap { l -> l.elevations.filter { !it.isNaN() } } + listOfNotNull(s.design)
         if (values.isEmpty()) {
-            text("A seção não cruza nenhuma superfície.", left, (top + bottom) / 2, fg)
+            text(tr("A seção não cruza nenhuma superfície."), left, (top + bottom) / 2, fg)
             return@Canvas
         }
         var zMin = values.min()
@@ -245,7 +247,7 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
         val cx = x(cursor)
         drawLine(fg, Offset(cx, top), Offset(cx, bottom), strokeWidth = 1.5f)
         val parts = mutableListOf(
-            if (abs(cursor) < 0.005) "Eixo" else StationFormat.offset(cursor),
+            if (abs(cursor) < 0.005) tr("Eixo") else StationFormat.offset(cursor),
         )
         s.lines.forEachIndexed { k, l ->
             val e = s.interpolate(l.elevations, cursor)
@@ -254,11 +256,11 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
                 parts += "${l.surface} ${StationFormat.lengthValue(e)}"
             }
         }
-        s.design?.let { parts += "Greide no eixo ${StationFormat.lengthValue(it)}" }
-        s.cutFill?.let { parts += (if (it >= 0) "Aterro " else "Corte ") + StationFormat.length(abs(it), 3) }
+        s.design?.let { parts += tr("Greide no eixo {0}", StationFormat.lengthValue(it)) }
+        s.cutFill?.let { parts += (if (it >= 0) tr("Aterro ") else tr("Corte ")) + StationFormat.length(abs(it), 3) }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (2 * halfWidth))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)
-        text("Estaca ${StationFormat.estaca(s.station)} · " + parts.joinToString(" · "), left, 18.dp.toPx(), fg)
+        text(tr("Estaca {0} · ", StationFormat.estaca(s.station)) + parts.joinToString(" · "), left, 18.dp.toPx(), fg)
     }
 }
 

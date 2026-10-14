@@ -50,12 +50,12 @@ class TiffReader(
         little = when {
             head[0] == 'I'.code.toByte() && head[1] == 'I'.code.toByte() -> true
             head[0] == 'M'.code.toByte() && head[1] == 'M'.code.toByte() -> false
-            else -> error("não é um arquivo TIFF")
+            else -> error(tr("não é um arquivo TIFF"))
         }
         big = when (u16(head, 2)) {
             42 -> false
             43 -> true
-            else -> error("não é um arquivo TIFF")
+            else -> error(tr("não é um arquivo TIFF"))
         }
         var next = if (big) i64(head, 8) else u32(head, 4)
         val images = ArrayList<Ifd>()
@@ -65,7 +65,7 @@ class TiffReader(
             images += ifd.first
             next = ifd.second
         }
-        val full = images.firstOrNull() ?: error("TIFF sem imagem")
+        val full = images.firstOrNull() ?: error(tr("TIFF sem imagem"))
         // Overviews keep the aspect of the full image; masks (subfile type 4) are skipped.
         val candidates = images.filter { it.subfileType and 4 == 0 && it.width > 0 && it.height > 0 }
             .filter { abs(it.width.toDouble() / it.height - full.width.toDouble() / full.height) < 0.02 }
@@ -112,7 +112,7 @@ class TiffReader(
         val entrySize = if (big) 20 else 12
         val countBytes = bytes(offset, countSize)
         val count = if (big) i64(countBytes, 0) else u16(countBytes, 0).toLong()
-        require(count in 0..4096) { "TIFF inválido" }
+        require(count in 0..4096) { tr("TIFF inválido") }
         val table = bytes(offset + countSize, (count * entrySize).toInt() + (if (big) 8 else 4))
         val tags = HashMap<Int, LongArray>()
         val raw = HashMap<Int, Pair<Long, Long>>()
@@ -164,17 +164,17 @@ class TiffReader(
         val planar = ifd.int(284, 1).toInt()
         val predictor = ifd.int(317, 1).toInt()
         val sampleFormat = ifd.int(339, 1).toInt()
-        require(bits == 8 || bits == 16) { "TIFF com $bits bits por amostra não é suportado" }
-        require(sampleFormat == 1) { "TIFF com amostras em ponto flutuante não é suportado" }
-        require(planar == 1 || samples == 1) { "TIFF com planos de cor separados não é suportado" }
-        require(compression in SUPPORTED) { "compressão TIFF $compression não é suportada" }
-        require(predictor == 1 || predictor == 2) { "preditor TIFF $predictor não é suportado" }
+        require(bits == 8 || bits == 16) { tr("TIFF com {0} bits por amostra não é suportado", bits) }
+        require(sampleFormat == 1) { tr("TIFF com amostras em ponto flutuante não é suportado") }
+        require(planar == 1 || samples == 1) { tr("TIFF com planos de cor separados não é suportado") }
+        require(compression in SUPPORTED) { tr("compressão TIFF {0} não é suportada", compression) }
+        require(predictor == 1 || predictor == 2) { tr("preditor TIFF {0} não é suportado", predictor) }
 
         val tiled = ifd.tags.containsKey(322)
         val blockW = if (tiled) ifd.int(322).toInt() else width
         val blockH = if (tiled) ifd.int(323).toInt() else min(height, ifd.int(278, height.toLong()).toInt().coerceAtLeast(1))
-        val offsets = ifd.tags[if (tiled) 324 else 273] ?: error("TIFF sem dados")
-        val counts = ifd.tags[if (tiled) 325 else 279] ?: error("TIFF sem dados")
+        val offsets = ifd.tags[if (tiled) 324 else 273] ?: error(tr("TIFF sem dados"))
+        val counts = ifd.tags[if (tiled) 325 else 279] ?: error(tr("TIFF sem dados"))
         val across = (width + blockW - 1) / blockW
 
         val step = max(1, (max(width, height) + maxSize - 1) / maxSize)
@@ -203,7 +203,7 @@ class TiffReader(
             val data = bytes(offsets[b], length)
 
             if (compression == 7) {
-                val decoder = jpeg ?: error("JPEG em TIFF não disponível")
+                val decoder = jpeg ?: error(tr("JPEG em TIFF não disponível"))
                 val stream = if (jpegTables != null && jpegTables.size > 4) {
                     // Abbreviated stream: shared tables (without EOI) followed by the block (without SOI).
                     jpegTables.copyOfRange(0, jpegTables.size - 2) + data.copyOfRange(2, data.size)
@@ -232,7 +232,7 @@ class TiffReader(
                 5 -> lzw(data, expected)
                 8, 32946 -> inflate(data, expected)
                 32773 -> packBits(data, expected)
-                else -> error("compressão TIFF $compression não é suportada")
+                else -> error(tr("compressão TIFF {0} não é suportada", compression))
             }
             if (predictor == 2) undoPredictor(pixels, rowBytes, samples, bytesPerSample, if (tiled) blockH else rows)
 
@@ -304,7 +304,7 @@ class TiffReader(
     // ---- Byte access ----
 
     private fun bytes(position: Long, length: Int): ByteArray {
-        require(position >= 0 && length >= 0 && position + length <= input.size) { "TIFF truncado" }
+        require(position >= 0 && length >= 0 && position + length <= input.size) { tr("TIFF truncado") }
         return ByteArray(length).also { input.read(position, it) }
     }
 

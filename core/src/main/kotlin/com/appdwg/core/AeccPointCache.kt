@@ -46,15 +46,15 @@ object AeccPointCache {
                 n++
             }
         }
-        require(n >= 3) { "nenhum ponto encontrado no arquivo" }
-        onStage("Triangulando $n pontos")
+        require(n >= 3) { tr("nenhum ponto encontrado no arquivo") }
+        onStage(tr("Triangulando {0} pontos", n))
         return LandXmlProject(
             linearUnit = null,
             coordinateSystem = null,
             surfaces = listOf(triangulate(name, xs.copyOf(n), ys.copyOf(n), zs.copyOf(n))),
             alignments = emptyList(),
             cgPoints = emptyList(),
-            warnings = listOf("Superfície triangulada a partir do cache de pontos do Civil 3D ($n pontos); linhas de quebra e contornos do Civil 3D não estão no arquivo."),
+            warnings = listOf(tr("Superfície triangulada a partir do cache de pontos do Civil 3D ({0} pontos); linhas de quebra e contornos do Civil 3D não estão no arquivo.", n)),
         )
     }
 

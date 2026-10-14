@@ -15,7 +15,7 @@ data class HaulWave(val start: Double, val end: Double, val volume: Double, val 
 
 /** Haul-distance class (DNIT bands), with the volume hauled in it. */
 data class HaulBand(val from: Double, val to: Double?, val volume: Double, val moment: Double) {
-    val label get() = if (to == null) "acima de ${from.toInt()} m" else "${from.toInt()} a ${to.toInt()} m"
+    val label get() = if (to == null) tr("acima de {0} m", from.toInt()) else "${from.toInt()} a ${to.toInt()} m"
 }
 
 class MassHaul(

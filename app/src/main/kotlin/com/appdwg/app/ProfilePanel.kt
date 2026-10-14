@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.rememberScrollState
 
 import androidx.compose.foundation.horizontalScroll
@@ -77,32 +79,32 @@ fun ProfilePanel(
                 // The window chips scroll sideways when the panel is narrow (phone) instead of squashing the chart.
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Perfil · ${profile.alignment}", style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text("Janela", style = MaterialTheme.typography.labelMedium)
+                    Text(tr("Perfil · {0}", profile.alignment), style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                    Text(tr("Janela"), style = MaterialTheme.typography.labelMedium)
                     PROFILE_RANGES.forEach { r ->
-                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) "Inteiro" else "±" + StationFormat.length(r, 0)) })
+                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) tr("Inteiro") else "±" + StationFormat.length(r, 0)) })
                     }
                 }
-                TextButton(onClick = onClose) { Text("Fechar") }
+                TextButton(onClick = onClose) { Text(tr("Fechar")) }
             }
             if (editPvis != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Greide: arraste um PVI (bolinha vermelha) para mudar a cota; toque para escolher.", style = MaterialTheme.typography.labelMedium)
+                Text(tr("Greide: arraste um PVI (bolinha vermelha) para mudar a cota; toque para escolher."), style = MaterialTheme.typography.labelMedium)
                 TextButton(onClick = {
                     // New PVI at the cursor, on the current grade.
                     val z = profile.design?.let { profile.interpolate(it, cursor) }?.takeIf { !it.isNaN() }
                         ?: profile.lines.firstOrNull()?.let { profile.interpolate(it.elevations, cursor) }?.takeIf { !it.isNaN() } ?: 0.0
                     onPvis((editPvis + com.appdwg.core.Profile.Pvi(cursor, z)).sortedBy { it.station })
-                }) { Text("PVI no cursor") }
+                }) { Text(tr("PVI no cursor")) }
                 selected?.let { i ->
                     if (i in editPvis.indices) {
                         TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
                         TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
-                        OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text("Remover PVI") }
+                        OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text(tr("Remover PVI")) }
                         Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
                             style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                TextButton(onClick = onRecalc) { Text("Recalcular estrada") }
+                TextButton(onClick = onRecalc) { Text(tr("Recalcular estrada")) }
             }
             ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected) { selected = it }
         }
@@ -191,7 +193,7 @@ private fun ProfileChart(
             p.design?.get(i)?.takeIf { !it.isNaN() }?.let(values::add)
         }
         if (values.isEmpty()) {
-            text("Sem superfície nem greide neste trecho.", left, (top + bottom) / 2, fg)
+            text(tr("Sem superfície nem greide neste trecho."), left, (top + bottom) / 2, fg)
             return@Canvas
         }
         var zMin = values.min()
@@ -258,7 +260,7 @@ private fun ProfileChart(
         // Cursor and readout.
         val c = cursor.coerceIn(s0, s1)
         drawLine(fg, Offset(x(c), top), Offset(x(c), bottom), strokeWidth = 1.5f)
-        val parts = mutableListOf("Estaca ${StationFormat.estaca(c)}")
+        val parts = mutableListOf(tr("Estaca {0}", StationFormat.estaca(c)))
         var terrain: Double? = null
         p.lines.forEachIndexed { k, l ->
             val e = p.interpolate(l.elevations, c)
@@ -271,8 +273,8 @@ private fun ProfileChart(
         val g = p.design?.let { p.interpolate(it, c) }?.takeIf { !it.isNaN() }
         g?.let {
             drawCircle(GRADE_COLOR, 6f, Offset(x(c), y(it)))
-            parts += "Greide ${StationFormat.lengthValue(it)}"
-            terrain?.let { t -> parts += (if (it >= t) "Aterro " else "Corte ") + StationFormat.length(abs(it - t), 3) }
+            parts += tr("Greide {0}", StationFormat.lengthValue(it))
+            terrain?.let { t -> parts += (if (it >= t) tr("Aterro ") else tr("Corte ")) + StationFormat.length(abs(it - t), 3) }
         }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (s1 - s0))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)

@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.os.SystemClock
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,14 +30,17 @@ import java.io.InputStream
 
 /** Progress of a file being loaded: what is happening and, when known, how far along it is. */
 class LoadTask(val label: String, /** Stops the task; null when it cannot be stopped. */ val onCancel: (() -> Unit)? = null) {
-    var stage by mutableStateOf("Lendo arquivo")
+    var stage by mutableStateOf(tr("Lendo arquivo"))
     /** 0..1, or null while the step has no measurable progress. */
     var fraction by mutableStateOf<Float?>(null)
     val startedAt = SystemClock.elapsedRealtime()
 
+    /** Sets the stage and its progress together, so the screen never shows one without the other. */
     fun step(name: String, fraction: Float? = null) {
-        stage = name
-        this.fraction = fraction
+        androidx.compose.runtime.snapshots.Snapshot.withMutableSnapshot {
+            stage = name
+            this.fraction = fraction
+        }
     }
 }
 
@@ -87,7 +92,7 @@ fun LoadProgress(task: LoadTask, modifier: Modifier = Modifier) {
         else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         task.onCancel?.let { cancel ->
             Spacer(Modifier.height(8.dp))
-            GButton("Cancelar", cancel, outlined = true)
+            GButton(tr("Cancelar"), cancel, outlined = true)
         }
     }
 }

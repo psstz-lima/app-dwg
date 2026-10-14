@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,27 +48,27 @@ fun PointsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
-        title = { Text("Pontos (camada _POINTS)") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        title = { Text(tr("Pontos (camada _POINTS)")) },
         text = {
             Column {
-                Text("${vm.userPoints.size} ponto(s). Formato do Civil 3D: número, descrição, E, N, cota (PDENZ).")
+                Text(tr("{0} ponto(s). Formato do Civil 3D: número, descrição, E, N, cota (PDENZ).", vm.userPoints.size))
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onImport) { Text("Importar TXT/CSV") }
-                    onImportDrive?.let { OutlinedButton(onClick = it) { Text("☁ Importar do Google Drive") } }
-                    OutlinedButton(onClick = onExport, enabled = vm.userPoints.isNotEmpty()) { Text("Exportar PDENZ") }
+                    OutlinedButton(onClick = onImport) { Text(tr("Importar TXT/CSV")) }
+                    onImportDrive?.let { OutlinedButton(onClick = it) { Text(tr("☁ Importar do Google Drive")) } }
+                    OutlinedButton(onClick = onExport, enabled = vm.userPoints.isNotEmpty()) { Text(tr("Exportar PDENZ")) }
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onCreate) { Text("Criar ponto na planta") }
-                    OutlinedButton(onClick = onGenerate) { Text("Gerar pontos…") }
+                    OutlinedButton(onClick = onCreate) { Text(tr("Criar ponto na planta")) }
+                    OutlinedButton(onClick = onGenerate) { Text(tr("Gerar pontos…")) }
                     OutlinedButton(onClick = { vm.surfaceFromPoints() }, enabled = vm.userPoints.count { !it.z.isNaN() } >= 3) {
-                        Text("Gerar superfície")
+                        Text(tr("Gerar superfície"))
                     }
                 }
                 if (vm.lastGenerated.isNotEmpty()) {
-                    TextButton(onClick = { vm.undoGenerated() }) { Text("Desfazer última geração (${vm.lastGenerated.size} pontos)") }
+                    TextButton(onClick = { vm.undoGenerated() }) { Text(tr("Desfazer última geração ({0} pontos)", vm.lastGenerated.size)) }
                 }
                 vm.pointsMessage?.let {
                     Spacer(Modifier.height(8.dp))
@@ -98,24 +100,24 @@ fun PointEditDialog(
         confirmButton = {
             TextButton(enabled = valid, onClick = {
                 onSave(CogoPoint(number.trim(), description.trim(), num(e)!!, num(n)!!, num(z) ?: Double.NaN))
-            }) { Text("Salvar") }
+            }) { Text(tr("Salvar")) }
         },
         dismissButton = {
             Row {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text("Apagar") }
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                if (onDelete != null) TextButton(onClick = onDelete) { Text(tr("Apagar")) }
+                TextButton(onClick = onDismiss) { Text(tr("Cancelar")) }
             }
         },
-        title = { Text(if (old == null) "Novo ponto" else "Ponto ${old.number}") },
+        title = { Text(if (old == null) tr("Novo ponto") else tr("Ponto {0}", old.number)) },
         text = {
             // Scrolls so the fields stay reachable above the keyboard.
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(number, { number = it }, label = { Text("Número") }, singleLine = true)
-                OutlinedTextField(description, { description = it }, label = { Text("Descrição") }, singleLine = true)
+                OutlinedTextField(number, { number = it }, label = { Text(tr("Número")) }, singleLine = true)
+                OutlinedTextField(description, { description = it }, label = { Text(tr("Descrição")) }, singleLine = true)
                 val decimal = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 OutlinedTextField(e, { e = it }, label = { Text("E (${StationFormat.lengthUnit})") }, singleLine = true, keyboardOptions = decimal, isError = num(e) == null)
                 OutlinedTextField(n, { n = it }, label = { Text("N (${StationFormat.lengthUnit})") }, singleLine = true, keyboardOptions = decimal, isError = num(n) == null)
-                OutlinedTextField(z, { z = it }, label = { Text("Cota (${StationFormat.lengthUnit})") }, singleLine = true, keyboardOptions = decimal,
+                OutlinedTextField(z, { z = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, keyboardOptions = decimal,
                     isError = z.isNotBlank() && num(z) == null)
             }
         },
@@ -134,23 +136,23 @@ fun PointCard(
 ) {
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(12.dp)) {
-            Text("Ponto ${point.number}" + if (point.description.isNotEmpty()) " · ${point.description}" else "",
+            Text(tr("Ponto {0}", point.number) + if (point.description.isNotEmpty()) " · ${point.description}" else "",
                 style = MaterialTheme.typography.titleSmall)
             PointLine("E / N", f3(point.x) + " / " + f3(point.y))
-            PointLine("Cota", if (point.z.isNaN()) "sem cota" else StationFormat.length(point.z, 3))
+            PointLine(tr("Cota"), if (point.z.isNaN()) tr("sem cota") else StationFormat.length(point.z, 3))
             terrain?.let { t ->
-                PointLine("Terreno no ponto", StationFormat.length(t, 3))
+                PointLine(tr("Terreno no ponto"), StationFormat.length(t, 3))
                 if (!point.z.isNaN()) {
                     val d = point.z - t
-                    PointLine("Ponto − terreno", (if (d >= 0) "+" else "−") + StationFormat.length(abs(d), 3))
+                    PointLine(tr("Ponto − terreno"), (if (d >= 0) "+" else "−") + StationFormat.length(abs(d), 3))
                 }
             }
             alignment?.let { a ->
                 PointLine(a.name, StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onEdit) { Text("Editar") }
-                TextButton(onClick = onClose) { Text("Fechar") }
+                TextButton(onClick = onEdit) { Text(tr("Editar")) }
+                TextButton(onClick = onClose) { Text(tr("Fechar")) }
             }
         }
     }

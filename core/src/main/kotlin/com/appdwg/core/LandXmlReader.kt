@@ -46,7 +46,7 @@ class LandXmlReader(private val parser: XmlPullParser) {
     // region Surfaces
 
     private fun readSurface() {
-        val name = parser.attr("name") ?: "Superfície ${surfaces.size + 1}"
+        val name = parser.attr("name") ?: tr("Superfície {0}", surfaces.size + 1)
         val depth = parser.depth
         val ids = PointIds()
         val xs = DoubleList()
@@ -83,7 +83,7 @@ class LandXmlReader(private val parser: XmlPullParser) {
         }
 
         if (!isTin) {
-            warnings.add("Superfície \"$name\" não é TIN e foi ignorada.")
+            warnings.add(tr("Superfície \"{0}\" não é TIN e foi ignorada.", name))
             return
         }
         val faces = IntList()
@@ -95,7 +95,7 @@ class LandXmlReader(private val parser: XmlPullParser) {
             val c = ids.index(refs[3 * t + 2])
             if (a < 0 || b < 0 || c < 0) skipped++ else { faces.add(a); faces.add(b); faces.add(c) }
         }
-        if (skipped > 0) warnings.add("Superfície \"$name\": $skipped triângulos com pontos inexistentes foram ignorados.")
+        if (skipped > 0) warnings.add(tr("Superfície \"{0}\": {1} triângulos com pontos inexistentes foram ignorados.", name, skipped))
         surfaces.add(Surface(name, xs.toArray(), ys.toArray(), zs.toArray(), faces.toArray()))
     }
 
@@ -112,7 +112,7 @@ class LandXmlReader(private val parser: XmlPullParser) {
     ) {
         fun build(points: Map<String, CgPoint>): Alignment {
             val built = elements.mapNotNull { it.build(points) ?: run {
-                warnings.add("Alinhamento \"$name\": um elemento referencia um ponto inexistente e foi ignorado.")
+                warnings.add(tr("Alinhamento \"{0}\": um elemento referencia um ponto inexistente e foi ignorado.", name))
                 null
             } }
             return Alignment(name, startStation, built, profile)
@@ -162,7 +162,7 @@ class LandXmlReader(private val parser: XmlPullParser) {
     }
 
     private fun readAlignment() {
-        val name = parser.attr("name") ?: "Alinhamento ${rawAlignments.size + 1}"
+        val name = parser.attr("name") ?: tr("Alinhamento {0}", rawAlignments.size + 1)
         val startStation = parser.attr("staStart")?.toDoubleOrNull() ?: 0.0
         val depth = parser.depth
         val elements = ArrayList<RawElement>()
@@ -175,9 +175,9 @@ class LandXmlReader(private val parser: XmlPullParser) {
             if (event != XmlPullParser.START_TAG) continue
             when (val tag = local()) {
                 "Line", "Curve", "Spiral" -> elements.add(readElement(tag))
-                "IrregularLine", "Chain" -> warnings.add("Alinhamento \"$name\": elemento $tag ainda não é suportado.")
+                "IrregularLine", "Chain" -> warnings.add(tr("Alinhamento \"{0}\": elemento {1} ainda não é suportado.", name, tag))
                 "ProfAlign" -> if (profile == null) profile = readProfAlign()
-                "StaEquation" -> warnings.add("Alinhamento \"$name\": equações de estaca ainda não são aplicadas.")
+                "StaEquation" -> warnings.add(tr("Alinhamento \"{0}\": equações de estaca ainda não são aplicadas.", name))
             }
         }
         rawAlignments.add(RawAlignment(name, startStation, elements, profile, warnings))
@@ -216,7 +216,7 @@ class LandXmlReader(private val parser: XmlPullParser) {
                 "PVI" -> 0.0
                 "ParaCurve", "CircCurve" -> parser.attr("length")?.toDoubleOrNull() ?: 0.0
                 "UnsymParaCurve" -> {
-                    warnings.add("Greide \"$name\": curva vertical assimétrica tratada como simétrica.")
+                    warnings.add(tr("Greide \"{0}\": curva vertical assimétrica tratada como simétrica.", name))
                     (parser.attr("lengthIn")?.toDoubleOrNull() ?: 0.0) + (parser.attr("lengthOut")?.toDoubleOrNull() ?: 0.0)
                 }
                 else -> continue

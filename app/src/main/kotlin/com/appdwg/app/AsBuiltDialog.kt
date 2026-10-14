@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -103,7 +105,7 @@ fun AsBuiltDialog(
                         FilterChip(st.source == 2, { st.source = 2 }, { Text(stringResource(R.string.asbuilt_points_all, user.size + filePoints.size)) })
                     }
                     OutlinedButton(onClick = onImport) { Text(stringResource(R.string.asbuilt_import)) }
-                    onImportDrive?.let { OutlinedButton(onClick = it) { Text("☁ Google Drive") } }
+                    onImportDrive?.let { OutlinedButton(onClick = it) { Text(tr("☁ Google Drive")) } }
                 }
                 Text(stringResource(R.string.asbuilt_design), style = MaterialTheme.typography.labelLarge)
                 if (surfaces.isEmpty()) Text(stringResource(R.string.asbuilt_no_surface), style = MaterialTheme.typography.bodySmall)

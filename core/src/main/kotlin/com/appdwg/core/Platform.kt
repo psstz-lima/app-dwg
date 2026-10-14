@@ -23,7 +23,7 @@ data class SlopeRule(
     val benchFall: Double = 0.0,
     val heights: List<Double> = emptyList(),
 ) {
-    init { require(ratio > 0) { "inclinação do talude deve ser maior que zero" } }
+    init { require(ratio > 0) { tr("inclinação do talude deve ser maior que zero") } }
 
     /** Height of slope piece [k] (0 = next to the platform); 0 means no benches. */
     fun heightOf(k: Int): Double = heights.filter { it > 0 }.let { h -> if (h.isEmpty()) benchHeight else h[minOf(k, h.size - 1)] }
@@ -64,7 +64,7 @@ class PlatformResult(
 object Platform {
     /** Designs [d] against [terrain], naming the surface [name]. */
     fun design(d: PlatformDesign, terrain: Surface, name: String = "Plataforma"): PlatformResult {
-        require(d.outline.size >= 3) { "a plataforma precisa de 3 vértices ou mais" }
+        require(d.outline.size >= 3) { tr("a plataforma precisa de 3 vértices ou mais") }
         val ccw = signedArea(d.outline) > 0
         val poly = if (ccw) d.outline else d.outline.reversed()
         val vz = d.vertexElevations?.let { if (ccw) it else it.reversed() }

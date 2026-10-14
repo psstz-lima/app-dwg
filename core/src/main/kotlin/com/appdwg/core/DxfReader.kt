@@ -87,7 +87,7 @@ internal fun fastDoubleOrNull(s: String): Double? {
     return if (neg) -v else v
 }
 
-internal fun fastDouble(s: String): Double = fastDoubleOrNull(s) ?: throw NumberFormatException("número inválido: $s")
+internal fun fastDouble(s: String): Double = fastDoubleOrNull(s) ?: throw NumberFormatException(tr("número inválido: {0}", s))
 
 class DxfReader(private val input: BufferedReader) {
 
@@ -116,9 +116,9 @@ class DxfReader(private val input: BufferedReader) {
     /** [onStage] is told when the file has been read and the drawing is being built. */
     fun read(onStage: (String) -> Unit = {}): LandXmlProject {
         parse()
-        onStage("Montando desenho (${modelSpace.size} objetos)")
+        onStage(tr("Montando desenho ({0} objetos)", modelSpace.size))
         draw(modelSpace, Xf.IDENTITY, Context("0", null, true), 0)
-        onStage("Montando superfícies")
+        onStage(tr("Montando superfícies"))
         return build()
     }
 
@@ -155,7 +155,7 @@ class DxfReader(private val input: BufferedReader) {
         while (true) {
             val codeLine = input.readLine() ?: break
             val value = input.readLine()?.trim() ?: break
-            val code = fastInt(codeLine) ?: error("DXF inválido perto de \"${codeLine.take(40)}\"")
+            val code = fastInt(codeLine) ?: error(tr("DXF inválido perto de \"{0}\"", codeLine.take(40)))
 
             if (expectSectionName) {
                 expectSectionName = false
@@ -356,7 +356,7 @@ class DxfReader(private val input: BufferedReader) {
                     }
                 }
             }
-            flags and 16 != 0 -> skipped.merge("POLYLINE (malha)", 1, Int::plus)
+            flags and 16 != 0 -> skipped.merge(tr("POLYLINE (malha)"), 1, Int::plus)
             flags and 8 != 0 -> out.line3(curve.map { Point3(it.d(10), it.d(20), it.d(30)) }, flags and 1 != 0)
             else -> {
                 val ocs = Ocs.of(p)
@@ -551,7 +551,7 @@ class DxfReader(private val input: BufferedReader) {
                 surfaces += toSurface(layer, corners)
             }
         }
-        val warnings = skipped.map { (type, n) -> "Não exibidos: $n ${SKIPPED_NAMES[type] ?: type}" }
+        val warnings = skipped.map { (type, n) -> tr("Não exibidos: {0} {1}", n, SKIPPED_NAMES[type] ?: type) }
         return LandXmlProject(
             linearUnit = linearUnit,
             coordinateSystem = null,
@@ -706,8 +706,8 @@ class DxfReader(private val input: BufferedReader) {
         private val INSUNITS = mapOf(1 to "inch", 2 to "foot", 4 to "millimeter", 5 to "centimeter", 6 to "meter", 7 to "kilometer")
 
         private val SKIPPED_NAMES = mapOf(
-            "LEADER" to "chamadas (LEADER)",
-            "MULTILEADER" to "chamadas (MULTILEADER)",
+            "LEADER" to tr("chamadas (LEADER)"),
+            "MULTILEADER" to tr("chamadas (MULTILEADER)"),
         )
 
         private fun trueColor(rgb: Int) = (0xFF shl 24) or (rgb and 0xFFFFFF)

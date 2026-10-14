@@ -1,5 +1,7 @@
 package com.appdwg.app
 
+import com.appdwg.core.tr
+
 import android.content.Context
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,12 +28,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** Look the user picks in Settings › Appearance; [AUTO] follows the system's dark mode. */
-enum class ThemeChoice(val label: String, val hint: String) {
+enum class ThemeChoice(private val labelPt: String, private val hintPt: String) {
     AUTO("Automático", "Campo Escuro com o sistema escuro, Engenharia Clara de dia"),
     FIELD_DARK("Campo Escuro", "Escuro, para pouca luz e economia de bateria"),
     ENGINEERING("Engenharia Clara", "Claro e sóbrio, como um desenho técnico"),
     EARTH("Terra", "Tons de terra, cantos arredondados e painéis flutuantes"),
-    SUN("Alto Contraste (sol)", "Preto e amarelo, para sol forte; alvos de toque maiores"),
+    SUN("Alto Contraste (sol)", "Preto e amarelo, para sol forte; alvos de toque maiores");
+
+    val label: String get() = tr(labelPt)
+    val hint: String get() = tr(hintPt)
 }
 
 /** Every colour, font and size the screens read from the theme, beyond Material's own. */
@@ -225,10 +230,13 @@ fun GromaticTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
 }
 
 /** Units the user picked in Aparência; [AUTO] is imperial only in the United States. */
-enum class UnitChoice(val label: String, val hint: String) {
+enum class UnitChoice(private val labelPt: String, private val hintPt: String) {
     AUTO("Automático", "Pelo idioma: imperial só em inglês dos EUA"),
     METRIC("Métrico", "m, m², ha, m³"),
-    IMPERIAL("Imperial", "pé internacional (ft), ft², acre, jarda cúbica (yd³)"),
+    IMPERIAL("Imperial", "pé internacional (ft), ft², acre, jarda cúbica (yd³)");
+
+    val label: String get() = tr(labelPt)
+    val hint: String get() = tr(hintPt)
 }
 
 /** Units choice kept on the device; applying it sets [com.appdwg.core.Display]. */
@@ -253,10 +261,12 @@ class UnitStore(context: Context) {
 }
 
 /** Language picked in Aparência; [AUTO] follows the device. */
-enum class LanguageChoice(val label: String, val tag: String?) {
+enum class LanguageChoice(private val labelPt: String, val tag: String?) {
     AUTO("Automático (do sistema)", null),
     PORTUGUESE("Português (Brasil)", "pt-BR"),
-    ENGLISH("English", "en-US"),
+    ENGLISH("English", "en-US");
+
+    val label: String get() = tr(labelPt)
 }
 
 /**
