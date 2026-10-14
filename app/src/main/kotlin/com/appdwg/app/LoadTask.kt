@@ -27,7 +27,7 @@ import java.io.FilterInputStream
 import java.io.InputStream
 
 /** Progress of a file being loaded: what is happening and, when known, how far along it is. */
-class LoadTask(val label: String) {
+class LoadTask(val label: String, /** Stops the task; null when it cannot be stopped. */ val onCancel: (() -> Unit)? = null) {
     var stage by mutableStateOf("Lendo arquivo")
     /** 0..1, or null while the step has no measurable progress. */
     var fraction by mutableStateOf<Float?>(null)
@@ -85,6 +85,10 @@ fun LoadProgress(task: LoadTask, modifier: Modifier = Modifier) {
         val f = task.fraction
         if (f != null) LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth())
         else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        task.onCancel?.let { cancel ->
+            Spacer(Modifier.height(8.dp))
+            GButton("Cancelar", cancel, outlined = true)
+        }
     }
 }
 

@@ -12,6 +12,8 @@ import kotlin.math.tan
 /** One web map tile ("slippy map" numbering: x east, y south from the top-left). */
 data class TileId(val z: Int, val x: Int, val y: Int) {
     val parent get() = TileId(z - 1, x shr 1, y shr 1)
+    /** The four tiles one zoom level finer that make up this one. */
+    val children get() = listOf(TileId(z + 1, 2 * x, 2 * y), TileId(z + 1, 2 * x + 1, 2 * y), TileId(z + 1, 2 * x, 2 * y + 1), TileId(z + 1, 2 * x + 1, 2 * y + 1))
 }
 
 /** Tile corners in project UTM coordinates: north-west, north-east, south-east, south-west. */

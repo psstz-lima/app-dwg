@@ -30,7 +30,12 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
 
 /** A web map tile server. [bulk] says whether its terms allow downloading an area ahead of time. */
-data class BasemapSource(val id: String, val label: String, val url: String, val maxZoom: Int, val bulk: Boolean, val credit: String)
+data class BasemapSource(val id: String, val label: String, val url: String, val maxZoom: Int, val bulk: Boolean, val credit: String) {
+    /** Esri sends a flat grey "map data not yet available" tile where it has no imagery. */
+    val greyPlaceholders get() = id.startsWith("esri")
+    /** OpenStreetMap asks apps to refresh cached tiles after a week and to keep few connections open. */
+    val maxAgeMs: Long? get() = if (id == "osm") 7L * 24 * 3600 * 1000 else null
+}
 
 val BASEMAP_SOURCES = listOf(
     BasemapSource("esri_img", "Satélite", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", 19, true, "Esri, Maxar, Earthstar Geographics"),
@@ -51,6 +56,7 @@ class BasemapTile(val bitmap: Bitmap, val src: android.graphics.Rect, val corner
 class BasemapStore(context: Context) {
     private val prefs = context.getSharedPreferences("basemap", Context.MODE_PRIVATE)
     private val root = File(context.filesDir, "tiles")
+    private val density = context.resources.displayMetrics.density.coerceAtLeast(1f)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     var enabled by mutableStateOf(prefs.getBoolean("enabled", false)); private set
@@ -61,19 +67,36 @@ class BasemapStore(context: Context) {
     /** Bumped when a tile arrives, so the plan redraws. */
     var version by mutableIntStateOf(0); private set
 
+    init {
+        // Plain OpenStreetMap tiles (rural areas) were once taken for Esri's "no imagery" tiles and
+        // stored empty, which left them blank for good: those markers are dropped once.
+        if (!prefs.getBoolean("osmEmptyFixed", false)) {
+            scope.launch {
+                File(root, "osm").walkBottomUp().filter { it.isFile && it.length() == 0L }.forEach { it.delete() }
+                prefs.edit().putBoolean("osmEmptyFixed", true).apply()
+            }
+        }
+    }
+
     fun enable(v: Boolean) { enabled = v; prefs.edit().putBoolean("enabled", v).apply() }
     fun choose(s: BasemapSource) { source = s; prefs.edit().putString("source", s.id).apply(); version++ }
     fun changeOpacity(v: Float) { opacity = v; prefs.edit().putFloat("opacity", v).apply() }
     fun allowOnline(v: Boolean) { online = v; prefs.edit().putBoolean("online", v).apply() }
 
-    private val memory = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
+    // Room for a full tablet screen of tiles plus the coarser and finer ones drawn while zooming.
+    private val memory = object : LruCache<String, Bitmap>(minOf(128L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 5).toInt()) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
-    /** Tiles not on disk nor fetched, with when that was found, so they are not retried every frame. */
-    private val missing = HashMap<String, Long>()
+    /**
+     * Tiles that could not be fetched: when that last happened and how many times, so they are
+     * retried after 2, 4, 8… seconds (at most a minute) instead of every frame or never.
+     */
+    private val missing = HashMap<String, Pair<Long, Int>>()
+    private fun retryDelay(attempts: Int) = minOf(60_000L, 2_000L shl minOf(attempts - 1, 5))
     private val loading = HashSet<String>()
     private val corners = object : LruCache<String, TileCorners>(4096) {}
     private val net = Semaphore(4)
+    private val osmNet = Semaphore(2)
     private val disk = Semaphore(2)
 
     private fun key(s: BasemapSource, t: TileId) = "${s.id}/${t.z}/${t.x}/${t.y}"
@@ -86,8 +109,8 @@ class BasemapStore(context: Context) {
         memory.get(k)?.let { return it }
         synchronized(loading) {
             if (k in loading) return null
-            val since = missing[k]
-            if (since != null && !(fetch && online && System.currentTimeMillis() - since > 30_000)) return null
+            val miss = missing[k]
+            if (miss != null && !(fetch && online && System.currentTimeMillis() - miss.first > retryDelay(miss.second))) return null
             loading += k
         }
         scope.launch {
@@ -96,10 +119,16 @@ class BasemapStore(context: Context) {
             // An empty file marks a tile the server has no picture for: a coarser one is drawn instead.
             val known = f.exists()
             if (known && f.length() > 0) disk.withPermit { bmp = BitmapFactory.decodeFile(f.path) }
-            if (bmp == null && !known && fetch && online) net.withPermit { bmp = download(s, t)?.let { BitmapFactory.decodeFile(it.path) } }
+            val gate = if (s.id == "osm") osmNet else net
+            if (bmp == null && !known && fetch && online) gate.withPermit { bmp = download(s, t)?.let { BitmapFactory.decodeFile(it.path) } }
+            // A stale tile is drawn at once and fetched again in the background.
+            val age = s.maxAgeMs
+            if (bmp != null && age != null && fetch && online && System.currentTimeMillis() - f.lastModified() > age) {
+                scope.launch { gate.withPermit { download(s, t)?.let { BitmapFactory.decodeFile(it.path) }?.let { fresh -> memory.put(k, fresh); withContext(Dispatchers.Main) { version++ } } } }
+            }
             synchronized(loading) {
                 loading -= k
-                if (bmp == null) missing[k] = System.currentTimeMillis() else missing -= k
+                if (bmp == null) missing[k] = System.currentTimeMillis() to ((missing[k]?.second ?: 0) + 1) else missing -= k
             }
             bmp?.let { memory.put(k, it); withContext(Dispatchers.Main) { version++ } }
         }
@@ -117,7 +146,8 @@ class BasemapStore(context: Context) {
             f.parentFile?.mkdirs()
             val tmp = File(f.path + ".part")
             c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
-            if (isPlaceholder(tmp)) { tmp.delete(); f.writeBytes(ByteArray(0)); return f }
+            if (s.greyPlaceholders && isPlaceholder(tmp)) { tmp.delete(); f.writeBytes(ByteArray(0)); return f }
+            if (f.exists()) f.delete()
             if (!tmp.renameTo(f)) return null
             f
         } finally { c.disconnect() }
@@ -151,15 +181,17 @@ class BasemapStore(context: Context) {
         if (crs.isGeographic) return emptyList()
         val lat = runCatching { crs.toWgs84(view.center.x, view.center.y).first }.getOrNull() ?: return emptyList()
         if (lat.isNaN() || kotlin.math.abs(lat) > 85) return emptyList()
-        val z = WebTiles.zoomFor(mpp, lat, 2, s.maxZoom)
+        // Tiles sized in dp, as web maps do, so street names stay readable on dense screens.
+        val z = WebTiles.zoomFor(mpp * density, lat, 2, s.maxZoom)
         val tiles = WebTiles.covering(view, crs, z)
         if (tiles.size > 400) return emptyList()
         val out = ArrayList<BasemapTile>(tiles.size)
         for (t in tiles) {
             val own = bitmap(t, fetch = true)
             if (own != null) { out += BasemapTile(own, android.graphics.Rect(0, 0, own.width, own.height), cornersOf(t, crs)); continue }
-            // Coarser tile, cropped to this tile's part of it.
+            // Until the tile arrives: a coarser one cropped to its part, else the finer ones already at hand.
             var p = t
+            var covered = false
             for (up in 1..6) {
                 if (p.z <= 1) break
                 p = p.parent
@@ -167,9 +199,16 @@ class BasemapStore(context: Context) {
                 val n = 1 shl up
                 val cw = b.width / n; val ch = b.height / n
                 val ox = (t.x - (p.x shl up)) * cw; val oy = (t.y - (p.y shl up)) * ch
-                if (cw > 0 && ch > 0) out += BasemapTile(b, android.graphics.Rect(ox, oy, ox + cw, oy + ch), cornersOf(t, crs))
+                if (cw > 0 && ch > 0) { out += BasemapTile(b, android.graphics.Rect(ox, oy, ox + cw, oy + ch), cornersOf(t, crs)); covered = true }
                 break
             }
+            if (!covered && t.z < s.maxZoom) for (c in t.children) {
+                val b = memory.get(key(s, c)) ?: continue
+                out += BasemapTile(b, android.graphics.Rect(0, 0, b.width, b.height), cornersOf(c, crs))
+                covered = true
+            }
+            // Nothing at hand: one tile two levels coarser (it covers 16 of these) fills in quickly.
+            if (!covered && t.z > 3) bitmap(t.parent.parent, fetch = true)
         }
         return out
     }

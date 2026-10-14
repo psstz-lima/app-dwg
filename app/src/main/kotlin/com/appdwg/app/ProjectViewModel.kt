@@ -135,6 +135,64 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     var tasks by mutableStateOf<List<LoadTask>>(emptyList())
         private set
 
+    // ---- Google Drive: files are downloaded once to a local copy, with progress, then read from it ----
+
+    /** Local copies of cloud files opened in this session, by their document. */
+    private val cloudCopies = java.util.concurrent.ConcurrentHashMap<Uri, java.io.File>()
+
+    /** The file's content: its downloaded copy when there is one. */
+    private fun input(uri: Uri): java.io.InputStream? =
+        cloudCopies[uri]?.takeIf { it.exists() }?.inputStream() ?: getApplication<Application>().contentResolver.openInputStream(uri)
+
+    /** Size the provider reports without downloading the file, or null. */
+    private fun reportedSize(uri: Uri): Long? = runCatching {
+        getApplication<Application>().contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
+    }.getOrNull()
+
+    /**
+     * Downloads a Google Drive file to the app's cache, showing the bytes received on [task].
+     * Throws CancellationException when the user cancels.
+     */
+    private suspend fun download(uri: Uri, task: LoadTask) = withContext(Dispatchers.IO) {
+        val total = reportedSize(uri)?.takeIf { it > 0 }
+        val dir = java.io.File(getApplication<Application>().cacheDir, "cloud").apply { mkdirs() }
+        val file = java.io.File(dir, Integer.toHexString(uri.toString().hashCode()))
+        task.step("Aguardando o Google Drive…")
+        val job = coroutineContext[Job]!!
+        try {
+            (getApplication<Application>().contentResolver.openInputStream(uri) ?: error("arquivo indisponível")).use { inp ->
+                file.outputStream().use { out ->
+                    val buf = ByteArray(1 shl 16)
+                    var done = 0L
+                    var shown = -1L
+                    while (true) {
+                        if (!job.isActive) throw kotlinx.coroutines.CancellationException()
+                        val n = inp.read(buf)
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        // Updates about every 256 kB, so the screen keeps up without slowing the copy.
+                        if (done - shown >= 1 shl 18) {
+                            shown = done
+                            fun mb(b: Long) = StationFormat.decimal(b / 1048576.0, 1)
+                            task.step("Baixando do Google Drive · " + mb(done) + (total?.let { " de " + mb(it) } ?: "") + " MB",
+                                total?.let { (done.toFloat() / it).coerceAtMost(1f) })
+                        }
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            file.delete()
+            throw e
+        }
+        cloudCopies[uri] = file
+    }
+
+    /** The open, or the file being opened, so a download can be cancelled. */
+    private var openJob: kotlinx.coroutines.Job? = null
+
     private suspend fun <T> tracked(label: String, block: suspend (LoadTask) -> T): T {
         val task = LoadTask(label)
         tasks = tasks + task
@@ -269,7 +327,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val name = displayName(uri)
         run {
             try {
-                val drawing = tracked("Adicionando $name") { t -> withContext(Dispatchers.IO) { read(uri, t) } }
+                val drawing = tracked("Adicionando $name") { t ->
+                    if (CloudDocs.isDrive(uri.toString())) download(uri, t)
+                    withContext(Dispatchers.IO) { read(uri, t) }
+                }
                 if (drawing.surfaces.isEmpty() && drawing.alignments.isEmpty() && drawing.cgPoints.isEmpty() && drawing.polylines.isEmpty()) {
                     compareMessage = "$name não tem superfície, alinhamento, ponto nem linha."
                     return
@@ -1635,16 +1696,40 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         sectionLine?.let { add(ExportLine("_SECAO", listOf(it.first, it.second), false, 2)) }
     }
 
+    /** Writes [bytes] in pieces, showing the amount sent on [task]. */
+    private fun writeWithProgress(target: Uri, bytes: ByteArray, task: LoadTask, cloud: Boolean) {
+        (getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error("destino indisponível")).use { out ->
+            var done = 0
+            while (done < bytes.size) {
+                val n = minOf(1 shl 16, bytes.size - done)
+                out.write(bytes, done, n)
+                done += n
+                fun mb(b: Int) = StationFormat.decimal(b / 1048576.0, 1)
+                task.step((if (cloud) "Enviando · " else "Gravando · ") + mb(done) + " de " + mb(bytes.size) + " MB", done.toFloat() / bytes.size)
+            }
+        }
+    }
+
     private fun writeTo(target: Uri, what: String, block: (java.io.OutputStream) -> Unit) {
         viewModelScope.launch {
             exportMessage = try {
-                tracked("Exportando $what") {
+                val cloud = CloudDocs.isDrive(target.toString())
+                tracked(if (cloud) "Exportando $what para o Google Drive" else "Exportando $what") { t ->
                     withContext(Dispatchers.IO) {
-                        getApplication<Application>().contentResolver.openOutputStream(target, "wt")?.buffered(1 shl 16)?.use { block(it) }
-                            ?: error("destino indisponível")
+                        val raw = getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error("destino indisponível")
+                        // Bytes written so far, shown while the file is made and sent.
+                        val counting = object : java.io.FilterOutputStream(raw) {
+                            var done = 0L
+                            override fun write(b: ByteArray, off: Int, len: Int) {
+                                out.write(b, off, len); done += len
+                                t.step((if (cloud) "Enviando · " else "Gravando · ") + StationFormat.decimal(done / 1048576.0, 1) + " MB")
+                            }
+                        }
+                        counting.buffered(1 shl 16).use { block(it) }
                     }
                 }
-                "$what exportado para ${displayName(target)}."
+                if (cloud) "$what exportado para o Google Drive (${displayName(target)}); o app Drive termina o envio em segundo plano."
+                else "$what exportado para ${displayName(target)}."
             } catch (e: OutOfMemoryError) {
                 "Memória insuficiente para exportar $what."
             } catch (e: Exception) {
@@ -1841,10 +1926,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             projectMessage = try {
                 val json = doc.toJson()
-                withContext(Dispatchers.IO) {
-                    getApplication<Application>().contentResolver.openOutputStream(target, "wt")?.use {
-                        it.write(json.toString(2).toByteArray(Charsets.UTF_8))
-                    } ?: error("destino indisponível")
+                val bytes = json.toString(2).toByteArray(Charsets.UTF_8)
+                val cloud = CloudDocs.isDrive(target.toString())
+                tracked(if (cloud) "Enviando ao Google Drive" else "Salvando projeto") { t ->
+                    withContext(Dispatchers.IO) { writeWithProgress(target, bytes, t, cloud) }
                 }
                 runCatching {
                     getApplication<Application>().contentResolver.takePersistableUriPermission(
@@ -1856,7 +1941,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 CloudDocs.noteUsed(getApplication(), target)
                 remember(target)
                 then()
-                "Projeto salvo em ${displayName(target)}."
+                if (CloudDocs.isDrive(target.toString())) "Projeto salvo no Google Drive (${displayName(target)}); o app Drive termina o envio em segundo plano."
+                else "Projeto salvo em ${displayName(target)}."
             } catch (e: Exception) {
                 "Não foi possível salvar o projeto: ${e.message ?: e.javaClass.simpleName}"
             }
@@ -1895,8 +1981,32 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
         CloudDocs.noteUsed(getApplication(), uri)
         projectMessage = null
-        viewModelScope.launch {
-            // The free version opens small files only.
+        openJob?.cancel()
+        val before = state
+        openJob = viewModelScope.launch {
+            // The free version opens small files only (the cloud reports the size before downloading).
+            if (CloudDocs.isDrive(uri.toString())) {
+                val known = reportedSize(uri)
+                if (!pro.isPro && known != null && known > FreeLimits.MAX_FILE_BYTES) {
+                    state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
+                        StationFormat.decimal(known / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString()))
+                    proRequested = true
+                    return@launch
+                }
+                val name = displayName(uri)
+                val task = LoadTask("Abrindo $name") { openJob?.cancel() }
+                state = ProjectState.Loading(name, task)
+                try {
+                    download(uri, task)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    state = before
+                    projectMessage = "Download cancelado."
+                    return@launch
+                } catch (e: Exception) {
+                    state = ProjectState.Failed(name, "Não foi possível baixar do Google Drive: ${e.message ?: e.javaClass.simpleName}")
+                    return@launch
+                }
+            }
             val size = withContext(Dispatchers.IO) { fileSize(uri) }
             if (!pro.isPro && size > FreeLimits.MAX_FILE_BYTES) {
                 state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
@@ -1906,7 +2016,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             }
             val head = withContext(Dispatchers.IO) {
                 runCatching {
-                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { s ->
+                    input(uri)?.use { s ->
                         val b = ByteArray(256); val n = s.read(b); if (n > 0) String(b, 0, n, Charsets.UTF_8) else ""
                     }
                 }.getOrNull().orEmpty()
@@ -1923,7 +2033,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val name = displayName(uri)
         val doc = try {
             withContext(Dispatchers.IO) {
-                val text = getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                val text = input(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
                     ?: error("arquivo indisponível")
                 ProjectDoc.fromJson(JSONObject(text))
             }
@@ -2124,7 +2234,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun read(uri: Uri, task: LoadTask? = null): LandXmlProject {
         val resolver = getApplication<Application>().contentResolver
         val size = fileSize(uri)
-        val raw = resolver.openInputStream(uri) ?: error("arquivo indisponível")
+        val raw = input(uri) ?: error("arquivo indisponível")
         val input = if (task == null) raw else CountingInputStream(raw, size) { task.step("Lendo arquivo", it) }
         return input.buffered().use { stream ->
             // Sniffs the content rather than trusting the file name, which e-mail apps often drop.
@@ -2210,7 +2320,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return total
     }
 
-    private fun fileSize(uri: Uri): Long =
+    private fun fileSize(uri: Uri): Long = cloudCopies[uri]?.takeIf { it.exists() }?.length() ?:
         runCatching { getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } }
             .getOrNull() ?: -1L
 
