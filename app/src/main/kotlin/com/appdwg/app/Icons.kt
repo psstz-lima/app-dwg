@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 
 /** Line icons (24 × 24, stroked) for the tool rail; the stroke width follows the theme. */
 enum class GIcon(val path: String) {
+    CLOSE("M6 6l12 12 M18 6L6 18"),
     PLAN("M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14"),
     CUBE("M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5"),
     SECTION("M2 18h20 M5 18l4-7h6l4 7"),
