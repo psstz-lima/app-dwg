@@ -68,6 +68,8 @@ import com.appdwg.core.Xrefs
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -978,15 +980,17 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         projectMessage = null
         viewModelScope.launch {
             if (!openNow(uri, allowEmpty = true)) return@launch
-            remember(uri)
-            projectUri = null
             val c = crs.fromWgs84(lat, lon)
             view?.let { v -> v.crs = crs; v.area = Bounds(c.x - 1000, c.y - 1000, c.x + 1000, c.y + 1000) }
             basemap.enable(true)
-            savedJson = currentDoc()?.toJson()?.toString()
+            // Kept as a project file in the app from the start, so what is downloaded stays with it.
+            saveProject(Uri.fromFile(java.io.File(dir, "novo-projeto-$stamp.gromatic"))) { projectMessage = null }
             areaRequested = true
         }
     }
+
+    /** Whether the open project has a surface to lay pictures on. */
+    val hasSurfaces get() = (state as? ProjectState.Loaded)?.project?.surfaces?.isNotEmpty() == true
 
     /** Set to open the area download (a new project from the map starts there). */
     var areaRequested by mutableStateOf(false)
@@ -1002,7 +1006,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * kinds as layered lines. Each result is saved in the app's storage and added to the project as
      * a file, like any other, so it is kept, styled and exported as usual.
      */
-    fun downloadArea(area: Bounds, dem: Boolean, tolerance: Double, keepTiff: Boolean, osm: Set<com.appdwg.core.Overpass.Kind>) {
+    fun downloadArea(area: Bounds, dem: Boolean, tolerance: Double, keepTiff: Boolean, osm: Set<com.appdwg.core.Overpass.Kind>,
+                     image: Boolean = false, scene: com.appdwg.core.Sentinel2.Scene? = null) {
         val crs = crs()
         if (crs.local) { areaMessage = tr("Escolha um sistema de coordenadas projetado (UTM, LTM…): o sistema local não tem latitude e longitude."); return }
         // The rectangle in latitude and longitude, from its corners.
@@ -1050,9 +1055,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         withContext(Dispatchers.IO) {
                             val blocks = com.appdwg.core.Overpass.blocks(south, west, north, east)
                             if (blocks.size > 60) error(tr("Área grande demais para o OpenStreetMap ({0} blocos). Desenhe uma área menor.", blocks.size))
-                            val answers = blocks.mapIndexed { i, b ->
-                                task.step(tr("Bloco {0} de {1}", i + 1, blocks.size), i.toFloat() / blocks.size)
-                                overpass(com.appdwg.core.Overpass.query(b[0], b[1], b[2], b[3], osm)) { !job.isActive }
+                            // A busy OpenStreetMap server leaves the rest of the download alone.
+                            val answers = try {
+                                blocks.mapIndexed { i, b ->
+                                    task.step(tr("Bloco {0} de {1}", i + 1, blocks.size), i.toFloat() / blocks.size)
+                                    overpass(com.appdwg.core.Overpass.query(b[0], b[1], b[2], b[3], osm)) { !job.isActive }
+                                }
+                            } catch (e: java.io.IOException) {
+                                notes += tr("OpenStreetMap não baixado: {0}", e.message ?: e.javaClass.simpleName); return@withContext
                             }
                             val (json, count) = com.appdwg.core.Overpass.toGeoJson(answers)
                             if (count == 0) { notes += tr("OpenStreetMap: nada desses tipos nesta área."); return@withContext }
@@ -1064,11 +1074,23 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 if (added.isNotEmpty()) for (u in added) addFileNow(u)
+                // The picture goes over the terrain, so it comes after it.
+                if (image) tracked(tr("Baixando imagem de satélite (Sentinel-2)"), onCancel = { job.cancel() }) { task ->
+                    val result = withContext(Dispatchers.IO) { satelliteImage(area, south, west, north, east, scene, dir, stamp, task) { !job.isActive } }
+                    val sc = result.first
+                    notes += sc.areaCloud?.let { tr("Imagem Sentinel-2 de {0} ({1}% de nuvens na área), colada sobre o terreno.", sc.date.take(10), StationFormat.decimal(it * 100, 0)) }
+                        ?: tr("Imagem Sentinel-2 de {0} ({1}% de nuvens na cena), colada sobre o terreno.", sc.date.take(10), StationFormat.decimal(sc.cloud, 0))
+                    notes += com.appdwg.core.Sentinel2.attribution(result.first.year)
+                    drapeNow(project = (state as? ProjectState.Loaded)?.project ?: return@tracked, uri = result.second, name = result.second.lastPathSegment ?: "sentinel2.jpg",
+                        world = result.third to (result.third.lastPathSegment ?: "sentinel2.jgw"), uris = listOf(result.second, result.third))
+                }
                 notes += listOfNotNull(
                     if (dem) com.appdwg.core.CopernicusDem.ATTRIBUTION + ". " + com.appdwg.core.CopernicusDem.DISCLAIMER + "." else null,
                     if (osm.isNotEmpty()) com.appdwg.core.Overpass.ATTRIBUTION else null,
                 )
                 areaMessage = notes.joinToString("\n")
+                // A project kept in the app (one started from the map) is saved with what came in.
+                projectUri?.takeIf { it.scheme == "file" && it.path?.startsWith(app.filesDir.path) == true }?.let { saveProject(it) { projectMessage = null } }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 areaMessage = tr("Download cancelado.")
             } catch (e: java.io.IOException) {
@@ -1082,6 +1104,165 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun cancelAreaDownload() { areaJob?.cancel() }
+
+    /** Sentinel-2 pictures that cover [area], newest first, for choosing the date. */
+    var scenes by mutableStateOf<List<com.appdwg.core.Sentinel2.Scene>>(emptyList())
+        private set
+    var scenesMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun searchScenes(area: Bounds) {
+        val crs = crs()
+        if (crs.local) return
+        val corners = listOf(area.minX to area.minY, area.minX to area.maxY, area.maxX to area.minY, area.maxX to area.maxY).map { (x, y) -> crs.toWgs84(x, y) }
+        scenesMessage = tr("Buscando imagens…")
+        viewModelScope.launch {
+            scenes = try {
+                val found = withContext(Dispatchers.IO) { findScenes(corners.minOf { it.first }, corners.minOf { it.second }, corners.maxOf { it.first }, corners.maxOf { it.second }, 60.0) }
+                if (found.isEmpty()) scenesMessage = tr("Nenhuma imagem cobre a área inteira no último ano.")
+                else scenesMessage = tr("Conferindo as nuvens na área…")
+                // The scene's own cloud cover says little about a small area: measured there for each date.
+                val measured = found.take(12).map { sc -> async(Dispatchers.IO) { sc.withAreaCloud(runCatching { areaCloud(sc, area) }.getOrNull()) } }.awaitAll()
+                if (found.isNotEmpty()) scenesMessage = null
+                measured
+            } catch (e: Exception) {
+                scenesMessage = tr("Não foi possível buscar: {0}", e.message ?: e.javaClass.simpleName); emptyList()
+            }
+        }
+    }
+
+    /**
+     * Share of cloud over [area] in [scene], from its scene classification (20 m), sampled on a
+     * grid of up to 100 x 100 points; only the blocks of that file under the area are read.
+     */
+    private fun areaCloud(scene: com.appdwg.core.Sentinel2.Scene, area: Bounds): Double? {
+        val href = scene.scl ?: return null
+        val input = HttpRandomInput.open(href) ?: return null
+        val reader = com.appdwg.core.TiffReader(input)
+        val layout = reader.blocks()
+        val pixel = scene.pixel * scene.width / layout.width
+        val zone = scene.epsg.takeLast(2).toInt()
+        val s2 = com.appdwg.core.CrsCatalog.byEpsg(scene.epsg) ?: com.appdwg.core.CrsCatalog.utm(com.appdwg.core.Datum.WGS84, zone, scene.epsg.startsWith("327"), scene.epsg)
+        val crs = crs()
+        val n = (maxOf(area.width, area.height) / pixel).toInt().coerceIn(2, 100)
+        val read = HashMap<Int, com.appdwg.core.Raster?>()
+        val classes = IntArray(n * n)
+        for (j in 0 until n) for (i in 0 until n) {
+            val (lat, lon) = crs.toWgs84(area.minX + area.width * (i + 0.5) / n, area.minY + area.height * (j + 0.5) / n)
+            val p = s2.fromWgs84(lat, lon)
+            val c = ((p.x - scene.originX) / pixel).toInt(); val r = ((scene.originY - p.y) / pixel).toInt()
+            if (c !in 0 until layout.width || r !in 0 until layout.height) continue
+            val b = (r / layout.blockHeight) * layout.across + c / layout.blockWidth
+            val raster = read.getOrPut(b) { reader.readBlock(b) } ?: continue
+            val x = c % layout.blockWidth; val y = r % layout.blockHeight
+            if (x < raster.width && y < raster.height) classes[j * n + i] = raster.pixels[y * raster.width + x] and 0xFF
+        }
+        return com.appdwg.core.Sentinel2.cloudShare(classes)
+    }
+
+    /** Pictures over the box from the last year with less than [maxCloud]% clouds, newest first. */
+    private fun findScenes(south: Double, west: Double, north: Double, east: Double, maxCloud: Double): List<com.appdwg.core.Sentinel2.Scene> {
+        val to = java.time.LocalDate.now(); val from = to.minusYears(1)
+        val body = com.appdwg.core.Sentinel2.searchBody(south, west, north, east, from.toString(), to.toString(), maxCloud, 60)
+        val c = (java.net.URL(com.appdwg.core.Sentinel2.SEARCH).openConnection() as java.net.HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true; connectTimeout = 20_000; readTimeout = 60_000
+            setRequestProperty("User-Agent", USER_AGENT); setRequestProperty("Content-Type", "application/json")
+        }
+        try {
+            c.outputStream.use { it.write(body.toByteArray()) }
+            if (c.responseCode != 200) throw java.io.IOException(tr("resposta {0} do servidor", c.responseCode))
+            return com.appdwg.core.Sentinel2.scenes(c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }, south, west, north, east)
+        } finally { c.disconnect() }
+    }
+
+    /**
+     * The chosen picture (or the newest one with few clouds) over [area]: the window of its file
+     * that covers the area is read, brought to the project's coordinate system, given automatic
+     * contrast, and saved as a JPEG with its world file. Returns the scene, picture and world file.
+     */
+    private fun satelliteImage(area: Bounds, south: Double, west: Double, north: Double, east: Double, chosen: com.appdwg.core.Sentinel2.Scene?,
+                               dir: java.io.File, stamp: String, task: LoadTask, cancelled: () -> Boolean): Triple<com.appdwg.core.Sentinel2.Scene, Uri, Uri> {
+        task.step(tr("Buscando a imagem mais recente com poucas nuvens"))
+        val scene = chosen ?: run {
+            // Newest first; the first one clear over the area wins, else the clearest of those seen.
+            var best: com.appdwg.core.Sentinel2.Scene? = null
+            for (sc in findScenes(south, west, north, east, 60.0).take(10)) {
+                if (cancelled()) throw kotlinx.coroutines.CancellationException()
+                task.step(tr("Conferindo as nuvens na área: {0}", sc.date.take(10)))
+                val m = sc.withAreaCloud(runCatching { areaCloud(sc, area) }.getOrNull() ?: (sc.cloud / 100))
+                if (best == null || m.areaCloud!! < best.areaCloud!!) best = m
+                if (m.areaCloud!! < 0.01) break
+            }
+            best
+        } ?: error(tr("Nenhuma imagem cobre a área inteira no último ano."))
+        val zone = scene.epsg.takeLast(2).toInt()
+        val s2 = com.appdwg.core.CrsCatalog.byEpsg(scene.epsg) ?: com.appdwg.core.CrsCatalog.utm(com.appdwg.core.Datum.WGS84, zone, scene.epsg.startsWith("327"), scene.epsg)
+        val crs = crs()
+        val input = HttpRandomInput.open(scene.href, cancelled) ?: error(tr("imagem não encontrada no servidor"))
+        val reader = com.appdwg.core.TiffReader(input)
+        val layout = reader.blocks()
+        // The picture's pixels the area needs (with a margin), from its corners in the picture's UTM zone.
+        val px = (0..8).flatMap { i -> (0..8).map { j -> area.minX + area.width * i / 8 to area.minY + area.height * j / 8 } }.map { (x, y) ->
+            val (lat, lon) = crs.toWgs84(x, y); val p = s2.fromWgs84(lat, lon)
+            (p.x - scene.originX) / scene.pixel to (scene.originY - p.y) / scene.pixel
+        }
+        val c0 = (px.minOf { it.first }.toInt() - 2).coerceIn(0, layout.width - 1); val c1 = (px.maxOf { it.first }.toInt() + 2).coerceIn(0, layout.width - 1)
+        val r0 = (px.minOf { it.second }.toInt() - 2).coerceIn(0, layout.height - 1); val r1 = (px.maxOf { it.second }.toInt() + 2).coerceIn(0, layout.height - 1)
+        var reduce = 1
+        while (maxOf(c1 - c0, r1 - r0) / reduce > 4096) reduce *= 2
+        val ww = (c1 - c0) / reduce + 1; val wh = (r1 - r0) / reduce + 1
+        val win = IntArray(ww * wh)
+        val blocks = (r0 / layout.blockHeight..r1 / layout.blockHeight).flatMap { by -> (c0 / layout.blockWidth..c1 / layout.blockWidth).map { bx -> by * layout.across + bx } }
+        blocks.forEachIndexed { k, b ->
+            if (cancelled()) throw kotlinx.coroutines.CancellationException()
+            task.step(tr("Lendo bloco {0} de {1} · {2} MB", k + 1, blocks.size, StationFormat.decimal(input.received / 1048576.0, 1)), k.toFloat() / blocks.size)
+            val raster = reader.readBlock(b, reduce) ?: return@forEachIndexed
+            val bx = (b % layout.across) * layout.blockWidth; val by = (b / layout.across) * layout.blockHeight
+            for (y in 0 until raster.height) {
+                val wy = (by + y * reduce - r0) / reduce
+                if (wy !in 0 until wh) continue
+                for (x in 0 until raster.width) {
+                    val wx = (bx + x * reduce - c0) / reduce
+                    if (wx in 0 until ww) win[wy * ww + wx] = raster.pixels[y * raster.width + x]
+                }
+            }
+        }
+        // The output picture in the project's system, about the source's pixel size.
+        task.step(tr("Ajustando a imagem ao sistema do projeto"))
+        val step = scene.pixel * reduce
+        val ow = (area.width / step).toInt().coerceIn(1, 4096); val oh = (area.height / step).toInt().coerceIn(1, 4096)
+        val sx = area.width / ow; val sy = area.height / oh
+        val out = IntArray(ow * oh)
+        // Exact positions on a coarse grid, interpolated in between: the map is smooth over an area this size.
+        val g = 32
+        val gw = ow / g + 2; val gh = oh / g + 2
+        val gx = DoubleArray(gw * gh); val gy = DoubleArray(gw * gh)
+        for (j in 0 until gh) for (i in 0 until gw) {
+            val (lat, lon) = crs.toWgs84(area.minX + (i * g + 0.5) * sx, area.maxY - (j * g + 0.5) * sy)
+            val p = s2.fromWgs84(lat, lon)
+            gx[j * gw + i] = ((p.x - scene.originX) / scene.pixel - c0) / reduce; gy[j * gw + i] = ((scene.originY - p.y) / scene.pixel - r0) / reduce
+        }
+        for (y in 0 until oh) {
+            val j = y / g; val ty = (y % g).toDouble() / g
+            for (x in 0 until ow) {
+                val i = x / g; val tx = (x % g).toDouble() / g
+                val k = j * gw + i
+                val fx = (gx[k] * (1 - tx) + gx[k + 1] * tx) * (1 - ty) + (gx[k + gw] * (1 - tx) + gx[k + gw + 1] * tx) * ty
+                val fy = (gy[k] * (1 - tx) + gy[k + 1] * tx) * (1 - ty) + (gy[k + gw] * (1 - tx) + gy[k + gw + 1] * tx) * ty
+                val ix = fx.toInt(); val iy = fy.toInt()
+                if (ix in 0 until ww && iy in 0 until wh) out[y * ow + x] = win[iy * ww + ix]
+            }
+        }
+        com.appdwg.core.Sentinel2.autoContrast(out)
+        val img = java.io.File(dir, "sentinel2-${scene.date.take(10)}-$stamp.jpg")
+        val bmp = Bitmap.createBitmap(out, ow, oh, Bitmap.Config.ARGB_8888)
+        img.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        bmp.recycle()
+        val world = java.io.File(dir, img.nameWithoutExtension + ".jgw")
+        fun n(v: Double) = String.format(java.util.Locale.ROOT, "%.6f", v)
+        world.writeText(listOf(n(sx), "0", "0", n(-sy), n(area.minX + sx / 2), n(area.maxY - sy / 2)).joinToString("\n") + "\n")
+        return Triple(scene, Uri.fromFile(img), Uri.fromFile(world))
+    }
 
     /** One Overpass request, retried a few times when the server is busy (429/504). */
     private fun overpass(query: String, cancelled: () -> Boolean): String {
@@ -2279,7 +2460,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun openProjectDoc(uri: Uri, doc: ProjectDoc, main: String) {
         val name = displayName(uri)
         relocating = null
-        if (!openNow(Uri.parse(main))) {
+        if (!openNow(Uri.parse(main), allowEmpty = true)) {
             val s = state
             if (s is ProjectState.Failed) {
                 relocating = uri to doc

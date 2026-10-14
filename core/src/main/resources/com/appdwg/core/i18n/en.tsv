@@ -1018,3 +1018,25 @@ Precisa de internet. Os dados entram no projeto como arquivos e ficam salvos nel
 Fontes: {0}. {1}.	Sources: {0}. {1}.
 Dados baixados da área	Downloaded area data
 OpenStreetMap: © colaboradores do OpenStreetMap, dados sob a licença ODbL, via Overpass API.	OpenStreetMap: © OpenStreetMap contributors, data under the ODbL licence, via the Overpass API.
+OpenStreetMap não baixado: {0}	OpenStreetMap not downloaded: {0}
+Baixando imagem de satélite (Sentinel-2)	Downloading satellite image (Sentinel-2)
+Imagem Sentinel-2 de {0} ({1}% de nuvens na área), colada sobre o terreno.	Sentinel-2 image from {0} ({1}% cloud over the area), draped on the terrain.
+Imagem Sentinel-2 de {0} ({1}% de nuvens na cena), colada sobre o terreno.	Sentinel-2 image from {0} ({1}% cloud in the scene), draped on the terrain.
+Buscando imagens…	Searching for images…
+Nenhuma imagem cobre a área inteira no último ano.	No image covers the whole area in the last year.
+Conferindo as nuvens na área…	Checking clouds over the area…
+Não foi possível buscar: {0}	Could not search: {0}
+Buscando a imagem mais recente com poucas nuvens	Searching for the newest image with few clouds
+Conferindo as nuvens na área: {0}	Checking clouds over the area: {0}
+imagem não encontrada no servidor	image not found on the server
+Lendo bloco {0} de {1} · {2} MB	Reading block {0} of {1} · {2} MB
+Ajustando a imagem ao sistema do projeto	Fitting the image to the project's system
+Imagem de satélite: Sentinel-2 (10 m), colada sobre o terreno	Satellite image: Sentinel-2 (10 m), draped on the terrain
+Precisa de uma superfície: marque também o terreno.	Needs a surface: also tick the terrain.
+Data: {0}	Date: {0}
+Data: a mais recente com poucas nuvens	Date: the newest with few clouds
+Escolher a data…	Choose the date…
+A mais recente com poucas nuvens	The newest with few clouds
+Imagens: Copernicus Sentinel data (ESA).	Images: Copernicus Sentinel data (ESA).
+{0} · tile {1} · {2}% de nuvens na área	{0} · tile {1} · {2}% cloud over the area
+{0} · tile {1} · {2}% de nuvens na cena	{0} · tile {1} · {2}% cloud in the scene

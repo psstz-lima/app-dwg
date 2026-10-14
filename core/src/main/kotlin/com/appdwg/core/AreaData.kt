@@ -254,3 +254,107 @@ object GeoTiffWriter {
         out.write(b.array())
     }
 }
+
+/**
+ * Sentinel-2 L2A true-colour pictures (the 10 m "visual" TCI band combination) from the public
+ * Cloud Optimized GeoTIFFs on AWS, found through the Earth Search STAC API.
+ */
+object Sentinel2 {
+    const val SEARCH = "https://earth-search.aws.element84.com/v1/search"
+    fun attribution(year: Int) = "Contains modified Copernicus Sentinel data $year"
+
+    /**
+     * One picture: its date, cloud cover (% of the whole scene), UTM EPSG, file, pixel grid and
+     * footprint (lon, lat); [scl] is its scene classification file and [areaCloud] the share of
+     * cloud over the area once measured (0..1).
+     */
+    class Scene(val id: String, val date: String, val cloud: Double, val epsg: String, val href: String,
+                val originX: Double, val originY: Double, val pixel: Double, val width: Int, val height: Int,
+                val footprint: List<Pair<Double, Double>>, val scl: String? = null, val areaCloud: Double? = null) {
+        val year get() = date.take(4).toIntOrNull() ?: 0
+        /** The Sentinel-2 tile (as "23KPU"): neighbouring tiles of the same day share a date. */
+        val tile get() = id.split('_').getOrNull(1) ?: ""
+        fun withAreaCloud(f: Double?) = Scene(id, date, cloud, epsg, href, originX, originY, pixel, width, height, footprint, scl, f)
+    }
+
+    /**
+     * Share (0..1) of cloud, cirrus and cloud shadow among the valid pixels of a piece of the
+     * scene classification (SCL classes 3, 8, 9, 10; 0 is no data). Null when nothing is valid.
+     */
+    fun cloudShare(classes: IntArray): Double? {
+        var valid = 0; var cloudy = 0
+        for (c in classes) {
+            if (c == 0) continue
+            valid++
+            if (c == 3 || c == 8 || c == 9 || c == 10) cloudy++
+        }
+        return if (valid == 0) null else cloudy.toDouble() / valid
+    }
+
+    /** STAC search for pictures over the box between [from] and [to] (ISO dates), clearest first by date. */
+    fun searchBody(south: Double, west: Double, north: Double, east: Double, from: String, to: String, maxCloud: Double, limit: Int = 30): String {
+        fun n(v: Double) = String.format(java.util.Locale.ROOT, "%.6f", v)
+        return "{\"collections\":[\"sentinel-2-l2a\"],\"bbox\":[${n(west)},${n(south)},${n(east)},${n(north)}]," +
+            "\"datetime\":\"${from}T00:00:00Z/${to}T23:59:59Z\",\"query\":{\"eo:cloud_cover\":{\"lt\":$maxCloud}}," +
+            "\"sortby\":[{\"field\":\"properties.datetime\",\"direction\":\"desc\"}],\"limit\":$limit}"
+    }
+
+    /** Pictures in a STAC answer that cover the whole box, newest first. */
+    fun scenes(json: String, south: Double, west: Double, north: Double, east: Double): List<Scene> {
+        val root = Json.parse(json) as? Map<*, *> ?: return emptyList()
+        return (root["features"] as? List<*>).orEmpty().mapNotNull { f ->
+            val m = f as? Map<*, *> ?: return@mapNotNull null
+            val p = m["properties"] as? Map<*, *> ?: return@mapNotNull null
+            val visual = (m["assets"] as? Map<*, *>)?.get("visual") as? Map<*, *> ?: return@mapNotNull null
+            val t = (visual["proj:transform"] as? List<*>)?.map { (it as Number).toDouble() } ?: return@mapNotNull null
+            val shape = (visual["proj:shape"] as? List<*>)?.map { (it as Number).toInt() } ?: return@mapNotNull null
+            val epsg = (p["proj:epsg"] as? Number)?.toInt()?.toString() ?: (p["proj:code"] as? String)?.substringAfter(':') ?: return@mapNotNull null
+            val ring = ((m["geometry"] as? Map<*, *>)?.get("coordinates") as? List<*>)?.firstOrNull() as? List<*> ?: return@mapNotNull null
+            val footprint = ring.mapNotNull { c -> (c as? List<*>)?.let { (it[0] as Number).toDouble() to (it[1] as Number).toDouble() } }
+            val s = Scene(m["id"].toString(), p["datetime"].toString(), (p["eo:cloud_cover"] as? Number)?.toDouble() ?: 100.0, epsg,
+                visual["href"].toString(), t[2], t[5], t[0], shape[1], shape[0], footprint,
+                ((m["assets"] as? Map<*, *>)?.get("scl") as? Map<*, *>)?.get("href")?.toString())
+            s.takeIf { listOf(west to south, west to north, east to south, east to north).all { (x, y) -> inside(x, y, footprint) } }
+        }
+    }
+
+    private fun inside(x: Double, y: Double, ring: List<Pair<Double, Double>>): Boolean {
+        var c = false
+        var j = ring.size - 1
+        for (i in ring.indices) {
+            val (xi, yi) = ring[i]; val (xj, yj) = ring[j]
+            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c
+            j = i
+        }
+        return c
+    }
+
+    /**
+     * Stretches each colour channel between its 2nd and 98th percentiles, as most viewers do, so
+     * the true-colour picture is neither dark nor washed out. Transparent pixels are left alone.
+     */
+    fun autoContrast(pixels: IntArray) {
+        val lo = IntArray(3); val hi = IntArray(3)
+        for (ch in 0..2) {
+            val hist = IntArray(256); var n = 0
+            for (p in pixels) if (p ushr 24 != 0) { hist[(p shr (16 - 8 * ch)) and 0xFF]++; n++ }
+            if (n == 0) return
+            var acc = 0; lo[ch] = 0; hi[ch] = 255
+            for (v in 0..255) { acc += hist[v]; if (acc >= n * 0.02) { lo[ch] = v; break } }
+            acc = 0
+            for (v in 255 downTo 0) { acc += hist[v]; if (acc >= n * 0.02) { hi[ch] = v; break } }
+            if (hi[ch] <= lo[ch]) { lo[ch] = 0; hi[ch] = 255 }
+        }
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            if (p ushr 24 == 0) continue
+            var out = p and 0xFF000000.toInt()
+            for (ch in 0..2) {
+                val v = (p shr (16 - 8 * ch)) and 0xFF
+                val s = ((v - lo[ch]) * 255 / (hi[ch] - lo[ch])).coerceIn(0, 255)
+                out = out or (s shl (16 - 8 * ch))
+            }
+            pixels[i] = out
+        }
+    }
+}

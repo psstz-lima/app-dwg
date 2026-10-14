@@ -31,6 +31,7 @@ import com.appdwg.core.Bounds
 import com.appdwg.core.CopernicusDem
 import com.appdwg.core.Overpass
 import com.appdwg.core.Point2
+import com.appdwg.core.Sentinel2
 import com.appdwg.core.StationFormat
 import com.appdwg.core.tr
 
@@ -46,6 +47,9 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
     var tolerance by rememberSaveable { mutableStateOf(StationFormat.lengthValue(0.5, 1)) }
     var keepTiff by rememberSaveable { mutableStateOf(false) }
     val kinds = remember { mutableStateOf(setOf(Overpass.Kind.ROADS, Overpass.Kind.WATER)) }
+    var image by rememberSaveable { mutableStateOf(true) }
+    var sceneId by rememberSaveable { mutableStateOf<String?>(null) }
+    val hasTerrain = dem || vm.hasSurfaces
     val area = if (useMeasure && measure.size >= 2)
         Bounds(measure.minOf { it.x }, measure.minOf { it.y }, measure.maxOf { it.x }, measure.maxOf { it.y }) else viewport
     val busy = vm.tasks.isNotEmpty()
@@ -53,9 +57,9 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
         onDismissRequest = onDismiss,
         title = { Text(tr("Baixar dados da área")) },
         confirmButton = {
-            TextButton(enabled = area != null && (dem || kinds.value.isNotEmpty()) && !busy, onClick = {
+            TextButton(enabled = area != null && (dem || kinds.value.isNotEmpty() || (image && hasTerrain)) && !busy, onClick = {
                 val tol = StationFormat.parseLength(tolerance)?.takeIf { it > 0 } ?: 0.5
-                vm.downloadArea(area!!, dem, tol, keepTiff, kinds.value)
+                vm.downloadArea(area!!, dem, tol, keepTiff, kinds.value, image && hasTerrain, vm.scenes.firstOrNull { it.id == sceneId })
             }) { Text(tr("Baixar")) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
@@ -77,6 +81,20 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
                         style = MaterialTheme.typography.bodySmall)
                 }
                 HorizontalDivider()
+                Check(tr("Imagem de satélite: Sentinel-2 (10 m), colada sobre o terreno"), image && hasTerrain) { image = it }
+                if (!hasTerrain) Text(tr("Precisa de uma superfície: marque também o terreno."), style = MaterialTheme.typography.bodySmall)
+                if (image && hasTerrain) {
+                    val chosen = vm.scenes.firstOrNull { it.id == sceneId }
+                    Text(chosen?.let { tr("Data: {0}", sceneLabel(it)) }
+                        ?: tr("Data: a mais recente com poucas nuvens"), style = MaterialTheme.typography.bodySmall)
+                    TextButton(enabled = area != null, onClick = { area?.let { vm.searchScenes(it) } }) { Text(tr("Escolher a data…")) }
+                    vm.scenesMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    for (sc in vm.scenes.take(12)) {
+                        Choice(sceneLabel(sc), sceneId == sc.id) { sceneId = sc.id }
+                    }
+                    if (vm.scenes.isNotEmpty()) Choice(tr("A mais recente com poucas nuvens"), sceneId == null) { sceneId = null }
+                }
+                HorizontalDivider()
                 Text(tr("OpenStreetMap"), fontWeight = FontWeight.Bold)
                 for ((k, label) in listOf(Overpass.Kind.ROADS to tr("Ruas e caminhos"), Overpass.Kind.BUILDINGS to tr("Construções"),
                     Overpass.Kind.WATER to tr("Hidrografia"), Overpass.Kind.RAILWAYS to tr("Ferrovias"), Overpass.Kind.BOUNDARIES to tr("Limites administrativos"))) {
@@ -85,13 +103,17 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
                 Text(tr("Cada tipo vai para uma camada; dá para exportar em DXF, GeoJSON ou Shapefile."), style = MaterialTheme.typography.bodySmall)
                 HorizontalDivider()
                 Text(tr("Precisa de internet. Os dados entram no projeto como arquivos e ficam salvos nele."), style = MaterialTheme.typography.bodySmall)
-                Text(tr("Fontes: {0}. {1}.", CopernicusDem.ATTRIBUTION, Overpass.ATTRIBUTION), style = MaterialTheme.typography.labelSmall)
+                Text(tr("Fontes: {0}. {1}.", CopernicusDem.ATTRIBUTION, Overpass.ATTRIBUTION) + " " + tr("Imagens: Copernicus Sentinel data (ESA)."), style = MaterialTheme.typography.labelSmall)
                 TaskProgress(vm)
                 vm.areaMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
     )
 }
+
+/** "2026-10-09 · tile 23KPU · 0% de nuvens na área", or the scene's cloud cover when the area's is unknown. */
+private fun sceneLabel(sc: Sentinel2.Scene) = sc.areaCloud?.let { tr("{0} · tile {1} · {2}% de nuvens na área", sc.date.take(10), sc.tile, StationFormat.decimal(it * 100, 0)) }
+    ?: tr("{0} · tile {1} · {2}% de nuvens na cena", sc.date.take(10), sc.tile, StationFormat.decimal(sc.cloud, 0))
 
 @Composable
 private fun Choice(text: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {

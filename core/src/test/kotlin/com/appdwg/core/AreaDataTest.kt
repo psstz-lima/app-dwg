@@ -59,4 +59,33 @@ class AreaDataTest {
         val e = assertNotNull(r.extent())
         assertEquals(-44.005, e.minX, 1e-9); assertEquals(-18.995, e.maxY, 1e-9)
     }
+
+    @Test
+    fun sentinelScenesMustCoverTheArea() {
+        fun item(id: String, lon0: Double) = """{"id":"$id","properties":{"datetime":"2026-10-0${id.last()}T13:00:00Z","eo:cloud_cover":3.5,"proj:epsg":32723},
+            "geometry":{"type":"Polygon","coordinates":[[[$lon0,-20.0],[${lon0 + 1},-20.0],[${lon0 + 1},-19.0],[$lon0,-19.0],[$lon0,-20.0]]]},
+            "assets":{"visual":{"href":"https://x/$id/TCI.tif","proj:transform":[10,0,600000,0,-10,7900000],"proj:shape":[10980,10980]},"scl":{"href":"https://x/$id/SCL.tif"}}}"""
+        val json = """{"features":[${item("A1", -44.0)},${item("B2", -43.94)}]}"""
+        val s = Sentinel2.scenes(json, -19.94, -43.95, -19.91, -43.92)
+        assertEquals(listOf("A1"), s.map { it.id })
+        assertEquals("32723", s[0].epsg); assertEquals(600000.0, s[0].originX); assertEquals(10.0, s[0].pixel)
+        assertEquals("Contains modified Copernicus Sentinel data 2026", Sentinel2.attribution(s[0].year))
+        assertEquals("https://x/A1/SCL.tif", s[0].scl)
+    }
+
+    @Test
+    fun cloudShareCountsCloudsAndShadowsOverValidPixels() {
+        // 0 no data, 4 vegetation, 5 bare soil, 3 shadow, 8/9 cloud, 10 cirrus.
+        assertEquals(0.5, Sentinel2.cloudShare(intArrayOf(0, 0, 4, 5, 3, 9))!!, 1e-9)
+        assertEquals(0.0, Sentinel2.cloudShare(intArrayOf(4, 4, 6))!!, 1e-9)
+        assertEquals(null, Sentinel2.cloudShare(intArrayOf(0, 0)))
+        assertEquals(1.0, Sentinel2.cloudShare(intArrayOf(8, 10))!!, 1e-9)
+    }
+
+    @Test
+    fun autoContrastStretches() {
+        val px = IntArray(1000) { i -> (0xFF shl 24) or ((60 + i % 40) shl 16) or ((60 + i % 40) shl 8) or (60 + i % 40) }
+        Sentinel2.autoContrast(px)
+        assertTrue(px.minOf { (it shr 16) and 0xFF } <= 10 && px.maxOf { (it shr 16) and 0xFF } >= 245)
+    }
 }
