@@ -46,14 +46,21 @@ fun View3D(
     /** Picture laid over the surfaces, or null. */
     drape: Drape?,
     modifier: Modifier = Modifier,
+    /** Display style of each surface: fill by elevation or shading, mesh and border lines. */
+    surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
 ) {
     val scene = remember(project) { Scene3D.build(project) }
     val renderer = remember(project) { Renderer3D(scene) }
     // Holder for the GL view, so gestures and settings can ask it to redraw.
     val holder = remember(project) { arrayOfNulls<GLSurfaceView>(1) }
 
-    LaunchedEffect(hiddenLayers, layerColor, background, foreground, exaggeration) {
-        renderer.update(hiddenLayers, layerColor, background.toArgb(), foreground.toArgb(), exaggeration)
+    // An edited surface stands in for its original, which would fill its holes.
+    val styles = project.surfaces.associate { sf ->
+        sf.name to if (project.surfaces.any { it.name == sf.name + EDITED_SUFFIX }) SurfaceStyle(triangles = false, elevation = ElevationPaint.NONE)
+        else surfaceStyle(sf.name)
+    }
+    LaunchedEffect(hiddenLayers, layerColor, background, foreground, exaggeration, styles) {
+        renderer.update(hiddenLayers, layerColor, background.toArgb(), foreground.toArgb(), exaggeration, styles)
         holder[0]?.requestRender()
     }
     LaunchedEffect(drape) {
@@ -119,7 +126,9 @@ class Scene3D(
     /** 3D models, flat shaded, named by layer. */
     val models: List<Mesh> = emptyList(),
 ) {
-    class Mesh(val name: String, val vertices: FloatArray, val indices: IntArray)
+    /** [edges] and [border] are vertex index pairs for lines over the mesh (surfaces only). */
+    class Mesh(val name: String, val vertices: FloatArray, val indices: IntArray,
+               val edges: IntArray = IntArray(0), val border: IntArray = IntArray(0))
 
     class LineBatch(val layer: String, val color: Int?, val byLayer: Boolean, val vertices: FloatArray)
 
@@ -189,7 +198,9 @@ class Scene3D(
                     v[9 * i + 7] = ((rgb shr 8) and 0xFF) / 255f
                     v[9 * i + 8] = (rgb and 0xFF) / 255f
                 }
-                Mesh(s.name, v, s.triangles)
+                // Every edge is drawn only for meshes small enough to stay readable and fast.
+                val edges = if (s.triangleCount <= MAX_DRAWN_TRIANGLES) com.appdwg.core.SurfaceEdges.all(s) else IntArray(0)
+                Mesh(s.name, v, s.triangles, edges, com.appdwg.core.SurfaceEdges.boundary(s))
             }
 
             val batches = lines3d.groupBy { Triple(it.layer, it.color, it.byLayer) }.map { (key, group) ->
@@ -259,12 +270,15 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var background = 0
     @Volatile private var foreground = -1
     @Volatile private var zScale = 1f
+    @Volatile private var styles: Map<String, SurfaceStyle> = emptyMap()
 
     private var width = 1
     private var height = 1
     private var program = 0
     private val meshBuffers = ArrayList<IntArray>()
     private val lineBuffers = ArrayList<Int>()
+    /** Per surface: element buffers of its edges and of its border. */
+    private val edgeBuffers = ArrayList<IntArray>()
 
     // Picture over the surfaces: set from the UI, uploaded as a texture on the GL thread.
     @Volatile private var drape: Drape? = null
@@ -302,7 +316,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
     }
 
-    fun update(hidden: Set<String>, layerColor: (String) -> Int?, background: Int, foreground: Int, zScale: Float) {
+    fun update(hidden: Set<String>, layerColor: (String) -> Int?, background: Int, foreground: Int, zScale: Float, styles: Map<String, SurfaceStyle>) {
+        this.styles = styles
         this.hidden = hidden
         this.layerColor = layerColor
         this.background = background
@@ -341,6 +356,16 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
             GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, m.indices.size * 4, ints(m.indices), GLES30.GL_STATIC_DRAW)
             meshBuffers += ids
+        }
+        edgeBuffers.clear()
+        for (m in scene.surfaces) {
+            val ids = IntArray(2)
+            GLES30.glGenBuffers(2, ids, 0)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[0])
+            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, m.edges.size * 4, ints(m.edges), GLES30.GL_STATIC_DRAW)
+            GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
+            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, m.border.size * 4, ints(m.border), GLES30.GL_STATIC_DRAW)
+            edgeBuffers += ids
         }
         for (b in scene.lines) {
             val ids = IntArray(1)
@@ -404,8 +429,12 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         } else {
             GLES30.glUniform1i(uDrape, 0)
         }
+        val uGray = GLES30.glGetUniformLocation(program, "uGray")
         scene.surfaces.forEachIndexed { i, m ->
             if (m.name in hidden) return@forEachIndexed
+            val st = styles[m.name] ?: SurfaceStyle()
+            if (st.elevation == ElevationPaint.NONE) return@forEachIndexed
+            GLES30.glUniform1i(uGray, if (st.elevation == ElevationPaint.SHADE) 1 else 0)
             val ids = meshBuffers[i]
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
             GLES30.glEnableVertexAttribArray(0)
@@ -417,7 +446,33 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
         }
+        GLES30.glUniform1i(uGray, 0)
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        // Mesh and border lines over the surfaces, unlit.
+        GLES30.glUniform1i(uLit, 0)
+        GLES30.glDisableVertexAttribArray(1)
+        GLES30.glDisableVertexAttribArray(2)
+        val fg = foreground
+        scene.surfaces.forEachIndexed { i, m ->
+            if (m.name in hidden) return@forEachIndexed
+            val st = styles[m.name] ?: SurfaceStyle()
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, meshBuffers[i][0])
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+            if (st.triangles && m.edges.isNotEmpty()) {
+                // Dark lines over a painted surface, the foreground colour over the bare background.
+                if (st.elevation == ElevationPaint.NONE) GLES30.glUniform3f(uColor, ((fg shr 16) and 0xFF) / 255f, ((fg shr 8) and 0xFF) / 255f, (fg and 0xFF) / 255f)
+                else GLES30.glUniform3f(uColor, 0.2f, 0.2f, 0.2f)
+                GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, edgeBuffers[i][0])
+                GLES30.glDrawElements(GLES30.GL_LINES, m.edges.size, GLES30.GL_UNSIGNED_INT, 0)
+            }
+            if (st.border && m.border.isNotEmpty()) {
+                GLES30.glUniform3f(uColor, 1f, 0.6f, 0f)
+                GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, edgeBuffers[i][1])
+                GLES30.glDrawElements(GLES30.GL_LINES, m.border.size, GLES30.GL_UNSIGNED_INT, 0)
+            }
+        }
+        GLES30.glUniform1i(uLit, 1)
         // Models: lit like the terrain, without the picture over the surfaces.
         GLES30.glUniform1i(uDrape, 0)
         scene.models.forEachIndexed { i, m ->
@@ -472,6 +527,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             uniform mat4 uMvp;
             uniform float uZScale;
             uniform int uLit;
+            uniform int uGray;
             uniform vec3 uColor;
             // Picture over the surface: left x, top y, width and height, relative to the scene origin.
             uniform vec4 uDrapeRect;
@@ -486,7 +542,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     vec3 n = normalize(vec3(aNormal.xy * uZScale, aNormal.z));
                     // Two-sided: model faces may be wound either way, so both sides take the light.
                     float light = abs(dot(n, normalize(vec3(-0.5, 0.5, 0.7))));
-                    vColor = aColor;
+                    vColor = uGray == 1 ? vec3(0.82) : aColor;
                     vShade = 0.45 + 0.65 * light;
                 } else {
                     vColor = uColor;

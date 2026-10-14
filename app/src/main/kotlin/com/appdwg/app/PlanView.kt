@@ -171,12 +171,33 @@ fun PlanView(
     pointLabels: Boolean = true,
     /** Downhill direction arrows: position and angle (radians, counterclockwise from east). */
     arrows: List<Pair<Point2, Double>> = emptyList(),
+    /** Display style of each surface (mesh, border, contours, elevations). */
+    surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
 ) {
     val bounds = project.bounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
     // so the view stays where it was.
     val origin = remember(viewKey) { bounds.center }
     val scene = remember(project) { Scene.build(project, origin) }
+    // An edited surface stands in for its original, whose mesh and lines would show through its holes.
+    val replaced = project.surfaces.map { it.name }.filter { n -> project.surfaces.any { it.name == n + EDITED_SUFFIX } }.toSet()
+    val styles = project.surfaces.associate { it.name to surfaceStyle(it.name).let { st ->
+        if (it.name in replaced) SurfaceStyle(triangles = false, contours = false, elevation = ElevationPaint.NONE) else st } }
+    val bordered = styles.filterValues { it.border }.keys
+    // Surface outlines, only for the surfaces that show them (finding the border sorts every edge).
+    val borders = remember(project, bordered) {
+        project.surfaces.filter { it.name in bordered }.map { sf ->
+            val e = com.appdwg.core.SurfaceEdges.boundary(sf)
+            Path().apply {
+                for (k in 0 until e.size / 2) {
+                    moveTo((sf.xs[e[2 * k]] - origin.x).toFloat(), (sf.ys[e[2 * k]] - origin.y).toFloat())
+                    lineTo((sf.xs[e[2 * k + 1]] - origin.x).toFloat(), (sf.ys[e[2 * k + 1]] - origin.y).toFloat())
+                }
+            }
+        }
+    }
+    val painted = styles.filterValues { it.elevation != ElevationPaint.NONE }.keys
+    val withContours = styles.filterValues { it.contours }.keys
     var size by remember { mutableStateOf(IntSize.Zero) }
     // Saved so rotating the device keeps the current zoom and position.
     var camera by rememberSaveable(viewKey, saver = CameraSaver) { mutableStateOf<Camera?>(null) }
@@ -185,7 +206,7 @@ fun PlanView(
 
     // Sharper terrain for the visible area once zoomed past the overview image's resolution.
     var detail by remember(project) { mutableStateOf<List<TerrainImage>>(emptyList()) }
-    LaunchedEffect(project, frame, size, hiddenLayers) {
+    LaunchedEffect(project, frame, size, hiddenLayers, painted) {
         val cam = camera ?: return@LaunchedEffect
         if (size.width <= 0 || terrain.isEmpty()) return@LaunchedEffect
         delay(DETAIL_DELAY_MS) // waits for the gesture to settle
@@ -204,14 +225,14 @@ fun PlanView(
         val rows = (size.height * DETAIL_MARGIN).toInt().coerceAtMost(DETAIL_MAX_PX)
         val job = coroutineContext.job
         detail = withContext(Dispatchers.Default) {
-            project.surfaces.filter { it.name !in hiddenLayers }
+            project.surfaces.filter { it.name !in hiddenLayers && it.name in painted }
                 .mapNotNull { TerrainImage.detail(it, region, cols, rows) { !job.isActive } }
         }
     }
 
     // Contours of the visible area, rebuilt once a gesture settles.
     var contours by remember(project) { mutableStateOf<ContourPaths?>(null) }
-    LaunchedEffect(project, frame, size, hiddenLayers, contourInterval) {
+    LaunchedEffect(project, frame, size, hiddenLayers, contourInterval, withContours) {
         if (contourInterval == null) { contours = null; return@LaunchedEffect }
         val cam = camera ?: return@LaunchedEffect
         if (size.width <= 0) return@LaunchedEffect
@@ -221,7 +242,7 @@ fun PlanView(
         val cx = cam.centerX + origin.x
         val cy = cam.centerY + origin.y
         val region = Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH)
-        val surfaces = project.surfaces.filter { it.name !in hiddenLayers }
+        val surfaces = project.surfaces.filter { it.name !in hiddenLayers && it.name in withContours }
         val job = coroutineContext.job
         contours = withContext(Dispatchers.Default) { ContourPaths.build(surfaces, region, contourInterval, origin) { !job.isActive } }
         onContours(contours?.interval)
@@ -347,8 +368,10 @@ fun PlanView(
         // The picture laid over the surfaces covers only the terrain: it is drawn in the same layer
         // with SrcAtop, so it shows where the terrain images have pixels and nowhere else.
         if (drape != null) drawContext.canvas.saveLayer(Rect(Offset.Zero, this.size), androidx.compose.ui.graphics.Paint())
-        for (t in terrain) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
-        for (t in detail) if (t.name !in hiddenLayers) drawTerrain(t) { toScreen(it, cam) }
+        // Shading only: the coloured image without its colour.
+        fun filterOf(name: String) = if (styles[name]?.elevation == ElevationPaint.SHADE) GRAYSCALE else null
+        for (t in terrain) if (t.name !in hiddenLayers && t.name in painted) drawTerrain(t, colorFilter = filterOf(t.name)) { toScreen(it, cam) }
+        for (t in detail) if (t.name !in hiddenLayers && t.name in painted) drawTerrain(t, colorFilter = filterOf(t.name)) { toScreen(it, cam) }
         if (drape != null) {
             drawTerrain(TerrainImage(drape.name, drape.bounds, drape.image), BlendMode.SrcAtop) { toScreen(it, cam) }
             drawContext.canvas.restore()
@@ -361,7 +384,12 @@ fun PlanView(
             translate(-cam.centerX.toFloat(), -cam.centerY.toFloat())
         }) {
             // The triangle mesh only helps once zoomed in; from afar it hides the shaded terrain.
-            if (cam.scale >= MESH_MIN_SCALE) scene.mesh?.let { drawPath(it, colors.mesh, style = Stroke(width = 1f / s)) }
+            if (cam.scale >= MESH_MIN_SCALE) for ((name, path) in scene.meshes) {
+                if (name !in hiddenLayers && styles[name]?.triangles != false) drawPath(path, colors.mesh, style = Stroke(width = 1f / s))
+            }
+            for ((i, sf) in project.surfaces.filter { it.name in bordered }.withIndex()) {
+                if (sf.name !in hiddenLayers) borders.getOrNull(i)?.let { drawPath(it, colors.contourMajor, style = Stroke(width = 2.5f / s)) }
+            }
             // 3D models seen from above: their projection filled, a little see-through.
             for ((layer, color, path) in scene.models) {
                 if (layer in hiddenLayers) continue
@@ -580,7 +608,10 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, colors: P
 }
 
 /** Draws only the part of the terrain image that is on screen, so deep zoom stays cheap. */
-private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendMode.SrcOver, alpha: Float = 1f, toScreen: (Point2) -> Offset) {
+private val GRAYSCALE = androidx.compose.ui.graphics.ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) })
+
+private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendMode.SrcOver, alpha: Float = 1f,
+                                  colorFilter: androidx.compose.ui.graphics.ColorFilter? = null, toScreen: (Point2) -> Offset) {
     val topLeft = toScreen(Point2(t.bounds.minX, t.bounds.maxY))
     val bottomRight = toScreen(Point2(t.bounds.maxX, t.bounds.minY))
     val pxW = (bottomRight.x - topLeft.x) / t.image.width
@@ -602,6 +633,7 @@ private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendM
         ),
         blendMode = blendMode,
         alpha = alpha,
+        colorFilter = colorFilter,
     )
 }
 
@@ -609,7 +641,8 @@ private fun DrawScope.drawTerrain(t: TerrainImage, blendMode: BlendMode = BlendM
 private data class Style(val layer: String, val color: Int?, val byLayer: Boolean)
 
 private class Scene(
-    val mesh: Path?,
+    /** Triangle mesh of each surface, by name; empty when there are too many triangles to draw. */
+    val meshes: Map<String, Path>,
     val drawing: Map<Style, Path>,
     val hatches: Map<Style, Path>,
     val alignments: List<Path>,
@@ -619,8 +652,8 @@ private class Scene(
     companion object {
         fun build(project: LandXmlProject, origin: Point2): Scene {
             val mesh = if (project.surfaces.sumOf { it.triangleCount } in 1..MAX_DRAWN_TRIANGLES) {
-                Path().apply {
-                    for (sf in project.surfaces) {
+                project.surfaces.associate { sf ->
+                    sf.name to Path().apply {
                         val t = sf.triangles
                         for (k in 0 until sf.triangleCount) {
                             val a = t[3 * k]; val b = t[3 * k + 1]; val c = t[3 * k + 2]
@@ -631,7 +664,7 @@ private class Scene(
                         }
                     }
                 }
-            } else null
+            } else emptyMap()
             val alignments = project.alignments.map { a ->
                 Path().apply {
                     a.vertices.forEachIndexed { i, p ->

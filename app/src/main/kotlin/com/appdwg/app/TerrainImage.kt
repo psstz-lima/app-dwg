@@ -71,6 +71,8 @@ class TerrainImage(val name: String, val bounds: Bounds, val image: ImageBitmap)
 
         private val STOPS = floatArrayOf(0f, 0.25f, 0.5f, 0.75f, 1f)
         private val COLORS = intArrayOf(0x2E7D32, 0x9CCC65, 0xFFEE58, 0xA1887F, 0xF5F5F5)
+        /** The elevation colours, lowest first, evenly spaced (for legends). */
+        val RAMP: List<Int> get() = COLORS.toList()
 
         private fun ramp(t: Float, shade: Float): Int {
             var i = 0

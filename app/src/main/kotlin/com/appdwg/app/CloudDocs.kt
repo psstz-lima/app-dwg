@@ -38,6 +38,12 @@ class OpenDocumentAt(private val start: () -> Uri?) : ActivityResultContracts.Op
         super.createIntent(context, input).apply { start()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) } }
 }
 
+/** Picker for several files that can start at a given place (Drive). */
+class OpenMultipleDocumentsAt(private val start: () -> Uri?) : ActivityResultContracts.OpenMultipleDocuments() {
+    override fun createIntent(context: Context, input: Array<String>): Intent =
+        super.createIntent(context, input).apply { start()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) } }
+}
+
 /** Save picker that can start at a given place (Drive). */
 class CreateDocumentAt(mime: String, private val start: () -> Uri?) : ActivityResultContracts.CreateDocument(mime) {
     override fun createIntent(context: Context, input: String): Intent =

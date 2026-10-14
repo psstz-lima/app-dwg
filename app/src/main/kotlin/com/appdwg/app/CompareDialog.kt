@@ -49,6 +49,7 @@ fun CompareDialog(
     onBase: (String) -> Unit,
     onOther: (String) -> Unit,
     onAddFile: () -> Unit,
+    onAddDrive: (() -> Unit)? = null,
     onCross: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -56,19 +57,26 @@ fun CompareDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Fechar") } },
-        dismissButton = { TextButton(onClick = onAddFile) { Text("Adicionar arquivo") } },
-        title = { Text("Arquivos e comparação") },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onAddFile) { Text("Adicionar arquivos") }
+                onAddDrive?.let { TextButton(onClick = it) { Text("☁ Google Drive") } }
+            }
+        },
+        title = { Text("Arquivos do projeto e comparação") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Arquivos sobrepostos", style = MaterialTheme.typography.labelLarge)
+                Text("Arquivos do projeto (mosaico)", style = MaterialTheme.typography.labelLarge)
                 if (vm.addedFiles.isEmpty()) {
                     Text(
-                        "Adicione outro DXF, LandXML ou .aecc.pnt (por exemplo, o levantamento ou o projeto) para ver junto e comparar.",
+                        "Adicione outros LandXML, DXF ou .aecc.pnt (trechos vizinhos, o levantamento ou o projeto) para montar um mosaico e comparar. Dá para escolher vários de uma vez.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                vm.addedFiles.forEach { (label, _) ->
+                vm.addedFiles.forEach { (label, _, uri) ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Files read from disk can be switched off; generated surfaces (road, platform) cannot.
+                        if (uri != null) androidx.compose.material3.Checkbox(label !in vm.hiddenFiles, { vm.setFileVisible(label, it) })
                         Text(label, Modifier.weight(1f), maxLines = 1)
                         OutlinedButton(onClick = { vm.removeFile(label) }) { Text("Remover") }
                     }

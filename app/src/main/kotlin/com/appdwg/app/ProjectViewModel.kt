@@ -227,6 +227,26 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var compareMessage by mutableStateOf<String?>(null)
         private set
+    /** Added files switched off: kept in the project but left out of the drawing and the tools. */
+    var hiddenFiles by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    fun setFileVisible(label: String, visible: Boolean) {
+        hiddenFiles = if (visible) hiddenFiles - label else hiddenFiles + label
+        refreshProject()
+    }
+
+    /** Files read from disk or the cloud and laid over the open one (a mosaic of projects). */
+    val sourceFiles get() = addedFiles.filter { it.uri != null }
+
+    /** Adds several files at once, one after the other, for a mosaic of projects. */
+    fun addFiles(uris: List<Uri>) {
+        for (uri in uris) runCatching {
+            getApplication<Application>().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        compareMessage = null
+        viewModelScope.launch { for (uri in uris) addFileNow(uri) }
+    }
 
     /** B − A of the last comparison and its color picture, shown while [differenceVisible]. */
     var difference by mutableStateOf<SurfaceDifference?>(null)
@@ -278,6 +298,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun removeFile(label: String) {
         if (addedFiles.none { it.label == label }) return
         addedFiles = addedFiles.filter { it.label != label }
+        hiddenFiles = hiddenFiles - label
         fun fromFile(n: String) = n == label || n.startsWith("$label|")
         crossSelected = crossSelected.filterNot(::fromFile)
         matrix = matrix.filterKeys { (a, b) -> !fromFile(a) && !fromFile(b) }
@@ -696,10 +717,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 // Added files sit where they are: an identity placement names their layers and
                 // surfaces "file|name".
                 for ((label, drawing) in addedFiles) {
+                    if (label in hiddenFiles) continue
                     p = Xrefs.attach(p, XrefDrawing(label, label, listOf(IDENTITY), overlay = true), drawing)
+                    // Alignments keep their names; one already used gets the file name added.
+                    val taken = p.alignments.map { it.name }.toMutableSet()
+                    val named = drawing.alignments.map { a ->
+                        if (taken.add(a.name)) a else com.appdwg.core.Alignment("${a.name} ($label)", a.startStation, a.elements, a.profile).also { taken += it.name }
+                    }
                     // A surface named like its file (point caches) reads better as just the file name.
                     p = p.copy(
-                        alignments = p.alignments + drawing.alignments,
+                        alignments = p.alignments + named,
                         surfaces = p.surfaces.map { s ->
                             // "Corredor|Corredor (terraplenagem)" reads better as "Corredor (terraplenagem)".
                             val inner = s.name.removePrefix("$label|")
@@ -1779,6 +1806,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             main = main.toString(),
             mainName = displayName(main),
             files = addedFiles.mapNotNull { f -> f.uri?.let { f.label to it.toString() } },
+            hiddenFiles = hiddenFiles.toList(),
             pointsSurface = generated,
             drape = drapeUris.map { it.toString() },
             drapeVisible = drapeVisible,
@@ -1938,6 +1966,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         unloaded = doc.unloaded.toSet()
         detached = doc.detached.toSet()
         pathEdits = doc.pathEdits
+        hiddenFiles = doc.hiddenFiles.toSet()
         for ((label, u) in doc.files) {
             val before = addedFiles.size
             addFileNow(Uri.parse(u), label)
@@ -2034,6 +2063,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     pathEdits = emptyMap()
                     referenceMessage = null
                     addedFiles = emptyList()
+                    hiddenFiles = emptySet()
                     userPoints = emptyList()
                     pointsMessage = null
                     compareMessage = null

@@ -274,6 +274,25 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
 }
 
+/** Colour ramp of a surface's elevations, from its lowest to its highest point. */
+@Composable
+private fun ElevationLegend(sf: com.appdwg.core.Surface) {
+    val min = sf.minElevation ?: return
+    val max = sf.maxElevation ?: return
+    Card {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Text("Cotas · " + sf.name.substringAfterLast('|'), style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(StationFormat.lengthValue(min, 1), style = MaterialTheme.typography.labelSmall)
+                androidx.compose.foundation.Canvas(Modifier.width(160.dp).height(12.dp)) {
+                    drawRect(androidx.compose.ui.graphics.Brush.horizontalGradient(TerrainImage.RAMP.map { Color(0xFF000000.toInt() or it) }))
+                }
+                Text(StationFormat.lengthValue(max, 1) + " " + StationFormat.lengthUnit, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+}
+
 /** Free version: the plan is for viewing; a tap here opens the Gromatic Pro screen. */
 @Composable
 private fun FreeHint(modifier: Modifier, onPro: () -> Unit) {
@@ -343,14 +362,19 @@ private fun ProjectScreen(
         }
     }
     val drape = vm.drape?.takeIf { vm.drapeVisible }
+    val ctx0 = androidx.compose.ui.platform.LocalContext.current
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
     var showCross by remember(fileName) { mutableStateOf(false) }
     var compareBase by v::compareBase
     var compareOther by v::compareOther
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.addFile(uri)
+    // Files added to the project (a mosaic of LandXML/DXF), from the device or Google Drive.
+    val addDrive = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val filePicker = rememberLauncherForActivityResult(OpenMultipleDocumentsAt { if (addDrive.getAndSet(false)) CloudDocs.driveStart(ctx0) else null }) { uris ->
+        if (uris.isNotEmpty()) vm.addFiles(uris)
     }
+    val hasDriveApp = remember { CloudDocs.driveInstalled(ctx0) }
+    fun addFiles(drive: Boolean) { addDrive.set(drive); filePicker.launch(arrayOf("*/*")) }
     // COGO points: dialog, tapped point, point being edited or created, and the "create" mode.
     var showPoints by remember(fileName) { mutableStateOf(false) }
     var selectedPoint by remember(fileName) { mutableStateOf<CogoPoint?>(null) }
@@ -726,6 +750,7 @@ private fun ProjectScreen(
                         exaggeration = exaggeration.toFloat(),
                         drape = drape,
                         modifier = Modifier.fillMaxSize(),
+                        surfaceStyle = { v.styleOf(it) },
                     )
                 } else PlanView(
                     project = project,
@@ -850,6 +875,7 @@ private fun ProjectScreen(
                     viewKey = fileName,
                     zoom = planZoom,
                     pointLabels = v.pointLabels,
+                    surfaceStyle = { v.styleOf(it) },
                     marks = vm.asBuilt?.let { r -> r.rows.map { Point2(it.point.x, it.point.y) to asBuiltColor(r.status(it)) } }.orEmpty(),
                 )
 
@@ -889,6 +915,10 @@ private fun ProjectScreen(
                     }
                 }
                 if (differenceOverlay != null && difference != null && !show3d && !wide) DifferenceLegend(difference, Modifier)
+                for (sf in project.surfaces) {
+                    val st = v.styleOf(sf.name)
+                    if (st.legend && st.elevation == ElevationPaint.COLORS && sf.name !in hidden) ElevationLegend(sf)
+                }
             }
             if (!show3d) {
                 // On phones the view switch spans the top, so north and the buttons go below it.
@@ -1117,6 +1147,16 @@ private fun ProjectScreen(
                     MenuLine("Conhecer o Gromatic Pro…") { close(); vm.proRequested = true }
                 })
             } else buildList {
+                // Files of the project (mosaic): each one on or off, and more added, without leaving the plan.
+                val files = vm.sourceFiles
+                add(FooterItem(if (files.isEmpty()) "Arquivos" else "Arquivos ${files.count { it.label !in vm.hiddenFiles } + 1}/${files.size + 1}") { close ->
+                    MenuTitle("Arquivos do projeto")
+                    MenuLine(fileName, checked = true, enabled = false) {}
+                    for (f in files) MenuLine(f.label, checked = f.label !in vm.hiddenFiles) { vm.setFileVisible(f.label, f.label in vm.hiddenFiles) }
+                    MenuLine("Adicionar arquivos…") { close(); addFiles(false) }
+                    if (hasDriveApp) MenuLine("Adicionar do Google Drive…") { close(); addFiles(true) }
+                    if (files.isNotEmpty()) MenuLine("Remover ou comparar…") { close(); showCompare = true }
+                })
                 // Drawing settings without leaving the plan.
                 val layers = project.layers + (if (vm.userPoints.isNotEmpty()) listOf(com.appdwg.core.POINTS_LAYER) else emptyList())
                 if (layers.isNotEmpty()) add(FooterItem("Camadas ${layers.count { it !in hidden }}/${layers.size}") { close ->
@@ -1136,6 +1176,21 @@ private fun ProjectScreen(
                         }
                         for (sf in project.surfaces) MenuLine("Só " + sf.name.substringAfterLast('|'), checked = shownSurfaces == listOf(sf.name)) {
                             offLayers = ArrayList((offLayers.toSet() + project.surfaces.map { it.name }) - sf.name); frozenLayers = ArrayList(frozenLayers - sf.name)
+                        }
+                        // Display style of each surface, as in Civil 3D: the mesh off with the elevations still shown.
+                        for (sf in project.surfaces) {
+                            val st = v.styleOf(sf.name)
+                            fun set(n: SurfaceStyle) = v.setStyle(sf.name, n)
+                            MenuTitle("Estilo · " + sf.name.substringAfterLast('|'))
+                            MenuLine("Triângulos (malha)", checked = st.triangles) { set(st.copy(triangles = !st.triangles)) }
+                            MenuLine("Borda", checked = st.border) { set(st.copy(border = !st.border)) }
+                            MenuLine("Curvas de nível", checked = st.contours && showContours) {
+                                if (!showContours) { showContours = true; set(st.copy(contours = true)) } else set(st.copy(contours = !st.contours))
+                            }
+                            MenuLine("Elevações em cores", checked = st.elevation == ElevationPaint.COLORS) { set(st.copy(elevation = ElevationPaint.COLORS)) }
+                            MenuLine("Só sombreamento", checked = st.elevation == ElevationPaint.SHADE) { set(st.copy(elevation = ElevationPaint.SHADE)) }
+                            MenuLine("Sem elevações", checked = st.elevation == ElevationPaint.NONE) { set(st.copy(elevation = ElevationPaint.NONE)) }
+                            MenuLine("Legenda de cotas", checked = st.legend) { set(st.copy(legend = !st.legend, elevation = if (!st.legend) ElevationPaint.COLORS else st.elevation)) }
                         }
                     })
                     add(FooterItem(if (showContours) "Curvas " + (contourDrawn?.let { StationFormat.length(it, if (StationFormat.toLength(it) < 0.99) 1 else 0) } ?: "") else "Curvas: não") { close ->
@@ -1261,7 +1316,8 @@ private fun ProjectScreen(
             other = compareOther,
             onBase = { compareBase = it },
             onOther = { compareOther = it },
-            onAddFile = { filePicker.launch(arrayOf("*/*")) },
+            onAddFile = { addFiles(false) },
+            onAddDrive = if (hasDriveApp) ({ addFiles(true) }) else null,
             onCross = { showCompare = false; showCross = true },
             onDismiss = { showCompare = false },
         )

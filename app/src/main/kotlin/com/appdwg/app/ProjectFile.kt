@@ -59,6 +59,37 @@ class ViewState(project: LandXmlProject) {
     var coordDigits by mutableStateOf(3)
     /** Coordinate system of the project; null = from the drawing's EPSG, else SIRGAS 2000 / UTM 23S. */
     var crs by mutableStateOf<com.appdwg.core.Crs?>(null)
+    /** How each surface is drawn, by name; surfaces not listed use the default style. */
+    var surfaceStyles by mutableStateOf<Map<String, SurfaceStyle>>(emptyMap())
+
+    fun styleOf(surface: String) = surfaceStyles[surface] ?: SurfaceStyle()
+    fun setStyle(surface: String, style: SurfaceStyle) { surfaceStyles = surfaceStyles + (surface to style) }
+}
+
+/** How the elevations of a surface are painted. */
+enum class ElevationPaint { COLORS, SHADE, NONE }
+
+/**
+ * Display style of a surface, as in Civil 3D: each part on or off on its own, so the mesh can be
+ * hidden while the elevations stay visible.
+ */
+data class SurfaceStyle(
+    val triangles: Boolean = true,
+    val border: Boolean = false,
+    val contours: Boolean = true,
+    val elevation: ElevationPaint = ElevationPaint.COLORS,
+    /** Elevation legend on the plan (colours mode). */
+    val legend: Boolean = false,
+) {
+    fun toJson(): JSONObject = JSONObject().put("triangles", triangles).put("border", border).put("contours", contours)
+        .put("elevation", elevation.name).put("legend", legend)
+
+    companion object {
+        fun fromJson(o: JSONObject) = SurfaceStyle(
+            o.optBoolean("triangles", true), o.optBoolean("border"), o.optBoolean("contours", true),
+            ElevationPaint.entries.firstOrNull { it.name == o.optString("elevation") } ?: ElevationPaint.COLORS, o.optBoolean("legend"),
+        )
+    }
 }
 
 /** Coordinate systems as JSON, for the project file and the user's own systems. */
@@ -145,6 +176,8 @@ class ProjectDoc(
     val mainName: String? = null,
     /** Surfaces made by editing (Editar sup.), stored whole since they come from no file; already encoded. */
     val edited: List<JSONObject> = emptyList(),
+    /** Labels of added files switched off. */
+    val hiddenFiles: List<String> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -177,6 +210,7 @@ class ProjectDoc(
                 .apply { if (!n.z.isNaN()) put("z", n.z); n.photo?.let { put("photo", it) } }
         }))
         if (edited.isNotEmpty()) put("edited", JSONArray(edited))
+        if (hiddenFiles.isNotEmpty()) put("hiddenFiles", JSONArray(hiddenFiles))
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -234,7 +268,8 @@ class ProjectDoc(
                     }
                 }.orEmpty(),
                 o.optString("mainName").ifEmpty { null },
-                edited = o.optJSONArray("edited")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty()
+                edited = o.optJSONArray("edited")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty(),
+                hiddenFiles = strings("hiddenFiles"),
             )
         }
 
@@ -278,6 +313,7 @@ class ProjectDoc(
             put("pointLabels", v.pointLabels)
             put("coordDigits", v.coordDigits)
             v.crs?.let { put("crs", CrsJson.toJson(it)) }
+            put("surfaceStyles", JSONObject().apply { v.surfaceStyles.forEach { (k, st) -> put(k, st.toJson()) } })
         }
 
         fun applyView(o: JSONObject, v: ViewState) {
@@ -326,6 +362,7 @@ class ProjectDoc(
             v.pointLabels = o.optBoolean("pointLabels", true)
             v.coordDigits = o.optInt("coordDigits", 3).coerceIn(0, 6)
             v.crs = o.optJSONObject("crs")?.let { runCatching { CrsJson.fromJson(it) }.getOrNull() }
+            o.optJSONObject("surfaceStyles")?.let { ss -> v.surfaceStyles = ss.keys().asSequence().associateWith { SurfaceStyle.fromJson(ss.getJSONObject(it)) } }
         }
     }
 }
