@@ -68,7 +68,7 @@ const val BASIN_COLOR = 0xFF00897B.toInt()
 const val STREAM_COLOR = 0xFF1565C0.toInt()
 const val OUTLET_COLOR = 0xFFFF6D00.toInt()
 /** Colour of the measurements kept on the plan. */
-const val MEASURE_COLOR = 0xFF6D4C41.toInt()
+const val SAVED_MEASURE_COLOR = 0xFF6D4C41.toInt()
 /** Colour of the road axis while it is laid out, curves included. */
 const val AXIS_COLOR = 0xFFD81B60.toInt()
 
@@ -78,12 +78,12 @@ fun designGuides(vm: ProjectViewModel): Pair<List<Guide>, List<GuideMark>> {
     val routes = vm.routeSuggestions.mapIndexed { i, r -> Guide(r.alignment.vertices, ROUTE_COLORS[i % ROUTE_COLORS.size], width = 4f, dashed = true) }
     val axis = vm.view?.roadParams?.let { vm.axisPreview(it) }.orEmpty()
     val measures = vm.view?.savedMeasures.orEmpty()
-    val measureLines = measures.filter { it.size >= 2 }.map { Guide(it, MEASURE_COLOR, width = 3f) }
+    val measureLines = measures.filter { it.size >= 2 }.map { Guide(it, SAVED_MEASURE_COLOR, width = 3f) }
     val measureMarks = measures.mapIndexedNotNull { i, m ->
         val last = m.lastOrNull() ?: return@mapIndexedNotNull null
         var len = 0.0
         for (k in 1 until m.size) len += kotlin.math.hypot(m[k].x - m[k - 1].x, m[k].y - m[k - 1].y)
-        GuideMark(last, MEASURE_COLOR, "M${i + 1} · " + StationFormat.length(len, 2))
+        GuideMark(last, SAVED_MEASURE_COLOR, "M${i + 1} · " + StationFormat.length(len, 2))
     }
     return (lines + routes + measureLines + listOfNotNull(axis.takeIf { it.size >= 2 }?.let { Guide(it, AXIS_COLOR, width = 4f) })) to (marks + measureMarks)
 }
