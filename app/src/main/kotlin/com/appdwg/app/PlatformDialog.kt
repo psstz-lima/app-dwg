@@ -55,6 +55,8 @@ fun PlatformDialog(
     var grade by remember { mutableStateOf(StationFormat.decimal(p0.gradePercent, 2)) }
     var azimuth by remember { mutableStateOf(StationFormat.decimal(p0.gradeAzimuth, 1)) }
     var useVertex by remember { mutableStateOf(p0.useVertexElevations) }
+    var maxGrade by remember { mutableStateOf("2") }
+    var swell by remember { mutableStateOf("1") }
     val f = remember {
         mutableMapOf(
             "cr" to StationFormat.decimal(p0.cutRatio, 2), "ch" to heightsText(p0.cutHeights, p0.cutBenchHeight),
@@ -134,6 +136,36 @@ fun PlatformDialog(
                 Text(tr("Talude H:V (ex.: 1,5 = 1,5 m na horizontal por 1 m de altura). Alturas das bermas: uma altura para todas (ex.: 8) ") +
                     tr("ou a altura de cada berma, da plataforma para fora, separadas por ; (ex.: 6; 8; 10; a última se repete). 0 = sem bermas. ") +
                     tr("A inclinação interna da berma (%) cai para o pé do talude de cima, levando a água para a canaleta."), style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
+                Text(tr("Formas sugeridas para esta área"), style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(maxGrade, { maxGrade = it }, label = { Text(tr("Inclinação máxima %")) }, singleLine = true,
+                        modifier = Modifier.width(170.dp), keyboardOptions = decimal, isError = num(maxGrade) == null)
+                    OutlinedTextField(swell, { swell = it }, label = { Text(tr("Corte por m³ de aterro")) }, singleLine = true,
+                        modifier = Modifier.width(190.dp), keyboardOptions = decimal, isError = num(swell)?.takeIf { it > 0 } == null)
+                    OutlinedButton(enabled = valid && v.platformOutline.size >= 3 && vm.tasks.isEmpty() && num(maxGrade) != null && (num(swell) ?: 0.0) > 0, onClick = {
+                        v.platformParams = params(); vm.suggestPlatforms(params(), num(maxGrade)!!, num(swell)!!)
+                    }) { Text(tr("Sugerir formas")) }
+                }
+                vm.platformOptions.takeIf { vm.platformOptionsOutline == v.platformOutline }.orEmpty().forEach { o ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(optionTitle(o), style = MaterialTheme.typography.bodyMedium)
+                            Text(tr("Cota {0} · corte {1} · aterro {2} · talude até {3} · ocupa mais {4}",
+                                StationFormat.lengthValue(o.baseElevation, 2), StationFormat.volume(o.cut), StationFormat.volume(o.fill),
+                                StationFormat.length(o.maxSlopeHeight, 1), StationFormat.area(o.footprint, 0)), style = MaterialTheme.typography.bodySmall)
+                        }
+                        TextButton(enabled = vm.tasks.isEmpty(), onClick = {
+                            useVertex = false
+                            elevation = StationFormat.lengthValue(o.baseElevation, 3)
+                            grade = StationFormat.decimal(o.gradePercent, 2)
+                            azimuth = StationFormat.decimal(o.gradeAzimuth, 1)
+                            v.platformParams = v.platformParams.copy(elevation = o.baseElevation, gradePercent = o.gradePercent,
+                                gradeAzimuth = o.gradeAzimuth, useVertexElevations = false)
+                            vm.designPlatform()
+                        }) { Text(tr("Usar")) }
+                    }
+                }
                 TaskProgress(vm)
                 vm.platformMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.platformVolumes?.let { d ->
@@ -174,3 +206,10 @@ private fun heights(s: String): List<Double>? {
 
 private fun heightsText(list: List<Double>, single: Double) =
     (list.ifEmpty { listOf(single) }).joinToString("; ") { StationFormat.lengthValue(it, 2) }
+
+private fun optionTitle(o: com.appdwg.core.PlatformOption) = when (o.kind) {
+    com.appdwg.core.PlatformOption.Kind.FLAT_BALANCED -> tr("Plana, corte igual ao aterro")
+    com.appdwg.core.PlatformOption.Kind.SLOPED_BALANCED -> tr("Inclinada {0} % como o terreno, corte igual ao aterro", StationFormat.decimal(o.gradePercent, 2))
+    com.appdwg.core.PlatformOption.Kind.SLOPED_LEAST -> tr("Inclinada {0} % como o terreno, menor movimento de terra", StationFormat.decimal(o.gradePercent, 2))
+    com.appdwg.core.PlatformOption.Kind.FLAT_LEAST -> tr("Plana, menor movimento de terra")
+}

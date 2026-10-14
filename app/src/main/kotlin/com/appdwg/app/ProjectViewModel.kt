@@ -2192,6 +2192,43 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Shapes the app suggests for the drawn outline, with their earthwork. */
+    var platformOptions by mutableStateOf<List<com.appdwg.core.PlatformOption>>(emptyList())
+        private set
+    /** Outline the options were worked out for; they no longer apply once it changes. */
+    var platformOptionsOutline: List<Point2> = emptyList()
+        private set
+
+    /**
+     * Suggests platform shapes for the drawn outline with the slopes in [pp]: flat or following
+     * the ground, balanced or with the least earthwork, the fall capped at [maxGrade] percent.
+     */
+    fun suggestPlatforms(pp: PlatformParams, maxGrade: Double, swell: Double) {
+        val v = view ?: return
+        val project = (state as? ProjectState.Loaded)?.project ?: return
+        val terrain = project.surfaces.firstOrNull { it.name == v.platformTerrain }
+            ?: project.surfaces.firstOrNull { !it.name.startsWith(PLATFORM_LABEL) }
+        if (terrain == null) { platformMessage = tr("Abra ou adicione uma superfície de terreno."); return }
+        if (v.platformOutline.size < 3) { platformMessage = tr("Desenhe a plataforma com 3 vértices ou mais."); return }
+        val outline = v.platformOutline
+        viewModelScope.launch {
+            try {
+                platformOptionsOutline = outline
+                platformOptions = tracked(tr("Estudando formas da plataforma")) {
+                    withContext(Dispatchers.Default) {
+                        com.appdwg.core.PlatformOptions.suggest(outline, terrain,
+                            SlopeRule(pp.cutRatio, pp.cutBenchHeight, pp.cutBenchWidth, pp.cutBenchFall, pp.cutHeights),
+                            SlopeRule(pp.fillRatio, pp.fillBenchHeight, pp.fillBenchWidth, pp.fillBenchFall, pp.fillHeights),
+                            maxGrade, swell) { !isActive }
+                    }
+                }
+                platformMessage = if (platformOptions.isEmpty()) tr("A plataforma está fora do terreno.") else null
+            } catch (e: Exception) {
+                platformMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+            }
+        }
+    }
+
     fun removePlatform() {
         platform = null
         platformVolumes = null

@@ -1085,3 +1085,14 @@ A superfície não tem área para analisar.	The surface has no area to analyse.
 Delimitando a bacia	Delineating the basin
 O ponto está fora da superfície.	The point is outside the surface.
 Nenhum talvegue com essa área cruza os eixos ou sai da área.	No stream that large crosses the alignments or leaves the area.
+Estudando formas da plataforma	Studying platform shapes
+Formas sugeridas para esta área	Suggested shapes for this area
+Inclinação máxima %	Maximum grade %
+Corte por m³ de aterro	Cut per m³ of fill
+Sugerir formas	Suggest shapes
+Cota {0} · corte {1} · aterro {2} · talude até {3} · ocupa mais {4}	Elevation {0} · cut {1} · fill {2} · slopes up to {3} · takes {4} more
+Usar	Use
+Plana, corte igual ao aterro	Flat, cut equal to fill
+Inclinada {0} % como o terreno, corte igual ao aterro	Sloped {0} % like the ground, cut equal to fill
+Inclinada {0} % como o terreno, menor movimento de terra	Sloped {0} % like the ground, least earthwork
+Plana, menor movimento de terra	Flat, least earthwork
