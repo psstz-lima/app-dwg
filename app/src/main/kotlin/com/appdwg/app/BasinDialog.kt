@@ -31,6 +31,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.appdwg.core.Basin
 import com.appdwg.core.Hydrology
 import com.appdwg.core.Idf
+import com.appdwg.core.IdfCatalog
+import com.appdwg.core.IdfEntry
 import com.appdwg.core.LandXmlProject
 import com.appdwg.core.OutletSuggestion
 import com.appdwg.core.Point2
@@ -55,6 +57,8 @@ data class BasinParams(
     val c: Double = 0.0,
     /** Smallest stream, m², for the suggested outlets. */
     val minArea: Double = 50_000.0,
+    /** Place whose published equation the IDF came from, or empty when typed in. */
+    val idfPlace: String = "",
 ) {
     val idf get() = if (k > 0) Idf(k, a, b, c) else null
 }
@@ -104,10 +108,19 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
             "b" to StationFormat.decimal(p0.b, 3), "c" to StationFormat.decimal(p0.c, 4),
         ))
     }
+    var place by remember { mutableStateOf(p0.idfPlace) }
+    var query by remember { mutableStateOf("") }
     fun params() = v.basinParams.copy(
         runoff = num(fields["C"]!!) ?: p0.runoff, years = num(fields["T"]!!) ?: p0.years,
         k = num(fields["K"]!!) ?: 0.0, a = num(fields["a"]!!) ?: 0.0, b = num(fields["b"]!!) ?: 0.0, c = num(fields["c"]!!) ?: 0.0,
+        idfPlace = place,
     )
+    fun pick(e: IdfEntry) {
+        fields = fields + mapOf("K" to StationFormat.decimal(e.idf.k, 3), "a" to StationFormat.decimal(e.idf.a, 4),
+            "b" to StationFormat.decimal(e.idf.b, 3), "c" to StationFormat.decimal(e.idf.c, 4))
+        place = e.label
+        query = ""
+    }
     AlertDialog(
         onDismissRequest = { v.basinParams = params(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -159,15 +172,30 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                         }
                     }
                     Text(tr("Chuva local (IDF): i = K·Tᵃ / (t + b)ᶜ, em mm/h com t em minutos"), style = MaterialTheme.typography.labelMedium)
+                    OutlinedTextField(query, { query = it }, label = { Text(tr("Buscar equação de chuva por cidade ou UF")) }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                    if (query.isNotBlank()) {
+                        val found = IdfCatalog.search(query)
+                        found.take(8).forEach { e ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(e.label + if (e.author.isNotEmpty()) " · " + e.author else "", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = { pick(e) }) { Text(tr("Usar")) }
+                            }
+                        }
+                        if (found.isEmpty()) Text(tr("Nenhuma equação para essa busca; digite K, a, b e c."), style = MaterialTheme.typography.bodySmall)
+                        else if (found.size > 8) Text(tr("Mais {0} resultados; refine a busca.", found.size - 8), style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (place.isNotEmpty()) Text(tr("Equação de {0} (Coletânea das equações de chuva do Brasil, ABRH). Confira com a do órgão local.", place),
+                        style = MaterialTheme.typography.bodySmall)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("K", "a", "b", "c").forEach { k ->
-                            OutlinedTextField(fields[k]!!, { fields = fields + (k to it) }, label = { Text(k) }, singleLine = true,
+                            OutlinedTextField(fields[k]!!, { fields = fields + (k to it); place = "" }, label = { Text(k) }, singleLine = true,
                                 modifier = Modifier.width(110.dp), isError = fields[k]!!.isNotBlank() && num(fields[k]!!) == null)
                         }
                     }
                     val p = params()
                     val idf = p.idf
-                    if (idf == null) Text(tr("Informe a equação de chuvas da região (K, a, b, c) para calcular a vazão."), style = MaterialTheme.typography.bodySmall)
+                    if (idf == null) Text(tr("Escolha a cidade ou informe a equação de chuvas da região (K, a, b, c) para calcular a vazão."), style = MaterialTheme.typography.bodySmall)
                     else {
                         val q = Hydrology.rational(b, p.runoff, idf, p.years)
                         Text(tr("t = {0} min · i = {1} mm/h · Q = {2} m³/s",

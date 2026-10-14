@@ -1066,7 +1066,6 @@ Vazão de pico (método racional)	Peak flow (rational method)
 Coef. de escoamento C	Runoff coefficient C
 Tempo de retorno (anos)	Return period (years)
 Chuva local (IDF): i = K·Tᵃ / (t + b)ᶜ, em mm/h com t em minutos	Local rainfall (IDF): i = K·Tᵃ / (t + b)ᶜ, in mm/h with t in minutes
-Informe a equação de chuvas da região (K, a, b, c) para calcular a vazão.	Enter the local rainfall equation (K, a, b, c) to compute the flow.
 t = {0} min · i = {1} mm/h · Q = {2} m³/s	t = {0} min · i = {1} mm/h · Q = {2} m³/s
 Bacia maior que 2 km²: o método racional tende a superestimar; prefira o hidrograma unitário (SCS).	Basin larger than 2 km²: the rational method tends to overestimate; prefer the unit hydrograph (SCS).
 Contorno e talvegue vão no DXF exportado (camadas _BACIA e _BACIA_TALVEGUE).	The outline and stream go into the exported DXF (layers _BACIA and _BACIA_TALVEGUE).
@@ -1140,3 +1139,8 @@ Fazer	Do it
 Sugestões	Suggestions
 Sugestão: {0}	Suggestion: {0}
 Ver sugestões	See suggestions
+Escolha a cidade ou informe a equação de chuvas da região (K, a, b, c) para calcular a vazão.	Pick the city or enter the local rainfall equation (K, a, b, c) to compute the flow.
+Buscar equação de chuva por cidade ou UF	Search rainfall equation by city or state
+Nenhuma equação para essa busca; digite K, a, b e c.	No equation matches; type K, a, b and c.
+Mais {0} resultados; refine a busca.	{0} more results; narrow the search.
+Equação de {0} (Coletânea das equações de chuva do Brasil, ABRH). Confira com a do órgão local.	Equation for {0} (Coletânea das equações de chuva do Brasil, ABRH). Check it against the local authority's.
