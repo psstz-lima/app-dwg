@@ -145,6 +145,83 @@ class TiffReader(
         return Raster(outW, outH, out)
     }
 
+    /** Sizes of the full picture and its overviews, in file order: level 0 is the full picture. */
+    fun levels(): List<Pair<Int, Int>> = images().filter { it.subfileType and 4 == 0 }.map { it.width to it.height }
+
+    /**
+     * Values of a one-band float image (a DEM) in the window ([x0], [y0]) of [w] x [h] pixels of
+     * [level] (see [levels]), row by row from the top; NaN outside the picture. Reads only the
+     * blocks the window touches. Takes 32-bit floats, plain or with the floating-point predictor.
+     */
+    fun readFloats(level: Int, x0: Int, y0: Int, w: Int, h: Int): FloatArray {
+        val ifd = images().filter { it.subfileType and 4 == 0 }.getOrNull(level) ?: error(tr("TIFF sem imagem"))
+        val bits = ifd.tags[258]?.first()?.toInt() ?: 1
+        val format = ifd.int(339, 1).toInt()
+        val samples = ifd.int(277, 1).toInt()
+        val compression = ifd.int(259, 1).toInt()
+        val predictor = ifd.int(317, 1).toInt()
+        require(bits == 32 && format == 3 && samples == 1) { tr("TIFF não é uma grade de cotas (float de 32 bits)") }
+        require(compression == 1 || compression == 8 || compression == 32946 || compression == 5) { tr("compressão TIFF {0} não é suportada", compression) }
+        val tiled = ifd.tags.containsKey(322)
+        val width = ifd.width; val height = ifd.height
+        val bw = if (tiled) ifd.int(322).toInt() else width
+        val bh = if (tiled) ifd.int(323).toInt() else min(height, ifd.int(278, height.toLong()).toInt().coerceAtLeast(1))
+        val offsets = ifd.tags[if (tiled) 324 else 273] ?: error(tr("TIFF sem dados"))
+        val counts = ifd.tags[if (tiled) 325 else 279] ?: error(tr("TIFF sem dados"))
+        val across = (width + bw - 1) / bw
+        val out = FloatArray(w * h) { Float.NaN }
+        val bx0 = max(0, x0) / bw; val bx1 = min(width - 1, x0 + w - 1) / bw
+        val by0 = max(0, y0) / bh; val by1 = min(height - 1, y0 + h - 1) / bh
+        if (x0 + w <= 0 || y0 + h <= 0 || x0 >= width || y0 >= height) return out
+        for (by in by0..by1) for (bx in bx0..bx1) {
+            val index = by * across + bx
+            val length = counts.getOrElse(index) { 0L }.toInt()
+            if (length <= 0) continue
+            val rows = if (tiled) bh else min(bh, height - by * bh)
+            val expected = bw * 4 * rows
+            val data = bytes(offsets[index], length)
+            val raw = when (compression) {
+                1 -> data
+                5 -> lzw(data, expected)
+                else -> inflate(data, expected)
+            }
+            val values = FloatArray(bw * rows)
+            if (predictor == 3) {
+                // Floating-point predictor: per row, bytes differenced, then stored as byte planes (most significant first).
+                val rowBytes = bw * 4
+                for (r in 0 until rows) {
+                    val start = r * rowBytes
+                    if (start + rowBytes > raw.size) break
+                    for (i in start + 1 until start + rowBytes) raw[i] = (raw[i] + raw[i - 1]).toByte()
+                    for (x in 0 until bw) {
+                        val b0 = raw[start + x].toInt() and 0xFF; val b1 = raw[start + bw + x].toInt() and 0xFF
+                        val b2 = raw[start + 2 * bw + x].toInt() and 0xFF; val b3 = raw[start + 3 * bw + x].toInt() and 0xFF
+                        values[r * bw + x] = Float.fromBits((b0 shl 24) or (b1 shl 16) or (b2 shl 8) or b3)
+                    }
+                }
+            } else {
+                for (i in values.indices) {
+                    val p = i * 4
+                    if (p + 4 > raw.size) break
+                    values[i] = Float.fromBits(u32(raw, p).toInt())
+                }
+            }
+            for (r in 0 until rows) {
+                val y = by * bh + r - y0
+                if (y !in 0 until h) continue
+                for (c in 0 until bw) {
+                    val x = bx * bw + c - x0
+                    if (x !in 0 until w || bx * bw + c >= width) continue
+                    out[y * w + x] = values[r * bw + c]
+                }
+            }
+        }
+        return out
+    }
+
+    /** Plan extent of the full picture from its GeoTIFF tags (the outer edge of its corner pixels). */
+    fun extent(): Bounds? = images().firstOrNull()?.let { geoExtent(it) }
+
     private fun reduceRaster(r: Raster, k: Int): Raster {
         if (k <= 1) return r
         val w = (r.width + k - 1) / k; val h = (r.height + k - 1) / k

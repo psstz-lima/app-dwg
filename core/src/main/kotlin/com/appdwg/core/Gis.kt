@@ -38,8 +38,10 @@ object Gis {
                     attr(f.attributes, "code", "codigo", "código", "desc", "descricao", "descrição", "description"), f.p)
                 is GisFeature.Line -> if (f.pts.size >= 2) {
                     val has3d = f.pts.any { !it.z.isNaN() && it.z != 0.0 }
+                    // A "#RRGGBB" colour attribute (as in OpenStreetMap downloads) colours the line.
+                    val color = attr(f.attributes, "color", "cor")?.removePrefix("#")?.takeIf { it.length == 6 }?.toIntOrNull(16)?.let { it or 0xFF000000.toInt() }
                     lines += Polyline(attr(f.attributes, "layer", "camada", "tipo", "type") ?: defaultLayer,
-                        DoubleArray(f.pts.size) { f.pts[it].x }, DoubleArray(f.pts.size) { f.pts[it].y }, f.closed,
+                        DoubleArray(f.pts.size) { f.pts[it].x }, DoubleArray(f.pts.size) { f.pts[it].y }, f.closed, color = color,
                         zs = if (has3d) DoubleArray(f.pts.size) { f.pts[it].z } else null)
                 }
             }
