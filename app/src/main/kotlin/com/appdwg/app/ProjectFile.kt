@@ -300,6 +300,10 @@ class ProjectDoc(
             put("contourInterval", v.contourInterval)
             put("platformOutline", JSONArray(v.platformOutline.map { JSONArray().put(it.x).put(it.y) }))
             put("platformParams", v.platformParams.toJson())
+            v.basinParams.let { b ->
+                put("basinParams", JSONObject().put("runoff", b.runoff).put("years", b.years).put("k", b.k).put("a", b.a)
+                    .put("b", b.b).put("c", b.c).put("minArea", b.minArea).put("idfPlace", b.idfPlace))
+            }
             v.platformTerrain?.let { put("platformTerrain", it) }
             put("platformBuilt", v.platformBuilt)
             put("roadParams", v.roadParams.toJson())
@@ -349,6 +353,11 @@ class ProjectDoc(
                 v.platformOutline = List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } }
             }
             o.optJSONObject("platformParams")?.let { v.platformParams = PlatformParams.fromJson(it) }
+            o.optJSONObject("basinParams")?.let { b ->
+                val d = BasinParams()
+                v.basinParams = BasinParams(b.optDouble("runoff", d.runoff), b.optDouble("years", d.years), b.optDouble("k", d.k),
+                    b.optDouble("a", d.a), b.optDouble("b", d.b), b.optDouble("c", d.c), b.optDouble("minArea", d.minArea), b.optString("idfPlace", ""))
+            }
             v.platformTerrain = o.optString("platformTerrain").ifEmpty { null }
             v.platformBuilt = o.optBoolean("platformBuilt")
             o.optJSONObject("roadParams")?.let { v.roadParams = RoadParams.fromJson(it) }

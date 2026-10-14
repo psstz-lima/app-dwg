@@ -75,13 +75,13 @@ object GradeDesign {
         var lo = -0.95; var hi = 0.95
         var best: DoubleArray? = null
         var bestNet = Double.MAX_VALUE
-        repeat(14) {
+        for (iteration in 0 until 14) {
             val lambda = (lo + hi) / 2
             val z = model.solve(lambda, cancelled) ?: return out
             val (cut, fill) = model.volumes(z)
             val net = cut - fill * rules.swell
             if (abs(net) < bestNet) { bestNet = abs(net); best = z }
-            if (abs(net) < 0.01 * (cut + fill) + 1) return@repeat
+            if (abs(net) < 0.01 * (cut + fill) + 1) break
             if (net > 0) lo = lambda else hi = lambda
         }
         best?.let { out += model.result(GradeSuggestion.Kind.BALANCED, it) }

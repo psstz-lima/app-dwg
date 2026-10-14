@@ -39,7 +39,7 @@ object Contours {
             pieces[from] = byLevel
             val p = DoubleArray(4)
             for (q in from until until) {
-                if ((q - from) % 8192 == 8191 && cancelled()) return@forChunks false
+                if ((q - from) % 1024 == 0 && cancelled()) return@forChunks false
                 val t = list[q]
                 val a = tri[3 * t]; val b = tri[3 * t + 1]; val c = tri[3 * t + 2]
                 val zmin = min(zs[a], min(zs[b], zs[c]))

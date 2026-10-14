@@ -2836,6 +2836,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     roadMessage = null
                     platformVolumes = null
                     platformMessage = null
+                    routeSuggestions = emptyList(); gradeSuggestions = emptyList()
+                    platformOptions = emptyList(); platformOptionsOutline = emptyList()
                     view = ViewState(project)
                     restoreRasters(project)
                     restoreXrefs(project)
