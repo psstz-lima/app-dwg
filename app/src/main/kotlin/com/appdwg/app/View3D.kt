@@ -406,6 +406,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uZScale"), zScale)
+        val uBias = GLES30.glGetUniformLocation(program, "uDepthBias")
+        GLES30.glUniform1f(uBias, 0f)
         val uLit = GLES30.glGetUniformLocation(program, "uLit")
         val uColor = GLES30.glGetUniformLocation(program, "uColor")
 
@@ -493,6 +495,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glUniform1i(uDrape, 0)
         GLES30.glDisableVertexAttribArray(1)
         GLES30.glDisableVertexAttribArray(2)
+        GLES30.glUniform1f(uBias, 0.0015f)
         scene.lines.forEachIndexed { i, b ->
             if (b.layer in hidden) return@forEachIndexed
             val argb = (if (b.byLayer) layerColor(b.layer) else b.color) ?: foreground
@@ -526,6 +529,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             layout(location = 2) in vec3 aColor;
             uniform mat4 uMvp;
             uniform float uZScale;
+            // Pulls lines towards the eye, so a line lying on the terrain is not hidden by it.
+            uniform float uDepthBias;
             uniform int uLit;
             uniform int uGray;
             uniform vec3 uColor;
@@ -536,6 +541,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             out vec2 vUv;
             void main() {
                 gl_Position = uMvp * vec4(aPos.xy, aPos.z * uZScale, 1.0);
+                gl_Position.z -= uDepthBias * gl_Position.w;
                 vUv = vec2((aPos.x - uDrapeRect.x) / uDrapeRect.z, (uDrapeRect.y - aPos.y) / uDrapeRect.w);
                 if (uLit == 1) {
                     // Normal under a vertical stretch: (nx, ny, nz / s), normalised.

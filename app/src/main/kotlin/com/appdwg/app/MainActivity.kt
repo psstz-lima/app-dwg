@@ -902,6 +902,7 @@ private fun ProjectScreen(
                     modifier = Modifier.fillMaxSize(),
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
+                    measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
                     snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
                         (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS, EditPick.DRAW)),
                     selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||

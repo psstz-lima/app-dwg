@@ -127,6 +127,8 @@ fun PlanView(
     modifier: Modifier = Modifier,
     /** Points of the measurement being taken, drawn as a line and, from 3 points on, an area. */
     measure: List<Point2> = emptyList(),
+    /** False for an open path (a road axis, a line being drawn): no closing edge nor area fill. */
+    measureClosed: Boolean = true,
     /** Taps snap to the nearest point or vertex, for measuring. */
     snap: Boolean = false,
     /** Ends of the cross section being shown, drawn across the alignment. */
@@ -593,7 +595,7 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
-        if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
+        if (measure.isNotEmpty()) drawMeasure(measure, measureClosed) { toScreen(it, cam) }
         if (sectionLine != null) {
             val a = toScreen(sectionLine.first, cam)
             val b = toScreen(sectionLine.second, cam)
@@ -1016,9 +1018,9 @@ private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2
 }
 
 /** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */
-private fun DrawScope.drawMeasure(points: List<Point2>, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawMeasure(points: List<Point2>, closed: Boolean, toScreen: (Point2) -> Offset) {
     val screen = points.map(toScreen)
-    if (screen.size >= 3) {
+    if (closed && screen.size >= 3) {
         val fill = Path().apply {
             moveTo(screen[0].x, screen[0].y)
             for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
