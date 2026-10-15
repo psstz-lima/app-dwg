@@ -26,6 +26,8 @@ class ViewState(project: LandXmlProject) {
     var measurePoints by mutableStateOf<List<Point2>>(emptyList())
     /** Measurements kept with "Salvar e nova", drawn on the plan numbered M1, M2… */
     var savedMeasures by mutableStateOf<List<List<Point2>>>(emptyList())
+    /** Axis information turned off on the plan ([AxisInfo] keys). */
+    var axisHidden by mutableStateOf<Set<String>>(emptySet())
     var showSection by mutableStateOf(false)
     var sectionAlignment by mutableStateOf(0)
     var sectionStation by mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0)
@@ -315,6 +317,7 @@ class ProjectDoc(
             put("measuring", v.measuring)
             put("measure", JSONArray(v.measurePoints.map { JSONArray().put(it.x).put(it.y) }))
             put("measures", JSONArray(v.savedMeasures.map { m -> JSONArray(m.map { JSONArray().put(it.x).put(it.y) }) }))
+            put("axisHidden", JSONArray(v.axisHidden.toList()))
             put("showSection", v.showSection)
             put("sectionAlignment", v.sectionAlignment)
             put("sectionStation", v.sectionStation)
@@ -370,6 +373,7 @@ class ProjectDoc(
             o.optJSONArray("measures")?.let { all ->
                 v.savedMeasures = List(all.length()) { k -> all.getJSONArray(k).let { a -> List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } } } }
             }
+            o.optJSONArray("axisHidden")?.let { a -> v.axisHidden = List(a.length()) { a.getString(it) }.toSet() }
             v.showSection = o.optBoolean("showSection")
             v.sectionAlignment = o.optInt("sectionAlignment")
             v.sectionStation = o.optDouble("sectionStation", v.sectionStation)

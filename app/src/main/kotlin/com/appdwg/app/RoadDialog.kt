@@ -74,6 +74,8 @@ fun RoadDialog(
     startOnGrade: Boolean = false,
     /** Shows the horizontal and vertical elements of the axes. */
     onElements: () -> Unit = {},
+    /** Chooses which axis information the plan shows. */
+    onDisplay: () -> Unit = {},
 ) {
     val v = vm.view ?: return
     var rp by remember { mutableStateOf(v.roadParams) }
@@ -113,6 +115,7 @@ fun RoadDialog(
                             FilterChip(selected = rp.alignmentIndex < 0, onClick = { rp = rp.copy(alignmentIndex = -1) }, label = { Text(tr("Novo eixo por PIs")) })
                             axes.forEachIndexed { i, a -> FilterChip(selected = rp.alignmentIndex == i, onClick = { rp = rp.copy(alignmentIndex = i) }, label = { Text(a.name) }) }
                         }
+                        OutlinedButton(onClick = { v.roadParams = rp; onDisplay() }) { Text(tr("Exibir no eixo: estacas, PIs, tangentes…")) }
                         if (rp.alignmentIndex < 0) {
                             Text(tr("PIs: {0}. O primeiro e o último são o início e o fim; nos demais entra curva circular com espirais.", rp.pis.size),
                                 style = MaterialTheme.typography.bodySmall)

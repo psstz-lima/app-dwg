@@ -75,7 +75,7 @@ const val AXIS_COLOR = 0xFFD81B60.toInt()
 fun designGuides(vm: ProjectViewModel): Pair<List<Guide>, List<GuideMark>> {
     val (lines, marks) = basinGuides(vm)
     val routes = vm.routeSuggestions.mapIndexed { i, r -> Guide(r.alignment.vertices, ROUTE_COLORS[i % ROUTE_COLORS.size], width = 4f, dashed = true) }
-    val axis = vm.view?.roadParams?.let { vm.axisPreview(it) }.orEmpty()
+    val axis = vm.view?.takeIf { AxisInfo.LINE !in it.axisHidden }?.roadParams?.let { vm.axisPreview(it) }.orEmpty()
     val measures = vm.view?.savedMeasures.orEmpty()
     val measureLines = measures.filter { it.size >= 2 }.map { Guide(it, SAVED_MEASURE_COLOR, width = 3f) }
     val measureMarks = measures.mapIndexedNotNull { i, m ->

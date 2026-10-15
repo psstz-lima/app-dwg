@@ -2,6 +2,7 @@ package com.appdwg.app
 
 import com.appdwg.core.tr
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -128,6 +129,53 @@ fun AlignmentElementsDialog(alignments: List<com.appdwg.core.Alignment>, onDismi
                         }
                     }
                 }
+            }
+        },
+    )
+}
+
+/** Information of the axes that can be turned off on the plan, one by one. */
+object AxisInfo {
+    const val LINE = "eixo"
+    const val STATIONS = "estacas"
+    const val KEYPOINTS = "notaveis"
+    const val PIS = "pis"
+    const val TANGENTS = "tangentes"
+    const val LENGTHS = "comprimentos"
+    val all = listOf(LINE, STATIONS, KEYPOINTS, PIS, TANGENTS, LENGTHS)
+}
+
+/** Turns each piece of axis information on or off on the plan. */
+@Composable
+fun AxisDisplayDialog(v: ViewState, onDismiss: () -> Unit) {
+    val labels = mapOf(
+        AxisInfo.LINE to tr("Linha do eixo (com as curvas)"),
+        AxisInfo.STATIONS to tr("Estacas"),
+        AxisInfo.KEYPOINTS to tr("Pontos notáveis (PC, PT, TS, SC…)"),
+        AxisInfo.PIS to tr("PIs"),
+        AxisInfo.TANGENTS to tr("Linhas entre os PIs (tangentes)"),
+        AxisInfo.LENGTHS to tr("Extensões das linhas entre os PIs"),
+    )
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { v.axisHidden = (AxisInfo.all - AxisInfo.STATIONS - AxisInfo.LINE).toSet() }) { Text(tr("Só estacas")) }
+                OutlinedButton(onClick = { v.axisHidden = emptySet() }) { Text(tr("Tudo")) }
+            }
+        },
+        title = { Text(tr("Exibir no eixo")) },
+        text = {
+            androidx.compose.foundation.layout.Column {
+                AxisInfo.all.forEach { k ->
+                    Row(Modifier.fillMaxWidth().clickable { v.axisHidden = if (k in v.axisHidden) v.axisHidden - k else v.axisHidden + k },
+                        verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(k !in v.axisHidden, { on -> v.axisHidden = if (on) v.axisHidden - k else v.axisHidden + k })
+                        Text(labels.getValue(k))
+                    }
+                }
+                Text(tr("PIs, tangentes e extensões aparecem enquanto o eixo é desenhado ou editado na planta."), style = MaterialTheme.typography.bodySmall)
             }
         },
     )

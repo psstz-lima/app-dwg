@@ -538,6 +538,7 @@ private fun ProjectScreen(
     // PI picked on the axis being edited, for its radius and transition.
     var selectedPi by remember(fileName) { mutableStateOf<Int?>(null) }
     var showElements by remember(fileName) { mutableStateOf(false) }
+    var showAxisDisplay by remember(fileName) { mutableStateOf(false) }
     LaunchedEffect(drawingRoad) { if (!drawingRoad) selectedPi = null }
     // Region and side whose edge target line is being tapped.
     var roadTargetPick by remember(fileName) { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -913,6 +914,8 @@ private fun ProjectScreen(
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
                     measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
                     extraAlignments = listOfNotNull(vm.previewAlignment(v.roadParams)),
+                    axisHidden = v.axisHidden,
+                    measureIsAxis = drawingRoad && !measuring,
                     handles = if (drawingRoad) v.roadParams.pis else emptyList(),
                     selectedHandle = selectedPi,
                     onHandleDrag = if (drawingRoad) { i, p -> v.roadParams.let { rp -> if (i in rp.pis.indices) v.roadParams = rp.copy(pis = rp.pis.toMutableList().apply { set(i, p) }) } } else null,
@@ -1078,6 +1081,7 @@ private fun ProjectScreen(
                             OutlinedButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
                             OutlinedButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
                             OutlinedButton(onClick = { showElements = true }) { Text(tr("Elementos")) }
+                            OutlinedButton(onClick = { showAxisDisplay = true }) { Text(tr("Exibir")) }
                             OutlinedButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
                         }
                     }
@@ -1535,6 +1539,7 @@ private fun ProjectScreen(
         )
     }
 
+    if (showAxisDisplay) AxisDisplayDialog(v, onDismiss = { showAxisDisplay = false })
     if (showElements) AlignmentElementsDialog(project.alignments + listOfNotNull(vm.previewAlignment(v.roadParams)), onDismiss = { showElements = false })
 
     if (showRoad) {
@@ -1546,6 +1551,7 @@ private fun ProjectScreen(
             onServiceNotePdf = { notePdfSaver.launch("$baseName-nota-de-servico.pdf") },
             onBulletin = { showRoad = false; showBulletin = true },
             onElements = { showElements = true },
+            onDisplay = { showAxisDisplay = true },
             onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
             onDismiss = { showRoad = false; roadOnGrade = false }, startOnGrade = roadOnGrade)
     }

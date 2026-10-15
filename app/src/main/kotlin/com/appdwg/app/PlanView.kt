@@ -134,6 +134,10 @@ fun PlanView(
     measureClosed: Boolean = true,
     /** Axes not in the drawing (the one being laid out with PIs), stationed and annotated like the others. */
     extraAlignments: List<Alignment> = emptyList(),
+    /** Axis information turned off ([AxisInfo] keys): axis line, stations, notable points, PIs, tangents, lengths. */
+    axisHidden: Set<String> = emptySet(),
+    /** The measure path is the axis being laid out: its lines, lengths and vertices follow [axisHidden]. */
+    measureIsAxis: Boolean = false,
     /** Points that can be dragged (PIs of the axis being edited), with the one selected. */
     handles: List<Point2> = emptyList(),
     selectedHandle: Int? = null,
@@ -381,7 +385,7 @@ fun PlanView(
                 drawPath(c.minor, colors.contour.copy(alpha = 0.8f), style = Stroke(width = 1f / s))
                 drawPath(c.major, colors.contourMajor, style = Stroke(width = 2f / s))
             }
-            for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
+            if (AxisInfo.LINE !in axisHidden) for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
         }
         contours?.let { c -> drawContourLabels(c, cam, colors) { ts(it, cam) } }
 
@@ -393,7 +397,7 @@ fun PlanView(
     val dens = androidx.compose.ui.platform.LocalDensity.current
     val heavy = scene.weight + project.texts.size * 20 > HEAVY_SCENE
     val layerColors = scene.layers.associateWith(layerColor)
-    val vectorKey = listOf(scene, hiddenLayers, styles, colors, contours, layerColors, project.texts)
+    val vectorKey = listOf(scene, hiddenLayers, styles, colors, contours, layerColors, project.texts, AxisInfo.LINE in axisHidden)
     var vectorCache by remember(project) { mutableStateOf<VectorCache?>(null) }
     LaunchedEffect(frame, size, vectorKey, heavy) {
         if (!heavy) { vectorCache = null; return@LaunchedEffect }
@@ -540,8 +544,8 @@ fun PlanView(
             drawImage(cache.bitmap, dstOffset = IntOffset(ox.roundToInt(), oy.roundToInt()),
                 dstSize = IntSize((w * k).roundToInt().coerceAtLeast(1), (h * k).roundToInt().coerceAtLeast(1)))
         } else drawVectors(cam)
-        drawStations(project.alignments + extraAlignments, cam, colors) { toScreen(it, cam) }
-        drawKeyPoints(keyPoints, cam, colors) { toScreen(it, cam) }
+        if (AxisInfo.STATIONS !in axisHidden) drawStations(project.alignments + extraAlignments, cam, colors) { toScreen(it, cam) }
+        if (AxisInfo.KEYPOINTS !in axisHidden) drawKeyPoints(keyPoints, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors, pointLabels) { toScreen(it, cam) }
         if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels, pointStyles) { toScreen(it, cam) }
         if (channels.isNotEmpty()) {
@@ -642,8 +646,12 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
-        if (measure.isNotEmpty()) drawMeasure(measure, measureClosed) { toScreen(it, cam) }
-        handles.forEachIndexed { i, h ->
+        if (measure.isNotEmpty()) {
+            if (measureIsAxis) drawMeasure(measure, false, lines = AxisInfo.TANGENTS !in axisHidden, lengths = AxisInfo.LENGTHS !in axisHidden,
+                vertices = AxisInfo.PIS !in axisHidden) { toScreen(it, cam) }
+            else drawMeasure(measure, measureClosed) { toScreen(it, cam) }
+        }
+        if (!(measureIsAxis && AxisInfo.PIS in axisHidden)) handles.forEachIndexed { i, h ->
             val sp = toScreen(h, cam); val r = 7.sp.toPx()
             drawRect(Color.White, topLeft = sp - Offset(r, r), size = androidx.compose.ui.geometry.Size(2 * r, 2 * r))
             drawRect(if (i == selectedHandle) Color(0xFFD81B60) else Color(0xFF1565C0), topLeft = sp - Offset(r, r),
@@ -1089,7 +1097,8 @@ private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2
 }
 
 /** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */
-private fun DrawScope.drawMeasure(points: List<Point2>, closed: Boolean, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawMeasure(points: List<Point2>, closed: Boolean, lines: Boolean = true, lengths: Boolean = true, vertices: Boolean = true,
+                                    toScreen: (Point2) -> Offset) {
     val screen = points.map(toScreen)
     if (closed && screen.size >= 3) {
         val fill = Path().apply {
@@ -1103,19 +1112,19 @@ private fun DrawScope.drawMeasure(points: List<Point2>, closed: Boolean, toScree
             pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
         )
     }
-    for (i in 1 until screen.size) drawLine(MEASURE_COLOR, screen[i - 1], screen[i], strokeWidth = 4f)
+    if (lines) for (i in 1 until screen.size) drawLine(MEASURE_COLOR, screen[i - 1], screen[i], strokeWidth = 4f)
     val label = Paint().apply {
         isAntiAlias = true
         textSize = 12.sp.toPx()
         color = MEASURE_COLOR.toArgb()
         setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK)
     }
-    for (i in 1 until screen.size) {
+    if (lengths) for (i in 1 until screen.size) {
         val mid = (screen[i - 1] + screen[i]) / 2f
         val d = hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
         drawContext.canvas.nativeCanvas.drawText(StationFormat.length(d), mid.x + 6f, mid.y - 6f, label)
     }
-    for ((i, sp) in screen.withIndex()) {
+    if (vertices) for ((i, sp) in screen.withIndex()) {
         drawCircle(Color.White, radius = 6.sp.toPx(), center = sp)
         drawCircle(MEASURE_COLOR, radius = 6.sp.toPx(), center = sp, style = Stroke(width = 3f))
         if (i == 0) drawCircle(MEASURE_COLOR, radius = 3.sp.toPx(), center = sp)
