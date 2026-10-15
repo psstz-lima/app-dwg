@@ -1,12 +1,12 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    kotlin("jvm") version "2.1.21"
+    kotlin("jvm") version "2.2.10"
     `java-library`
 }
 
 group = "com.appdwg"
-version = "0.1.1"
+version = "0.1.2"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17

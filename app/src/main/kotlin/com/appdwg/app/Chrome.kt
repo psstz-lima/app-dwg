@@ -126,7 +126,7 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
                 Icon(v, contentDescription = null, tint = fg.copy(alpha = if (enabled) 1f else 0.4f), modifier = Modifier.size(20.dp))
             }
             Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 15.sp, maxLines = 1)
+                fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -137,9 +137,9 @@ fun RecentButton(name: String, modifier: Modifier = Modifier, cloud: Boolean = f
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val type = when {
-        name.endsWith(".gromatic", true) || name.endsWith(".appdwg", true) -> "PROJETO"
+        name.endsWith(".gmt", true) || name.endsWith(".gromatic", true) || name.endsWith(".appdwg", true) -> tr("PROJETO")
         name.endsWith(".dxf", true) -> "DXF"
-        name.contains(".aecc.pnt", true) -> "PONTOS"
+        name.contains(".aecc.pnt", true) -> tr("PONTOS")
         name.endsWith(".xml", true) -> "LANDXML"
         else -> name.substringAfterLast('.', "").uppercase().take(7)
     }

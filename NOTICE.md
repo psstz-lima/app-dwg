@@ -8,7 +8,8 @@ cada um sob a sua própria licença, que continua valendo para esse componente.
 | Componente | Titular | Licença |
 |---|---|---|
 | Kotlin (biblioteca padrão) e kotlinx.coroutines | JetBrains s.r.o. e colaboradores | Apache 2.0 |
-| Jetpack Compose, Material 3, AndroidX Activity, Lifecycle e Core | The Android Open Source Project (Google) | Apache 2.0 |
+| Jetpack Compose, Material 3, AndroidX Activity, AppCompat, Lifecycle e Core | The Android Open Source Project (Google) | Apache 2.0 |
+| Coil 3 e OkHttp (leitura dos tiles de mapa) | Coil Contributors; Square, Inc. | Apache 2.0 |
 | Google Play Billing Library | Google LLC | Termos do Android Software Development Kit e do Google Play |
 | kXML2 (parte do Android; usada nos testes) | Stefan Haustein e colaboradores | MIT |
 

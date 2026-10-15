@@ -146,14 +146,14 @@ fun GpsCard(gnss: GnssManager, east: Double, north: Double, height: Double?, cal
             val prec = listOfNotNull(f.sigmaH?.let { "H ${StationFormat.lengthValue(it)}" }, f.sigmaV?.let { "V ${StationFormat.lengthValue(it)}" })
             Text(if (prec.isNotEmpty()) tr("Precisão ") + prec.joinToString(" · ") + " " + StationFormat.lengthUnit else f.hdop?.let { "HDOP ${StationFormat.decimal(it, 1)}" } ?: "",
                 style = MaterialTheme.typography.bodySmall)
-            Text("E ${StationFormat.lengthValue(east)} · N ${StationFormat.lengthValue(north)}" + (height?.let { " · cota ${StationFormat.lengthValue(it)}" } ?: "") +
-                if (calibrated) " · calibrado" else "",
+            Text("E ${StationFormat.lengthValue(east)} · N ${StationFormat.lengthValue(north)}" + (height?.let { " · " + tr("cota {0}", StationFormat.lengthValue(it)) } ?: "") +
+                if (calibrated) " · " + tr("calibrado") else "",
                 style = MaterialTheme.typography.bodySmall)
             info?.alignment?.takeIf { !it.stationOffset.outside }?.let { a ->
                 Text("${a.name}: ${StationFormat.estaca(a.stationOffset.station)} · ${StationFormat.offset(a.stationOffset.offset)}", style = MaterialTheme.typography.bodySmall)
             }
             info?.terrainElevation?.let { t ->
-                Text(tr("Terreno {0}", StationFormat.lengthValue(t)) + (height?.let { z -> val d = z - t; " · antena ${if (d >= 0) "+" else "−"}${StationFormat.length(abs(d), 3)}" } ?: ""),
+                Text(tr("Terreno {0}", StationFormat.lengthValue(t)) + (height?.let { z -> val d = z - t; " · " + tr("antena {0}", (if (d >= 0) "+" else "−") + StationFormat.length(abs(d), 3)) } ?: ""),
                     style = MaterialTheme.typography.bodySmall)
             }
         }

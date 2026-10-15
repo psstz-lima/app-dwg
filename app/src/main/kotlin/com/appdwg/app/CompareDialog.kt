@@ -187,9 +187,9 @@ fun DifferenceLegend(d: SurfaceDifference, modifier: Modifier) {
                 Text("+" + StationFormat.lengthValue(s, 2), style = MaterialTheme.typography.labelSmall)
             }
             Row(Modifier.width(220.dp)) {
-                Text("corte", style = MaterialTheme.typography.labelSmall, color = Color(0xFF000000 or DifferenceImage.CUT.toLong()))
+                Text(tr("corte"), style = MaterialTheme.typography.labelSmall, color = Color(0xFF000000 or DifferenceImage.CUT.toLong()))
                 Spacer(Modifier.weight(1f))
-                Text("aterro", style = MaterialTheme.typography.labelSmall, color = Color(0xFF000000 or DifferenceImage.FILL.toLong()))
+                Text(tr("aterro"), style = MaterialTheme.typography.labelSmall, color = Color(0xFF000000 or DifferenceImage.FILL.toLong()))
             }
         }
     }

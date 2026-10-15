@@ -112,7 +112,7 @@ fun BasemapDialog(
                     if (p != null) {
                         LinearProgressIndicator(progress = { p.first / p.second.coerceAtLeast(1).toFloat() }, modifier = Modifier.fillMaxWidth())
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("${p.first} de ${p.second}")
+                            Text(tr("{0} de {1}", p.first, p.second))
                             OutlinedButton(onClick = store::cancelDownload) { Text(tr("Parar")) }
                         }
                     } else {

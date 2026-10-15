@@ -107,7 +107,7 @@ fun NoteCard(vm: ProjectViewModel, note: FieldNote, onEdit: () -> Unit, onClose:
         Column(Modifier.padding(12.dp)) {
             Text(tr("Anotação {0} · {1}", note.id, note.time), style = MaterialTheme.typography.titleSmall)
             if (note.text.isNotEmpty()) Text(note.text)
-            Text("E ${StationFormat.lengthValue(note.x)} · N ${StationFormat.lengthValue(note.y)}" + (if (note.z.isNaN()) "" else " · cota ${StationFormat.lengthValue(note.z)}"),
+            Text("E ${StationFormat.lengthValue(note.x)} · N ${StationFormat.lengthValue(note.y)}" + (if (note.z.isNaN()) "" else " · " + tr("cota {0}", StationFormat.lengthValue(note.z))),
                 style = MaterialTheme.typography.bodySmall)
             thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 220.dp)) }
             Row {

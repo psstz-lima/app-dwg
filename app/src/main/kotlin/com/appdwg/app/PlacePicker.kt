@@ -255,7 +255,7 @@ private fun currentLocation(context: Context, onResult: (Location?) -> Unit) {
     var done = false
     fun finish(l: Location?) { if (!done) { done = true; main.post { onResult(l) } } }
     if (providers.isEmpty()) { finish(lastKnown(context)); return }
-    val cancel = androidx.core.os.CancellationSignal()
+    val cancel = android.os.CancellationSignal()
     main.postDelayed({ cancel.cancel(); finish(lastKnown(context)) }, 20_000)
     var pending = providers.size
     for (p in providers) runCatching {

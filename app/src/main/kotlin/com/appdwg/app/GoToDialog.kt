@@ -87,7 +87,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                             val len = kotlin.math.hypot(p1.x - p0.x, p1.y - p0.y).takeIf { it > 0 } ?: 1.0
                             val o = num(offset)!!
                             onGo(Point2(c.x + (p1.y - p0.y) / len * o, c.y - (p1.x - p0.x) / len * o))
-                        }) { Text("Ir") }
+                        }) { Text(tr("Ir")) }
                     }
                 }
                 Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
@@ -98,7 +98,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                     Spacer(Modifier.width(8.dp))
                     OutlinedTextField(north, { north = it }, label = { Text("N") }, singleLine = true, modifier = Modifier.width(180.dp), keyboardOptions = decimal)
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(enabled = num(east) != null && num(north) != null, onClick = { onGo(Point2(num(east)!!, num(north)!!)) }) { Text("Ir") }
+                    OutlinedButton(enabled = num(east) != null && num(north) != null, onClick = { onGo(Point2(num(east)!!, num(north)!!)) }) { Text(tr("Ir")) }
                 }
             }
         },

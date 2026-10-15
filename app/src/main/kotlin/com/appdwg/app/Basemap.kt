@@ -28,8 +28,6 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
 
 /** A web map tile server. [bulk] says whether its terms allow downloading an area ahead of time. */
@@ -61,6 +59,7 @@ class BasemapTile(val bitmap: Bitmap, val src: android.graphics.Rect, val corner
 class BasemapStore(context: Context) {
     private val prefs = context.getSharedPreferences("basemap", Context.MODE_PRIVATE)
     private val root = File(context.filesDir, "tiles")
+    private val images = TileImages(context)
     private val density = context.resources.displayMetrics.density.coerceAtLeast(1f)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -131,13 +130,13 @@ class BasemapStore(context: Context) {
             var bmp: Bitmap? = null
             // An empty file marks a tile the server has no picture for: a coarser one is drawn instead.
             val known = f.exists()
-            if (known && f.length() > 0) disk.withPermit { bmp = decodeTile(f) }
+            if (known && f.length() > 0) disk.withPermit { bmp = decodeTile(f, k) }
             val gate = if (s.id == "osm") osmNet else net
-            if (bmp == null && !known && fetch && online) gate.withPermit { bmp = download(s, t)?.let { decodeTile(it) } }
+            if (bmp == null && !known && fetch && online) gate.withPermit { bmp = fetchTile(s, t, k) }
             // A stale tile is drawn at once and fetched again in the background.
             val age = s.maxAgeMs
             if (bmp != null && age != null && fetch && online && System.currentTimeMillis() - f.lastModified() > age) {
-                scope.launch { gate.withPermit { download(s, t)?.let { decodeTile(it) }?.let { fresh -> putTile(k, fresh); withContext(Dispatchers.Main) { version++ } } } }
+                scope.launch { gate.withPermit { fetchTile(s, t, k)?.let { fresh -> putTile(k, fresh); withContext(Dispatchers.Main) { version++ } } } }
             }
             synchronized(loading) {
                 loading -= k
@@ -148,33 +147,41 @@ class BasemapStore(context: Context) {
         return null
     }
 
-    /** Saves [t] to disk; null when the server has no tile or the network fails. */
-    private fun download(s: BasemapSource, t: TileId): File? = runCatching {
-        val c = URL(WebTiles.url(s.url, t)).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000; c.readTimeout = 15_000
-        c.setRequestProperty("User-Agent", "Gromatic/1.0 (Android; survey and earthworks)")
-        try {
-            if (c.responseCode != 200) return null
-            val f = file(s, t)
+    /**
+     * Downloads [t] with Coil (memory and disk cache, downsampled) and mirrors the encoded bytes
+     * into the offline tile file. Null when the server has no tile or the network fails. An empty
+     * file is the marker for Esri's grey "not available" tile.
+     */
+    private suspend fun fetchTile(s: BasemapSource, t: TileId, k: String): Bitmap? {
+        val url = WebTiles.url(s.url, t)
+        val bmp = images.decode(url, k, WebTiles.TILE_PX, opaque = true, disk = true, memory = true) ?: return null
+        val f = file(s, t)
+        if (!images.exportDisk(k, f)) {
             f.parentFile?.mkdirs()
             val tmp = File(f.path + ".part")
-            c.inputStream.use { inp -> tmp.outputStream().use { inp.copyTo(it) } }
-            if (s.greyPlaceholders && isPlaceholder(tmp)) { tmp.delete(); f.writeBytes(ByteArray(0)); return f }
+            tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 90, it) }
             if (f.exists()) f.delete()
-            if (!tmp.renameTo(f)) return null
-            f
-        } finally { c.disconnect() }
-    }.getOrNull()
+            if (!tmp.renameTo(f)) tmp.delete()
+        }
+        if (s.greyPlaceholders && isPlaceholder(f)) {
+            images.evict(k)
+            f.delete()
+            f.writeBytes(ByteArray(0))
+            return null
+        }
+        return bmp
+    }
 
     /** Map tiles are opaque JPEG or PNG. RGB_565 halves the cache against the default 32-bit decode. */
-    private fun decodeTile(f: File): Bitmap? = BitmapDecode.decodeFile(f.path, Bitmap.Config.RGB_565)
+    private suspend fun decodeTile(f: File, k: String): Bitmap? =
+        images.decode(f, k, WebTiles.TILE_PX, opaque = true, disk = false, memory = true)
 
     /** Whether a tile is a flat grey "map data not yet available" picture. */
-    private fun isPlaceholder(f: File): Boolean {
+    private suspend fun isPlaceholder(f: File): Boolean {
         if (f.length() > 12_000) return false
         // A reduced decode is enough to see a flat colour, and it does not allocate a full tile.
-        val b = BitmapDecode.decodeFile(f.path, Bitmap.Config.RGB_565, sampleSize = 8) ?: return true
-        try {
+        val b = images.decode(f, f.path + "#sample", 32, opaque = true, disk = false, memory = false) ?: return true
+        run {
             if (b.width < 2 || b.height < 2) return true
             val ref = b.getPixel(b.width / 2, b.height / 2)
             val r = (ref shr 16) and 0xFF; val g = (ref shr 8) and 0xFF; val bl = ref and 0xFF
@@ -189,7 +196,7 @@ class BasemapStore(context: Context) {
                 if (kotlin.math.abs(((p shr 16) and 0xFF) - r) < 6 && kotlin.math.abs((p and 0xFF) - bl) < 6) same++
             }
             return same >= 220
-        } finally { b.recycle() }
+        }
     }
 
     private fun cornersOf(t: TileId, crs: Crs): TileCorners {
@@ -279,7 +286,7 @@ class BasemapStore(context: Context) {
                 launch {
                     for (t in queue) {
                         if (!isActive) break
-                        if (!file(s, t).exists() && download(s, t) == null) failed.incrementAndGet()
+                        if (!file(s, t).exists() && fetchTile(s, t, key(s, t)) == null && !file(s, t).exists()) failed.incrementAndGet()
                         else synchronized(loading) { missing -= key(s, t) }
                         val d = done.incrementAndGet()
                         if (d % 10 == 0 || d == tiles.size) withContext(Dispatchers.Main) { progress = d to tiles.size }

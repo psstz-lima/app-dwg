@@ -1,5 +1,6 @@
 package com.appdwg.app
 
+import com.appdwg.core.GmtException
 import com.appdwg.core.tr
 
 import android.app.Application
@@ -2840,6 +2841,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Where the project was last saved or opened from, and its content then (for "unsaved changes"). */
     var projectUri by mutableStateOf<Uri?>(null)
         private set
+    /** Created time of an open .gmt, kept when the file is saved again. */
+    private var gmtCreated: String? = null
     private var savedJson: String? = null
     var projectMessage by mutableStateOf<String?>(null)
         private set
@@ -2889,6 +2892,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         view = null
         sourceUri = null
         projectUri = null
+        gmtCreated = null
         savedJson = null
         base = null
         baseTerrain = emptyList()
@@ -2905,16 +2909,20 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return doc.toJson().toString() != savedJson
     }
 
-    /** Writes the project file to [target]. */
+    /** Writes the project file to [target]. A `.gmt` name stores a single-file container; `.gromatic` stays JSON. */
     fun saveProject(target: Uri, then: () -> Unit = {}) {
         val doc = currentDoc() ?: return
+        val gmt = GmtIo.isGmt(displayName(target), null, target.lastPathSegment)
         viewModelScope.launch {
             projectMessage = try {
                 val json = doc.toJson()
-                val bytes = json.toString(2).toByteArray(Charsets.UTF_8)
                 val cloud = CloudDocs.isDrive(target.toString())
-                tracked(if (cloud) tr("Enviando ao Google Drive") else tr("Salvando projeto")) { t ->
-                    withContext(Dispatchers.IO) { writeWithProgress(target, bytes, t, cloud) }
+                val skipped = if (gmt) saveGmt(target, doc, json, cloud) else {
+                    val bytes = json.toString(2).toByteArray(Charsets.UTF_8)
+                    tracked(if (cloud) tr("Enviando ao Google Drive") else tr("Salvando projeto")) { t ->
+                        withContext(Dispatchers.IO) { writeWithProgress(target, bytes, t, cloud) }
+                    }
+                    0
                 }
                 runCatching {
                     getApplication<Application>().contentResolver.takePersistableUriPermission(
@@ -2926,12 +2934,100 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 CloudDocs.noteUsed(getApplication(), target)
                 remember(target)
                 then()
-                if (CloudDocs.isDrive(target.toString())) tr("Projeto salvo no Google Drive ({0}); o app Drive termina o envio em segundo plano.", displayName(target))
-                else tr("Projeto salvo em {0}.", displayName(target))
+                val where = if (cloud) tr("Projeto salvo no Google Drive ({0}); o app Drive termina o envio em segundo plano.", displayName(target))
+                    else tr("Projeto salvo em {0}.", displayName(target))
+                if (skipped > 0) where + " " + tr("{0} arquivo(s) não entrou(aram) no .gmt (não foi possível lê-los).", skipped) else where
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
-                tr("Não foi possível salvar o projeto: {0}", errorText(e))
+                if (gmt) dropEmpty(target)
+                tr("Não foi possível salvar o projeto: {0}", gmtMessage(e))
             }
         }
+    }
+
+    /** Streams the open project into a .gmt. Returns how many referenced files could not be copied. */
+    private suspend fun saveGmt(target: Uri, doc: ProjectDoc, json: org.json.JSONObject, cloud: Boolean): Int {
+        val pieces = gmtPieces(doc)
+        return tracked(if (cloud) tr("Enviando ao Google Drive") else tr("Salvando projeto")) { t ->
+            withContext(Dispatchers.IO) {
+                val raw = getApplication<Application>().contentResolver.openOutputStream(target, "wt") ?: error(tr("destino indisponível"))
+                raw.use { out ->
+                    val result = GmtIo.write(out, json.toString(2), pieces, BuildConfig.VERSION_NAME, gmtCreated) { bytes ->
+                        t.step((if (cloud) tr("Enviando · ") else tr("Gravando · ")) + StationFormat.decimal(bytes / 1048576.0, 1) + " MB")
+                    }
+                    gmtCreated = result.created
+                    result.skipped
+                }
+            }
+        }
+    }
+
+    /** Files the project points at, plus note photos kept in the app. Unreadable ones are omitted. */
+    private fun gmtPieces(doc: ProjectDoc): List<GmtPiece> {
+        val pieces = ArrayList<GmtPiece>()
+        val seen = HashSet<String>()
+        fun add(role: String, source: String, name: String, size: Long, open: () -> java.io.InputStream?) {
+            if (source.isBlank() || !seen.add(role + "\u0000" + source)) return
+            val probe = open() ?: return
+            probe.close()
+            pieces += GmtPiece(role, source, name, size) { open() ?: error(tr("arquivo indisponível")) }
+        }
+        fun addUri(role: String, uri: String) {
+            if (!uri.contains("://")) return
+            val u = Uri.parse(uri)
+            add(role, uri, displayName(u), fileSize(u).coerceAtLeast(-1)) { input(u) }
+        }
+        addUri("main", doc.main)
+        doc.files.forEach { (_, u) -> addUri("file", u) }
+        doc.drape.forEach { addUri("drape", it) }
+        doc.models.forEach { (uris, _) -> uris.forEach { addUri("model", it) } }
+        doc.states.forEach { s ->
+            if (s.file.isNotEmpty()) addUri("state", s.file)
+            s.image.forEach { addUri("image", it) }
+        }
+        doc.view.optJSONObject("sheets")?.optString("logo")?.takeIf { it.isNotEmpty() }?.let { addUri("logo", it) }
+        doc.notes.forEach { n ->
+            val photo = n.photo ?: return@forEach
+            val f = java.io.File(notesDir, photo)
+            if (f.isFile) add("note", photo, f.name, f.length()) { f.inputStream() }
+        }
+        return pieces
+    }
+
+    private suspend fun openGmt(uri: Uri) {
+        val name = displayName(uri)
+        val task = LoadTask(tr("Abrindo {0}", name)) { openJob?.cancel() }
+        state = ProjectState.Loading(name, task)
+        try {
+            val opened = withContext(Dispatchers.IO) {
+                val cache = java.io.File(getApplication<Application>().cacheDir, "gmt-src").apply { mkdirs() }
+                val zip = GmtIo.materialize(getApplication(), uri, java.io.File(cache, Integer.toHexString(uri.toString().hashCode()) + ".gmt")) {
+                    task.step(tr("Lendo arquivo"), it.toFloat())
+                }
+                val dir = java.io.File(getApplication<Application>().filesDir, "gmt/" + Integer.toHexString(uri.toString().hashCode()))
+                GmtIo.read(zip, dir, notesDir)
+            }
+            gmtCreated = opened.manifest.created
+            val doc = ProjectDoc.fromJson(org.json.JSONObject(opened.projectJson))
+            openProjectDoc(uri, doc, doc.main)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            state = ProjectState.Failed(name, tr("Não foi possível ler o projeto: {0}", gmtMessage(e)))
+        }
+    }
+
+    private fun gmtMessage(e: Exception): String = when (e) {
+        is GmtException -> when (e.code) {
+            "newer" -> tr("Este projeto foi salvo por uma versão mais nova do Gromatic ({0}). Atualize o app para abri-lo.", e.detail)
+            "corrupt", "truncated" -> tr("O arquivo .gmt está corrompido ou incompleto.")
+            "unknown" -> tr("Este arquivo não é um projeto .gmt do Gromatic.")
+            "path" -> tr("O arquivo .gmt contém um caminho inválido e foi recusado.")
+            "too-large" -> tr("O arquivo .gmt é grande demais para abrir neste aparelho.")
+            else -> tr("Não foi possível ler o projeto .gmt ({0}).", e.code)
+        }
+        else -> errorText(e)
     }
 
     // ---- Recent files ----
@@ -2999,6 +3095,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 proRequested = true
                 return@launch
             }
+            if (GmtIo.isGmt(displayName(uri), getApplication<Application>().contentResolver.getType(uri), uri.lastPathSegment)) {
+                openGmt(uri)
+                if (state is ProjectState.Loaded) remember(uri)
+                return@launch
+            }
+            gmtCreated = null
             val head = withContext(Dispatchers.IO) {
                 runCatching {
                     input(uri)?.use { s ->

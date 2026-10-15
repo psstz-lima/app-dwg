@@ -312,9 +312,9 @@ object SectionSheets {
         cell(tr("Folha"), "$page / $pages", x0 + w * 0.6f, rows[1])
         cell(tr("Escalas"), "H 1:${p.scale} · V 1:${p.scale / max(1, p.exaggeration)}", x0, rows[2])
         cell(tr("Data"), date, x0 + w * 0.6f, rows[2])
-        cell(tr("Responsável técnico"), listOf(p.responsible, p.registration.takeIf { it.isNotBlank() }?.let { "CREA $it" }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "),
+        cell(tr("Responsável técnico"), listOf(p.responsible, p.registration.takeIf { it.isNotBlank() }?.let { tr("CREA {0}", it) }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "),
             x0, rows[3])
-        cell("Nº", p.drawing, x0 + w * 0.6f, rows[3])
+        cell(tr("Nº"), p.drawing, x0 + w * 0.6f, rows[3])
         // Legend at the left of the block.
         var ly = y0 + 10f
         c.drawText(tr("Legenda"), margin, ly, bold); ly += 12f

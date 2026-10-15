@@ -5,7 +5,7 @@ import com.appdwg.core.tr
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,7 +84,7 @@ import com.appdwg.core.StationFormat
 import com.appdwg.core.SurfaceDifference
 import kotlin.math.abs
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val viewModel: ProjectViewModel by viewModels()
 
@@ -128,7 +128,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openFromIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_VIEW) intent.data?.let { viewModel.open(it) }
+        val uri = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> {
+                if (android.os.Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            else -> null
+        }
+        uri?.let { viewModel.open(it) }
     }
 }
 
@@ -155,7 +163,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     val saver = rememberLauncherForActivityResult(CreateDocumentAt("application/octet-stream", ::start)) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
     }
-    fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".gromatic"
+    fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".gmt"
     fun save(then: () -> Unit = {}) {
         if (!viewModel.pro.isPro) { viewModel.proRequested = true; return }
         val target = viewModel.projectUri
@@ -1261,7 +1269,7 @@ private fun ProjectScreen(
     val metersPerInch = viewport?.let { vp -> if (planWidthPx > 0) vp.width / planWidthPx * xdpi else null }
     if (!vm.fullScreen && compact) ToolBar(railTools())
     if (!vm.fullScreen) {
-        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        val clipboard = androidx.compose.ui.platform.LocalClipboard.current
         val digits = v.coordDigits
         StatusFooter(
             items = buildList {
@@ -1271,7 +1279,7 @@ private fun ProjectScreen(
                     add(FooterItem("E $e   N $n" + (z?.let { "   Z $it" } ?: "")) { close ->
                         MenuTitle(tr("Coordenadas ({0})", StationFormat.lengthUnit))
                         MenuLine(tr("Copiar E N") + if (z != null) " Z" else "") {
-                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(listOfNotNull(e, n, z).joinToString(" "))); close()
+                            clipboard.nativeClipboard.setPrimaryClip(android.content.ClipData.newPlainText("en", listOfNotNull(e, n, z).joinToString(" "))); close()
                         }
                         MenuTitle(tr("Casas decimais"))
                         for (d in listOf(0, 1, 2, 3, 4)) MenuLine(d.toString(), checked = d == digits) { v.coordDigits = d }
@@ -1808,7 +1816,7 @@ private suspend fun captureWindow(window: android.view.Window): android.graphics
     val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
     return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         android.view.PixelCopy.request(window, bitmap, { result ->
-            cont.resume(if (result == android.view.PixelCopy.SUCCESS) bitmap else null) {}
+            cont.resume(if (result == android.view.PixelCopy.SUCCESS) bitmap else null) { _, _, _ -> }
         }, android.os.Handler(android.os.Looper.getMainLooper()))
     }
 }

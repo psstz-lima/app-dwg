@@ -127,11 +127,11 @@ private fun ModelRow(
     val ax = typed[0]; val ay = typed[1]; val bx = typed[2]; val by = typed[3]
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(tr("Alinhar por 2 pontos"), style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(ax, { setTyped(0, it) }, label = { Text("A: X modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
-        OutlinedTextField(ay, { setTyped(1, it) }, label = { Text("A: Y modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
+        OutlinedTextField(ax, { setTyped(0, it) }, label = { Text(tr("A: X modelo")) }, singleLine = true, modifier = Modifier.width(148.dp), keyboardOptions = text)
+        OutlinedTextField(ay, { setTyped(1, it) }, label = { Text(tr("A: Y modelo")) }, singleLine = true, modifier = Modifier.width(148.dp), keyboardOptions = text)
         OutlinedButton(onClick = { onPickAlign(index, 1) }) { Text(if (alignPoints.first != null) tr("A na planta ✓") else tr("Tocar A na planta")) }
-        OutlinedTextField(bx, { setTyped(2, it) }, label = { Text("B: X modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
-        OutlinedTextField(by, { setTyped(3, it) }, label = { Text("B: Y modelo") }, singleLine = true, modifier = Modifier.width(120.dp), keyboardOptions = text)
+        OutlinedTextField(bx, { setTyped(2, it) }, label = { Text(tr("B: X modelo")) }, singleLine = true, modifier = Modifier.width(148.dp), keyboardOptions = text)
+        OutlinedTextField(by, { setTyped(3, it) }, label = { Text(tr("B: Y modelo")) }, singleLine = true, modifier = Modifier.width(148.dp), keyboardOptions = text)
         OutlinedButton(onClick = { onPickAlign(index, 2) }) { Text(if (alignPoints.second != null) tr("B na planta ✓") else tr("Tocar B na planta")) }
         val pa = alignPoints.first; val pb = alignPoints.second
         val ma = len(ax)?.let { x -> len(ay)?.let { y -> Point2(x, y) } }
