@@ -1031,7 +1031,7 @@ private fun ProjectScreen(
                         style = MaterialTheme.typography.labelMedium, color = g.text,
                     )
                 } else if (editing) {
-                    EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
+                    EditLinesBar(edit, vm, project, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
                 } else if (addingNote) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
