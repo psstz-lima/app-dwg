@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Contour lines over a survey triangle with a road axis: terrain, TIN and alignment. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#7FD1AE" android:strokeWidth="2.2" android:strokeLineCap="round"
+        android:pathData="M30,44 C40,36 52,40 60,36 C68,32 74,36 78,40" />
+    <path android:strokeColor="#7FD1AE" android:strokeWidth="2.2" android:strokeLineCap="round"
+        android:pathData="M30,54 C42,47 54,52 62,47 C70,43 75,47 78,50" />
+    <path android:strokeColor="#7FD1AE" android:strokeWidth="2.2" android:strokeLineCap="round"
+        android:pathData="M30,64 C42,58 56,63 64,58 C71,54 75,58 78,60" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="2" android:strokeLineJoin="round"
+        android:pathData="M36,74 L54,32 L72,74 Z" />
+    <path android:strokeColor="#F2C14E" android:strokeWidth="4" android:strokeLineCap="round"
+        android:pathData="M28,80 C44,70 58,72 80,58" />
+</vector>
