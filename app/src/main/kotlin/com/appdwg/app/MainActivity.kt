@@ -172,6 +172,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     var showAbout by remember { mutableStateOf(false) }
     var showAppearance by remember { mutableStateOf(false) }
     var showNewProject by remember { mutableStateOf(false) }
+    var askCloud by remember { mutableStateOf(false) }
     var afterSave by remember { mutableStateOf<(() -> Unit)?>(null) }
     val saver = rememberLauncherForActivityResult(CreateDocumentAt("application/octet-stream", ::start)) { uri ->
         if (uri != null) viewModel.saveProject(uri) { afterSave?.invoke(); afterSave = null } else afterSave = null
@@ -252,7 +253,11 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     }
                     if (state is ProjectState.Loaded) {
                         val close = remember(g.iconStroke) { GIcon.CLOSE.vector(g.iconStroke) }
-                        androidx.compose.material3.IconButton(onClick = { guarded { viewModel.closeProject() } }) {
+                        androidx.compose.material3.IconButton(onClick = {
+                            guarded {
+                                if (DownloadNames.shouldAsk(viewModel.unexportedCloudCount())) askCloud = true else viewModel.closeProject()
+                            }
+                        }) {
                             androidx.compose.material3.Icon(close, tr("Fechar projeto"), tint = onBar)
                         }
                     }
@@ -262,13 +267,37 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     ) { padding ->
         if (showAbout) AboutDialog(onDismiss = { showAbout = false })
         if (showNewProject) PlacePicker(viewModel.basemap, onPick = { lat, lon, hw, hh -> showNewProject = false; viewModel.newProject(lat, lon, hw, hh) }, onDismiss = { showNewProject = false })
-        if (showAppearance) AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
+        if (showAppearance) {
+            val langCtx = androidx.compose.ui.platform.LocalContext.current
+            val langReady = remember { LanguageChoice.entries.associateWith { LanguagePacks.ready(langCtx, it) } }
+            AppearanceDialog(viewModel.themes.choice, { viewModel.themes.choose(it) },
             onAbout = { showAppearance = false; showAbout = true }, onDismiss = { showAppearance = false },
             units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
             language = viewModel.languages.choice, onLanguage = { viewModel.languages.choose(it) },
+            languageReady = langReady,
             crsName = if (state is ProjectState.Loaded) viewModel.crs().name else null,
             onCrs = if (state is ProjectState.Loaded) ({ showAppearance = false; if (ProAccess.allows(ProFeature.CRS, viewModel.pro.isPro)) viewModel.crsDialogRequested = true else viewModel.proRequested = true }) else null,
             pro = viewModel.pro.isPro, onPro = { showAppearance = false; viewModel.proRequested = true })
+        }
+        if (askCloud) {
+            AlertDialog(
+                modifier = Modifier.safeBars(),
+                onDismissRequest = { askCloud = false },
+                title = { Text(tr("Salvar arquivos baixados?")) },
+                text = { Text(tr("Este projeto tem arquivos baixados da nuvem (Google Drive ou outro). Salvar cópias na pasta Downloads do aparelho? O projeto em si continua no formato .gmt.")) },
+                confirmButton = {
+                    GButton(tr("Salvar"), {
+                        askCloud = false
+                        val ok = viewModel.exportCloudCopies()
+                        if (ok) {
+                            viewModel.closeProject()
+                            viewModel.report(tr("Arquivos salvos na pasta Downloads."))
+                        } else viewModel.report(tr("Não foi possível salvar os arquivos."))
+                    }, primary = true)
+                },
+                dismissButton = { GButton(tr("Não salvar"), { askCloud = false; viewModel.closeProject() }) },
+            )
+        }
         if (viewModel.proRequested) ProDialog(viewModel.pro, onDismiss = { viewModel.proRequested = false })
         if (showRecent) {
             AlertDialog(
@@ -469,6 +498,7 @@ private fun ProjectScreen(
         try { drape3d = vm.drapeFor3d(drape, v.drapeQuality) } finally { drapeLoading = false }
     }
     val ctx0 = androidx.compose.ui.platform.LocalContext.current
+    val langReady = remember { LanguageChoice.entries.associateWith { LanguagePacks.ready(ctx0, it) } }
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
     var showCross by remember(fileName) { mutableStateOf(false) }
@@ -785,15 +815,17 @@ private fun ProjectScreen(
     val xdpi = androidx.compose.ui.platform.LocalResources.current.displayMetrics.xdpi
 
     var show3d by v::show3d
+    var showAr by remember(fileName) { mutableStateOf(false) }
     var exaggeration by v::exaggeration
     val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } || project.models.isNotEmpty() }
     // Back leaves the tool in use (one at a time) before it leaves the project.
-    androidx.activity.compose.BackHandler(enabled = addingNote || addingPoints || measuring || editing || show3d || showSection || showProfile) {
+    androidx.activity.compose.BackHandler(enabled = addingNote || addingPoints || measuring || editing || showAr || show3d || showSection || showProfile) {
         when {
             addingNote -> addingNote = false
             addingPoints -> addingPoints = false
             measuring -> measuring = false
             editing -> editing = false
+            showAr -> showAr = false
             show3d -> show3d = false
             showSection -> showSection = false
             else -> showProfile = false
@@ -839,6 +871,10 @@ private fun ProjectScreen(
         add(RailTool(GIcon.MODELS, tr("Modelos"), feature = ProFeature.MODELS) { showModels = true })
         add(RailTool(GIcon.NOTE, tr("Anotar"), addingNote, feature = ProFeature.NOTES) { addingNote = true; measuring = false; show3d = false })
         add(RailTool(GIcon.GPS, "GPS", vm.gnss.connected, feature = ProFeature.GPS) { showGps = true })
+        add(RailTool(GIcon.AR, tr("RA"), showAr, feature = ProFeature.AR) {
+            showAr = !showAr
+            if (showAr) { show3d = false; measuring = false }
+        })
         add(RailTool(GIcon.CALIBRATE, calibLabel, v.calibrationOn, feature = ProFeature.CALIBRATE) { showCalibration = true })
         add(RailTool(GIcon.CALC, tr("Cálculos"), feature = ProFeature.CALC) { showCalc = true })
         add(RailTool(GIcon.MAP, tr("Mapa"), vm.basemap.enabled, feature = ProFeature.MAP) { showBasemap = true })
@@ -988,7 +1024,15 @@ private fun ProjectScreen(
                 .onSizeChanged { planWidthPx = it.width },
         ) {
                 val pickingArea = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
-                if (show3d) key(project) {
+                if (showAr) ArScreen(
+                    project = project,
+                    userPoints = vm.userPoints,
+                    hidden = hidden,
+                    origin = gpsLocal,
+                    controls = v.arControls,
+                    onControls = { v.arControls = it },
+                    onClose = { showAr = false },
+                ) else if (show3d) key(project) {
                     View3D(
                         project = project,
                         hiddenLayers = hidden,
@@ -1004,6 +1048,11 @@ private fun ProjectScreen(
                         userPoints = vm.userPoints,
                         overlayLines = drapeLines,
                         overlayTris = if (areaClosed && areaPoly.size >= 3) drapeTris else DoubleArray(0),
+                        onDrapeFailed = {
+                            val lower = GlTexture.nextQuality(v.drapeQuality) ?: return@View3D
+                            v.drapeQuality = lower
+                            vm.report(tr("Qualidade reduzida: memória do aparelho"))
+                        },
                     )
                 } else PlanView(
                     project = project,
@@ -1411,7 +1460,12 @@ private fun ProjectScreen(
                 })
                 add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: tr("Auto")) { close ->
                     MenuTitle(tr("Idioma"))
-                    for (l in LanguageChoice.entries) MenuLine(l.label, checked = vm.languages.choice == l) { close(); vm.languages.choose(l) }
+                    val missingLanguage = langReady.any { !it.value }
+                    for (l in LanguageChoice.entries) {
+                        val ready = langReady[l] != false
+                        MenuLine(l.label, checked = vm.languages.choice == l, enabled = ready) { if (ready) { close(); vm.languages.choose(l) } }
+                    }
+                    if (missingLanguage) MenuTitle(tr("Este idioma não está instalado neste aparelho. Atualize o Gromatic pela Play Store."))
                 })
                 add(FooterItem(tr("Tema")) { close ->
                     for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }
@@ -1484,7 +1538,12 @@ private fun ProjectScreen(
                 })
                 add(FooterItem(vm.languages.choice.tag?.substringBefore('-')?.uppercase() ?: tr("Auto")) { close ->
                     MenuTitle(tr("Idioma"))
-                    for (l in LanguageChoice.entries) MenuLine(l.label, checked = vm.languages.choice == l) { close(); vm.languages.choose(l) }
+                    val missingLanguage = langReady.any { !it.value }
+                    for (l in LanguageChoice.entries) {
+                        val ready = langReady[l] != false
+                        MenuLine(l.label, checked = vm.languages.choice == l, enabled = ready) { if (ready) { close(); vm.languages.choose(l) } }
+                    }
+                    if (missingLanguage) MenuTitle(tr("Este idioma não está instalado neste aparelho. Atualize o Gromatic pela Play Store."))
                 })
                 add(FooterItem(tr("Tema")) { close ->
                     for (t in ThemeChoice.entries) MenuLine(t.label, checked = vm.themes.choice == t) { close(); vm.themes.choose(t) }

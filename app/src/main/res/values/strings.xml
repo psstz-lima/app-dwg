@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Gromatic</string>
+    <string name="lang_probe">pt</string>
 
     <string name="close">Fechar</string>
 

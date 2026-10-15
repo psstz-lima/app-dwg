@@ -49,6 +49,7 @@ enum class GIcon(val path: String) {
     MINUS("M5 12h14"),
     DOWNLOAD("M12 3v12 M7 10l5 5 5-5 M5 20h14"),
     LOCK("M6 11h12v10H6z M8.5 11V7.5a3.5 3.5 0 0 1 7 0V11"),
+    AR("M4 8h4l2-3h4l2 3h4v11H4z M9 12.5a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"),
     ;
 
     fun vector(stroke: Float, color: Color = Color.Black): ImageVector = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).addPath(

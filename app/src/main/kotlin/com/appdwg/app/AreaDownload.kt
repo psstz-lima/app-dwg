@@ -2,9 +2,8 @@ package com.appdwg.app
 
 import com.appdwg.core.RandomInput
 import com.appdwg.core.tr
+import okhttp3.Request
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** Identifies the app to the servers it downloads from, as their usage policies ask. */
 const val USER_AGENT = "Gromatic/1.0 (Android; survey and earthworks)"
@@ -12,24 +11,22 @@ const val USER_AGENT = "Gromatic/1.0 (Android; survey and earthworks)"
 /**
  * A file on a web server read at any position with HTTP range requests, in chunks kept in memory,
  * so a Cloud Optimized GeoTIFF gives just the part of it that is needed.
+ * Bytes that are not an image stay on OkHttp. JPEG tiles of a remote TIFF are decoded by Coil.
  */
-class HttpRandomInput private constructor(private val url: URL, override val size: Long, private val cancelled: () -> Boolean) : RandomInput {
+class HttpRandomInput private constructor(private val url: String, override val size: Long, private val cancelled: () -> Boolean) : RandomInput {
     companion object {
         private const val CHUNK = 256 * 1024
 
         /** The file at [url], or null when the server has none (404/403: no tile there). */
         fun open(url: String, cancelled: () -> Boolean = { false }): HttpRandomInput? {
-            val u = URL(url)
-            val c = (u.openConnection() as HttpURLConnection).apply {
-                requestMethod = "HEAD"; connectTimeout = 15_000; readTimeout = 30_000; setRequestProperty("User-Agent", USER_AGENT)
-            }
-            try {
-                return when (c.responseCode) {
-                    200 -> HttpRandomInput(u, c.contentLengthLong, cancelled)
+            val call = Net.client.newCall(Request.Builder().url(url).head().build())
+            call.execute().use { response ->
+                return when (response.code) {
+                    200 -> HttpRandomInput(url, response.header("Content-Length")?.toLongOrNull() ?: response.body?.contentLength() ?: -1L, cancelled)
                     403, 404 -> null
-                    else -> throw IOException(tr("resposta {0} do servidor", c.responseCode))
+                    else -> throw IOException(tr("resposta {0} do servidor", response.code))
                 }
-            } finally { c.disconnect() }
+            }
         }
     }
 
@@ -61,14 +58,13 @@ class HttpRandomInput private constructor(private val url: URL, override val siz
         var attempt = 0
         while (true) {
             try {
-                val c = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15_000; readTimeout = 60_000
-                    setRequestProperty("User-Agent", USER_AGENT)
-                    setRequestProperty("Range", "bytes=$position-${position + length - 1}")
-                }
-                try {
-                    if (c.responseCode != 206 && c.responseCode != 200) throw IOException(tr("resposta {0} do servidor", c.responseCode))
-                    c.inputStream.use { s ->
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Range", "bytes=$position-${position + length - 1}")
+                    .build()
+                Net.client.newCall(request).execute().use { response ->
+                    if (response.code != 206 && response.code != 200) throw IOException(tr("resposta {0} do servidor", response.code))
+                    (response.body ?: throw IOException(tr("resposta {0} do servidor", response.code))).byteStream().use { s ->
                         var o = offset; var left = length
                         while (left > 0) {
                             if (cancelled()) throw kotlinx.coroutines.CancellationException()
@@ -77,7 +73,7 @@ class HttpRandomInput private constructor(private val url: URL, override val siz
                             o += k; left -= k; received += k
                         }
                     }
-                } finally { c.disconnect() }
+                }
                 return
             } catch (e: IOException) {
                 // Mobile connections drop now and then: a few tries before giving up.

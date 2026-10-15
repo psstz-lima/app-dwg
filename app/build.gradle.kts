@@ -14,12 +14,20 @@ android {
         applicationId = "app.gromatic"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.1.4"
+        versionCode = 6
+        versionName = "0.1.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Native debug symbols travel inside the AAB (Play Console "native code without debug symbols").
         ndk {
             debugSymbolLevel = "FULL"
+        }
+    }
+
+    bundle {
+        language {
+            // Ship every language in the base module. A split would leave English out of a
+            // Portuguese Play install, and the in-app picker would appear to do nothing.
+            enableSplit = false
         }
     }
 
@@ -82,6 +90,13 @@ dependencies {
     // which AGP 9's built-in Kotlin 2.2.10 cannot read.
     implementation("io.coil-kt.coil3:coil:3.3.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    val camera = "1.4.2"
+    implementation("androidx.camera:camera-core:$camera")
+    implementation("androidx.camera:camera-camera2:$camera")
+    implementation("androidx.camera:camera-lifecycle:$camera")
+    implementation("androidx.camera:camera-view:$camera")
+    implementation("com.google.ar:core:1.46.0")
 
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

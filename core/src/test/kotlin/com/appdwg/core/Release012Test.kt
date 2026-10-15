@@ -14,8 +14,9 @@ class Release012Test {
     @Test
     fun versionAndOptimizedShrinking() {
         val app = File(root(), "app/build.gradle.kts").readText()
-        assertTrue(app.contains("versionCode = 5"))
-        assertTrue(app.contains("versionName = \"0.1.4\""))
+        assertTrue(app.contains("versionCode = 6"))
+        assertTrue(app.contains("versionName = \"0.1.5\""))
+        assertTrue(app.contains("enableSplit = false"))
         assertTrue(app.contains("isMinifyEnabled = true"))
         assertTrue(app.contains("isShrinkResources = true"))
         val root = File(root(), "build.gradle.kts").readText()
@@ -32,6 +33,10 @@ class Release012Test {
         assertTrue(manifest.contains(".gmt"))
         assertTrue(manifest.contains("application/vnd.gromatic.project"))
         assertTrue(manifest.contains("locales_config"))
+        assertTrue(manifest.contains("android.permission.CAMERA"))
+        assertTrue(manifest.contains("android.hardware.camera.ar\" android:required=\"false\""))
+        assertTrue(manifest.contains("com.google.ar.core\" android:value=\"optional\""))
+        assertFalse(manifest.contains("configChanges"))
         val locales = File(root(), "app/src/main/res/xml/locales_config.xml").readText()
         assertTrue(locales.contains("pt-BR"))
         assertTrue(locales.contains("en-US"))

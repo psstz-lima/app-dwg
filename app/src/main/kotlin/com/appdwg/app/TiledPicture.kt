@@ -78,13 +78,7 @@ class TiledPicture private constructor(
             return TiledPicture(name, where, fd, reader, File(cacheRoot, key).apply { mkdirs() })
         }
 
-        private fun decodeJpeg(bytes: ByteArray, reduce: Int): Raster? {
-            // JPEG blocks are opaque: RGB_565 is half the temporary buffer of ARGB_8888.
-            val bmp = BitmapDecode.decodeBytes(bytes, Bitmap.Config.RGB_565, reduce) ?: return null
-            val px = IntArray(bmp.width * bmp.height)
-            bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
-            return Raster(bmp.width, bmp.height, px).also { bmp.recycle() }
-        }
+        private fun decodeJpeg(bytes: ByteArray, reduce: Int): Raster? = CoilPictures.raster(bytes, reduce)
     }
 
     private val layout = reader.blocks()

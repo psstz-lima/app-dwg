@@ -52,6 +52,7 @@ enum class ProFeature(val id: String, val label: String) {
     SHEETS("sheets", "Pranchas de seções"),
     CROSS_SECTION("cross_section", "Comparar seções"),
     TIMELINE("timeline", "Linha do tempo da obra"),
+    AR("ar", "Realidade aumentada"),
 }
 
 /** Pro opens every [ProFeature]. There is no capability that stays locked once Pro is active. */
