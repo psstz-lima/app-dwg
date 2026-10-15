@@ -73,6 +73,8 @@ fun RoadDialog(
     onDismiss: () -> Unit,
     /** Opens on the grade tab (the app suggests a grade). */
     startOnGrade: Boolean = false,
+    /** Shows the horizontal and vertical elements of the axes. */
+    onElements: () -> Unit = {},
 ) {
     val v = vm.view ?: return
     var rp by remember { mutableStateOf(v.roadParams) }
@@ -116,7 +118,8 @@ fun RoadDialog(
                             Text(tr("PIs: {0}. O primeiro e o último são o início e o fim; nos demais entra curva circular com espirais.", rp.pis.size),
                                 style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedButton(onClick = { v.roadParams = rp; onDrawAxis() }) { Text(tr("Desenhar PIs na planta")) }
+                                OutlinedButton(onClick = { v.roadParams = rp; onDrawAxis() }) { Text(if (rp.pis.isEmpty()) tr("Desenhar PIs na planta") else tr("Editar eixo na planta")) }
+                                TextButton(onClick = { v.roadParams = rp; onElements() }) { Text(tr("Elementos")) }
                                 OutlinedButton(enabled = vm.userPoints.size >= 2, onClick = {
                                     rp = rp.copy(pis = vm.userPoints.map { com.appdwg.core.Point2(it.x, it.y) }, radii = emptyList(), spirals = emptyList())
                                 }) { Text(tr("Usar pontos _POINTS")) }

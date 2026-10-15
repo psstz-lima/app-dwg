@@ -5,9 +5,11 @@ import com.appdwg.core.tr
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -69,4 +71,64 @@ fun PiEditor(rp: RoadParams, i: Int, onChange: (RoadParams) -> Unit, onSelect: (
             onSelect(null)
         }) { Text(tr("Apagar PI")) }
     }
+}
+
+/** Azimuth as degrees, minutes and seconds: 123°45'06". */
+private fun dms(deg: Double): String {
+    val total = Math.round(deg * 3600) % (360 * 3600)
+    return "%d°%02d'%02d\"".format(total / 3600, total / 60 % 60, total % 60)
+}
+
+/** Horizontal and vertical elements of the axes: the drawing's alignments and the one laid out with PIs. */
+@Composable
+fun AlignmentElementsDialog(alignments: List<com.appdwg.core.Alignment>, onDismiss: () -> Unit) {
+    var pick by remember { mutableStateOf(0) }
+    var vertical by remember { mutableStateOf(false) }
+    val a = alignments.getOrNull(pick)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth(0.95f),
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        title = { Text(tr("Elementos do eixo")) },
+        text = {
+            androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    alignments.forEachIndexed { i, al -> androidx.compose.material3.FilterChip(pick == i, { pick = i }, { Text(al.name) }) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    androidx.compose.material3.FilterChip(!vertical, { vertical = false }, { Text(tr("Horizontais")) })
+                    androidx.compose.material3.FilterChip(vertical, { vertical = true }, { Text(tr("Verticais")) })
+                }
+                if (a == null) { Text(tr("Nenhum eixo.")); return@Column }
+                val small = MaterialTheme.typography.bodySmall
+                @Composable
+                fun row(cells: List<String>, bold: Boolean = false) = Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    cells.forEach { Text(it, Modifier.weight(1f), style = if (bold) MaterialTheme.typography.labelMedium else small, maxLines = 2) }
+                }
+                if (!vertical) {
+                    row(listOf(tr("Elemento"), tr("Início"), tr("Fim"), tr("Comprimento"), tr("Raio"), tr("Azimute"), tr("Lado")), true)
+                    com.appdwg.core.AlignmentReport.horizontal(a).forEach { h ->
+                        row(listOf(tr(h.kind), StationFormat.estaca(h.from), StationFormat.estaca(h.to), StationFormat.length(h.length, 2),
+                            h.radius?.let { StationFormat.length(it, 1) } ?: "—", dms(h.azimuth),
+                            when (h.right) { true -> tr("direita"); false -> tr("esquerda"); null -> "—" }))
+                    }
+                    Text(tr("Pontos notáveis"), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    Text(com.appdwg.core.AlignmentReport.keyPoints(a).joinToString(" · ") { "${it.label} ${StationFormat.estaca(it.station)}" }, style = small)
+                } else {
+                    val p = a.profile
+                    if (p == null || p.pvis.size < 2) Text(tr("Este eixo ainda não tem greide."), style = small)
+                    else {
+                        row(listOf("PIV", tr("Estaca"), tr("Cota"), tr("Rampa antes"), tr("Rampa depois"), "L", "K", "PCV", "PTV"), true)
+                        com.appdwg.core.AlignmentReport.vertical(p).forEachIndexed { i, v ->
+                            fun g(x: Double?) = x?.let { StationFormat.decimal(it, 3) + " %" } ?: "—"
+                            row(listOf("${i + 1}", StationFormat.estaca(v.station), StationFormat.lengthValue(v.elevation), g(v.gradeIn), g(v.gradeOut),
+                                if (v.length > 0) StationFormat.length(v.length, 1) else "—", v.k?.let { StationFormat.decimal(it, 1) } ?: "—",
+                                v.pcv?.let { StationFormat.estaca(it) } ?: "—", v.ptv?.let { StationFormat.estaca(it) } ?: "—"))
+                        }
+                    }
+                }
+            }
+        },
+    )
 }

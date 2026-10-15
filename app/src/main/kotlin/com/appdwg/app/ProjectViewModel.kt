@@ -1748,25 +1748,29 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Designs the road of the view settings and lays its surfaces and axis over the project. */
     fun designRoad() { viewModelScope.launch { designRoadNow() } }
 
-    /** Alignment the road settings describe, with the file's profile if any; null when not defined yet. */
     private var previewKey: RoadParams? = null
-    private var previewAxis: List<Point2> = emptyList()
+    private var previewAlign: Alignment? = null
 
     /**
      * The axis drawn with PIs as the plan shows it while it is laid out: tangents with their curves
-     * and spirals from the current radius and Ls. Empty when the axis comes from the file, has
-     * fewer than 2 PIs, or the road was already built (it then shows its own axis).
+     * and spirals from the current radius and Ls, with the typed grade. Null when the axis comes
+     * from the file, has fewer than 2 PIs, or the road was already built (it then shows its own axis).
      */
-    fun axisPreview(rp: RoadParams): List<Point2> {
+    fun previewAlignment(rp: RoadParams): Alignment? {
         // A built road shows its own axis, except while its PIs are being edited.
-        if (rp.alignmentIndex >= 0 || rp.pis.size < 2 || (road != null && view?.drawingRoad != true)) return emptyList()
+        if (rp.alignmentIndex >= 0 || rp.pis.size < 2 || (road != null && view?.drawingRoad != true)) return null
         if (rp != previewKey) {
             val project = (state as? ProjectState.Loaded)?.project
-            previewAxis = project?.let { runCatching { roadAxis(rp, it)?.vertices }.getOrNull() }.orEmpty()
+            previewAlign = project?.let { runCatching { roadAxis(rp, it) }.getOrNull() }?.let { a ->
+                if (rp.pvis.size >= 2) Alignment(a.name, a.startStation, a.elements, Profile(tr("Greide"), AlignmentBuilder.curvesFromK(rp.pvis.sortedBy { it.station }, rp.kValue)
+                    .mapIndexed { i, p -> rp.pvis.sortedBy { it.station }[i].takeIf { it.curveLength > 0 } ?: p })) else a
+            }
             previewKey = rp
         }
-        return previewAxis
+        return previewAlign
     }
+
+    fun axisPreview(rp: RoadParams): List<Point2> = previewAlignment(rp)?.vertices.orEmpty()
 
     fun roadAxis(rp: RoadParams, project: LandXmlProject): Alignment? {
         if (rp.alignmentIndex >= 0) return project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }.getOrNull(rp.alignmentIndex)

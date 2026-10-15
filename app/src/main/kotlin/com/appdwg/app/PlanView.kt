@@ -132,6 +132,8 @@ fun PlanView(
     measure: List<Point2> = emptyList(),
     /** False for an open path (a road axis, a line being drawn): no closing edge nor area fill. */
     measureClosed: Boolean = true,
+    /** Axes not in the drawing (the one being laid out with PIs), stationed and annotated like the others. */
+    extraAlignments: List<Alignment> = emptyList(),
     /** Points that can be dragged (PIs of the axis being edited), with the one selected. */
     handles: List<Point2> = emptyList(),
     selectedHandle: Int? = null,
@@ -209,6 +211,8 @@ fun PlanView(
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
     // so the view stays where it was.
     val origin = remember(viewKey) { bounds.center }
+    // PC, PT, TS… of every axis, worked out once per change of the axes.
+    val keyPoints = remember(project.alignments, extraAlignments) { (project.alignments + extraAlignments).flatMap { com.appdwg.core.AlignmentReport.keyPoints(it) } }
     // Read inside the drag gesture, which is not restarted while the handles move.
     val handlesNow = androidx.compose.runtime.rememberUpdatedState(handles)
     val dragNow = androidx.compose.runtime.rememberUpdatedState(onHandleDrag)
@@ -536,7 +540,8 @@ fun PlanView(
             drawImage(cache.bitmap, dstOffset = IntOffset(ox.roundToInt(), oy.roundToInt()),
                 dstSize = IntSize((w * k).roundToInt().coerceAtLeast(1), (h * k).roundToInt().coerceAtLeast(1)))
         } else drawVectors(cam)
-        drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
+        drawStations(project.alignments + extraAlignments, cam, colors) { toScreen(it, cam) }
+        drawKeyPoints(keyPoints, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors, pointLabels) { toScreen(it, cam) }
         if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels, pointStyles) { toScreen(it, cam) }
         if (channels.isNotEmpty()) {
@@ -946,6 +951,24 @@ private fun DrawScope.drawStations(
             }
             sta += step
         }
+    }
+}
+
+/** Notable points of the axes (PC, PT, TS, SC…) with their stations; labels that would overlap are left out. */
+private fun DrawScope.drawKeyPoints(points: List<com.appdwg.core.AlignmentReport.KeyPoint>, cam: Camera, colors: PlanColors, toScreen: (Point2) -> Offset) {
+    if (points.isEmpty()) return
+    val paint = Paint().apply { isAntiAlias = true; textSize = 10.sp.toPx(); color = colors.stations.toArgb(); isFakeBoldText = true }
+    val r = 3.5f.sp.toPx()
+    val taken = ArrayList<android.graphics.RectF>()
+    for (k in points) {
+        val sp = toScreen(k.point)
+        if (sp.x !in -50f..size.width + 50f || sp.y !in -50f..size.height + 50f) continue
+        drawCircle(colors.stations, radius = r, center = sp, style = Stroke(width = 2f))
+        val text = "${k.label} ${StationFormat.estaca(k.station)}"
+        val box = android.graphics.RectF(sp.x + r * 2, sp.y - r * 2 - paint.textSize, sp.x + r * 2 + paint.measureText(text), sp.y - r * 2)
+        if (taken.any { android.graphics.RectF.intersects(it, box) }) continue
+        taken += box
+        drawContext.canvas.nativeCanvas.drawHaloText(text, box.left, box.bottom, paint)
     }
 }
 

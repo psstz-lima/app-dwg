@@ -538,6 +538,7 @@ private fun ProjectScreen(
     var drawingRoad by v::drawingRoad
     // PI picked on the axis being edited, for its radius and transition.
     var selectedPi by remember(fileName) { mutableStateOf<Int?>(null) }
+    var showElements by remember(fileName) { mutableStateOf(false) }
     LaunchedEffect(drawingRoad) { if (!drawingRoad) selectedPi = null }
     // Region and side whose edge target line is being tapped.
     var roadTargetPick by remember(fileName) { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -912,6 +913,7 @@ private fun ProjectScreen(
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
                     measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
+                    extraAlignments = listOfNotNull(vm.previewAlignment(v.roadParams)),
                     handles = if (drawingRoad) v.roadParams.pis else emptyList(),
                     selectedHandle = selectedPi,
                     onHandleDrag = if (drawingRoad) { i, p -> v.roadParams.let { rp -> if (i in rp.pis.indices) v.roadParams = rp.copy(pis = rp.pis.toMutableList().apply { set(i, p) }) } } else null,
@@ -1076,6 +1078,7 @@ private fun ProjectScreen(
                             Text(tr("Toque os PIs do eixo, do início ao fim ({0}). Arraste um PI para movê-lo; toque nele para raio e transição.", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
                             TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
+                            TextButton(onClick = { showElements = true }) { Text(tr("Elementos")) }
                             TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
                         }
                     }
@@ -1533,6 +1536,8 @@ private fun ProjectScreen(
         )
     }
 
+    if (showElements) AlignmentElementsDialog(project.alignments + listOfNotNull(vm.previewAlignment(v.roadParams)), onDismiss = { showElements = false })
+
     if (showRoad) {
         RoadDialog(vm, project, onDrawAxis = {
             showRoad = false; measuring = false; showSection = false; showProfile = false; show3d = false
@@ -1541,6 +1546,7 @@ private fun ProjectScreen(
         }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") },
             onServiceNotePdf = { notePdfSaver.launch("$baseName-nota-de-servico.pdf") },
             onBulletin = { showRoad = false; showBulletin = true },
+            onElements = { showElements = true },
             onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
             onDismiss = { showRoad = false; roadOnGrade = false }, startOnGrade = roadOnGrade)
     }
