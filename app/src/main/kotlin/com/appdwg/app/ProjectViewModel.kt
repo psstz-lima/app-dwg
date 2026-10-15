@@ -269,8 +269,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * file (.jgw, .pgw, .tfw). A GeoTIFF places itself; a picture with no placement is stretched over
      * the surfaces' extent.
      */
-    fun loadDrape(uris: List<Uri>) {
+    fun loadDrape(uris: List<Uri>, fromState: Boolean = false) {
         val project = (state as? ProjectState.Loaded)?.project ?: return
+        // A picture chosen while a state is shown becomes that state's picture.
+        if (!fromState) activeState?.let { a -> states.getOrNull(a)?.let { st -> states = states.toMutableList().apply { set(a, st.copy(image = uris.map { it.toString() })) } } }
         val named = uris.map { it to displayName(it) }
         val world = named.firstOrNull { it.second.substringAfterLast('.', "").lowercase() in WORLD_FILE_EXTENSIONS }
         val picture = named.firstOrNull { it !== world }
@@ -413,6 +415,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeFile(label: String) {
         if (addedFiles.none { it.label == label }) return
+        if (states.any { it.file == label }) {
+            activeState = null; hideMain = false
+            hiddenFiles = hiddenFiles - states.map { it.file }.toSet()
+            states = states.filter { it.file != label }.takeUnless { it.size == 1 && it[0].file.isEmpty() }.orEmpty()
+            statePeriods = emptyList(); stateTotal = null
+        }
         addedFiles = addedFiles.filter { it.label != label }
         hiddenFiles = hiddenFiles - label
         fun fromFile(n: String) = n == label || n.startsWith("$label|")
@@ -427,6 +435,142 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun clearDifference() {
         difference = null
         differenceImage = null
+    }
+
+    // ---- Survey states: the works timeline (primitiva, medição 1, 2…) ----
+
+    /** States of the works in date order; the first holds the project's own drawing once a measurement is added. */
+    var states by mutableStateOf<List<SurveyState>>(emptyList())
+        private set
+    /** State shown alone on the plan and in 3D; null shows every file together. */
+    var activeState by mutableStateOf<Int?>(null)
+        private set
+    /** Volumes between each state and the one before, and from the first to the last. */
+    var statePeriods by mutableStateOf<List<SurfaceDifference>>(emptyList())
+        private set
+    var stateTotal by mutableStateOf<SurfaceDifference?>(null)
+        private set
+    /** True while the timeline bar is on the plan. */
+    var timelineShown by mutableStateOf(false)
+    /** Set while a state of an added file is shown: the drawing's own surfaces step aside. */
+    private var hideMain = false
+
+    private fun today(): String = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.ROOT).format(java.util.Date())
+
+    private fun isPicture(name: String) = name.substringAfterLast('.', "").lowercase().let { it in WORLD_FILE_EXTENSIONS || it in setOf("tif", "tiff", "jpg", "jpeg", "png", "webp") }
+
+    /**
+     * Adds a measurement: its LandXML/DXF and, optionally, its picture (TIFF and world file) chosen
+     * together. The first one also turns the project's own drawing into the primitiva.
+     */
+    fun addState(uris: List<Uri>) {
+        val named = uris.map { it to displayName(it) }
+        val survey = named.firstOrNull { !isPicture(it.second) }
+        if (survey == null) {
+            compareMessage = tr("Escolha o XML ou DXF da medição junto com a imagem.")
+            return
+        }
+        uris.forEach { u -> runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+        val image = named.filter { it !== survey && isPicture(it.second) }.map { it.first.toString() }
+        compareMessage = null
+        viewModelScope.launch {
+            if (states.isEmpty()) states = listOf(SurveyState(tr("Primitiva"), "", "", drapeUris.map { it.toString() }))
+            val name = tr("Medição {0}", states.size)
+            val before = addedFiles.size
+            addFileNow(survey.first, name)
+            if (addedFiles.size == before) return@launch
+            val added = SurveyState(name, today(), addedFiles.last().label, image)
+            states = (states + added).sortedBy { it.sortKey }
+            showState(states.indexOf(added))
+        }
+    }
+
+    /** Renames or re-dates state [i]; the timeline keeps date order. */
+    fun editState(i: Int, name: String, date: String) {
+        val old = states.getOrNull(i) ?: return
+        val shown = activeState?.let { states.getOrNull(it) }
+        val edited = old.copy(name = name.trim().ifEmpty { old.name }, date = date.trim())
+        states = states.toMutableList().apply { set(i, edited) }.sortedBy { it.sortKey }
+        activeState = shown?.let { s -> states.indexOfFirst { it.file == s.file } }?.takeIf { it >= 0 }
+        statePeriods = emptyList(); stateTotal = null
+    }
+
+    /** Takes state [i] out of the timeline, and its file out of the project (the primitiva's drawing stays). */
+    fun removeState(i: Int) {
+        val s = states.getOrNull(i) ?: return
+        if (activeState != null) showAllStates()
+        states = states.filterIndexed { k, _ -> k != i }
+        if (states.size == 1 && states[0].file.isEmpty()) states = emptyList()
+        statePeriods = emptyList(); stateTotal = null
+        if (s.file.isNotEmpty()) removeFile(s.file)
+    }
+
+    /** Shows state [i] alone: its surfaces and lines, and its picture over them. */
+    fun showState(i: Int) {
+        val s = states.getOrNull(i) ?: return
+        activeState = i
+        val files = states.map { it.file }.filter { it.isNotEmpty() }.toSet()
+        hiddenFiles = hiddenFiles - files + (files - s.file)
+        hideMain = s.file.isNotEmpty()
+        refreshProject()
+        if (s.image.isNotEmpty()) loadDrape(s.image.map(Uri::parse), fromState = true) else removeDrape()
+    }
+
+    /** Every state together again, as plain files. */
+    fun showAllStates() {
+        activeState = null
+        hiddenFiles = hiddenFiles - states.map { it.file }.toSet()
+        hideMain = false
+        refreshProject()
+    }
+
+    /** The surface standing for state [s]: the largest of its file, named after the state. */
+    private fun stateSurface(s: SurveyState): Surface? {
+        val surfaces = if (s.file.isEmpty()) base?.surfaces.orEmpty() else addedFiles.firstOrNull { it.label == s.file }?.project?.surfaces.orEmpty()
+        val big = surfaces.maxByOrNull { it.triangleCount } ?: return null
+        return Surface(s.name, big.xs, big.ys, big.zs, big.triangles)
+    }
+
+    /** Cut and fill from each state to the next, and from the first to the last. */
+    fun computeStatePeriods() {
+        val surfaces = states.map { stateSurface(it) }
+        val missing = states.filterIndexed { k, _ -> surfaces[k] == null }.map { it.name }
+        if (missing.isNotEmpty()) {
+            compareMessage = tr("Sem superfície em: {0}.", missing.joinToString(", "))
+            return
+        }
+        val list = surfaces.filterNotNull()
+        if (list.size < 2) return
+        compareMessage = null
+        viewModelScope.launch {
+            try {
+                val (periods, total) = tracked(tr("Volumes entre estados")) { t ->
+                    withContext(Dispatchers.Default) {
+                        val out = ArrayList<SurfaceDifference>()
+                        for (k in 1 until list.size) {
+                            t.step(tr("{0} → {1}", list[k - 1].name, list[k].name), k.toFloat() / list.size)
+                            out += SurfaceCompare.difference(list[k - 1], list[k], maxCells = 1_000_000) ?: error(tr("{0} e {1} não se sobrepõem.", list[k - 1].name, list[k].name))
+                        }
+                        out to (if (list.size > 2) SurfaceCompare.difference(list.first(), list.last(), maxCells = 1_000_000) else out.first())
+                    }
+                }
+                statePeriods = periods
+                stateTotal = total
+            } catch (e: OutOfMemoryError) {
+                compareMessage = tr("Superfícies grandes demais para comparar neste aparelho.")
+            } catch (e: IllegalStateException) {
+                compareMessage = e.message
+            }
+        }
+    }
+
+    /** Shows on the plan the color map of a difference between states. */
+    fun showStateDifference(d: SurfaceDifference) {
+        viewModelScope.launch {
+            differenceImage = withContext(Dispatchers.Default) { DifferenceImage.of(d) }
+            difference = d
+            differenceVisible = true
+        }
     }
 
     // ---- Cross comparison of several surfaces ----
@@ -850,6 +994,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         },
                     )
                 }
+                // A measurement shown alone hides the primitiva's surfaces from the drawing itself.
+                if (hideMain) p = p.copy(surfaces = p.surfaces.filter { s -> b.surfaces.none { it.name == s.name } })
                 p = p.copy(models = models.flatMap { e -> e.model.meshes.map { e.placement.apply(it) } })
                 // Line edits: originals the user removed or changed are left out, edited lines added.
                 keptOriginals = p.polylines.indices.filter { it !in hiddenOriginals }
@@ -862,7 +1008,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         TerrainImage.of(s)?.also { synchronized(terrainCache) { terrainCache[s.xs] = it } }
                     }
                 }
-                p to baseTerrain + images
+                p to (if (hideMain) baseTerrain.filter { t -> p.surfaces.any { it.name == t.name } } else baseTerrain) + images
             } }
             loadedXrefs = xrefDrawings.keys
             state = (state as? ProjectState.Loaded ?: current).copy(project = project, terrain = terrain)
@@ -2572,6 +2718,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             mainName = displayName(main),
             files = addedFiles.mapNotNull { f -> f.uri?.let { f.label to it.toString() } },
             hiddenFiles = hiddenFiles.toList(),
+            states = states,
+            activeState = activeState ?: -1,
             pointsSurface = generated,
             drape = drapeUris.map { it.toString() },
             drapeVisible = drapeVisible,
@@ -2775,6 +2923,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         detached = doc.detached.toSet()
         pathEdits = doc.pathEdits
         hiddenFiles = doc.hiddenFiles.toSet()
+        states = doc.states
+        activeState = doc.activeState.takeIf { it in doc.states.indices }
+        hideMain = activeState?.let { doc.states[it].file.isNotEmpty() } ?: false
+        timelineShown = states.size > 1
         for ((label, u) in doc.files) {
             val before = addedFiles.size
             addFileNow(Uri.parse(u), label)
@@ -2882,6 +3034,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     referenceMessage = null
                     addedFiles = emptyList()
                     hiddenFiles = emptySet()
+                    states = emptyList(); activeState = null; hideMain = false; statePeriods = emptyList(); stateTotal = null; timelineShown = false
                     userPoints = emptyList()
                     pointsMessage = null
                     compareMessage = null

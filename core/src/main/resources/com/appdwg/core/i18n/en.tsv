@@ -1164,3 +1164,25 @@ Apagar salvas	Delete kept
 Linha 2D	2D line
 3D sobre a superfície	3D on the surface
 3D numa cota	3D at an elevation
+Estados da obra (linha do tempo)	Works states (timeline)
+O desenho aberto é a primitiva. Adicione cada medição com o XML ou DXF e a TIFF dela, escolhidos juntos.	The open drawing is the original ground. Add each measurement with its XML or DXF and its TIFF, chosen together.
+Sem imagem	No picture
+Adicionar medição	Add measurement
+Linha do tempo	Timeline
+Mostrar todos	Show all
+Volumes entre estados	Volumes between states
+Para trocar a imagem do estado marcado, use Imagem > Trocar.	To change the picture of the selected state, use Picture > Change.
+{0} → {1}: corte {2} · aterro {3}	{0} → {1}: cut {2} · fill {3}
+Ver mapa	Show map
+Acumulado {0} → {1}: corte {2} · aterro {3}	Cumulative {0} → {1}: cut {2} · fill {3}
+Estado	State
+Data (dd/mm/aaaa)	Date (dd/mm/yyyy)
+Pausar	Pause
+Reproduzir	Play
+Todos	All
+Escolha o XML ou DXF da medição junto com a imagem.	Choose the measurement's XML or DXF together with the picture.
+Primitiva	Original ground
+Medição {0}	Measurement {0}
+Sem superfície em: {0}.	No surface in: {0}.
+{0} → {1}	{0} → {1}
+{0} e {1} não se sobrepõem.	{0} and {1} do not overlap.

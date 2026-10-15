@@ -163,6 +163,23 @@ data class BulletinItem(
     }
 }
 
+/**
+ * One survey state of the works timeline (primitiva, medição 1, 2…): the file read for it ("" for
+ * the project's own drawing), the picture laid over it and the date it was surveyed (dd/mm/aaaa).
+ */
+data class SurveyState(val name: String, val date: String, val file: String, val image: List<String>) {
+    fun toJson(): JSONObject = JSONObject().put("name", name).put("date", date).put("file", file).put("image", JSONArray(image))
+
+    /** Date as yyyymmdd for sorting; without a readable date the primitiva comes first, the others last. */
+    val sortKey: String get() = Regex("""(\d{1,2})/(\d{1,2})/(\d{4})""").find(date)?.destructured
+        ?.let { (d, m, y) -> y + m.padStart(2, '0') + d.padStart(2, '0') } ?: if (file.isEmpty()) "00000000" else "99999999"
+
+    companion object {
+        fun fromJson(o: JSONObject) = SurveyState(o.optString("name"), o.optString("date"), o.optString("file"),
+            o.optJSONArray("image")?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty())
+    }
+}
+
 /** Everything a saved project (.gromatic, antes .appdwg) holds; files are kept as content URIs, not copied. */
 class ProjectDoc(
     val main: String,
@@ -189,6 +206,9 @@ class ProjectDoc(
     val edited: List<JSONObject> = emptyList(),
     /** Labels of added files switched off. */
     val hiddenFiles: List<String> = emptyList(),
+    /** Survey states of the works timeline, in date order, and the one shown (−1: all). */
+    val states: List<SurveyState> = emptyList(),
+    val activeState: Int = -1,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -222,6 +242,7 @@ class ProjectDoc(
         }))
         if (edited.isNotEmpty()) put("edited", JSONArray(edited))
         if (hiddenFiles.isNotEmpty()) put("hiddenFiles", JSONArray(hiddenFiles))
+        if (states.isNotEmpty()) { put("states", JSONArray(states.map { it.toJson() })); put("activeState", activeState) }
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -281,6 +302,8 @@ class ProjectDoc(
                 o.optString("mainName").ifEmpty { null },
                 edited = o.optJSONArray("edited")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty(),
                 hiddenFiles = strings("hiddenFiles"),
+                states = o.optJSONArray("states")?.let { a -> List(a.length()) { SurveyState.fromJson(a.getJSONObject(it)) } }.orEmpty(),
+                activeState = o.optInt("activeState", -1),
             )
         }
 

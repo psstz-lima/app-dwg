@@ -53,6 +53,8 @@ fun CompareDialog(
     onAddFile: () -> Unit,
     onAddDrive: (() -> Unit)? = null,
     onCross: () -> Unit,
+    onAddState: () -> Unit,
+    onTimeline: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val names = project.surfaces.map { it.name }
@@ -68,6 +70,10 @@ fun CompareDialog(
         title = { Text(tr("Arquivos do projeto e comparação")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                StatesSection(vm, onAddState, onTimeline)
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
                 Text(tr("Arquivos do projeto (mosaico)"), style = MaterialTheme.typography.labelLarge)
                 if (vm.addedFiles.isEmpty()) {
                     Text(

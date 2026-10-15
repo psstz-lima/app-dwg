@@ -434,6 +434,10 @@ private fun ProjectScreen(
     val filePicker = rememberLauncherForActivityResult(OpenMultipleDocumentsAt { if (addDrive.getAndSet(false)) CloudDocs.driveStart(ctx0) else null }) { uris ->
         if (uris.isNotEmpty()) vm.addFiles(uris)
     }
+    // A measurement of the works: its LandXML/DXF and its picture, chosen together.
+    val statePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.addState(uris)
+    }
     val hasDriveApp = remember { CloudDocs.driveInstalled(ctx0) }
     fun addFiles(drive: Boolean) { addDrive.set(drive); filePicker.launch(arrayOf("*/*")) }
     // COGO points: dialog, tapped point, point being edited or created, and the "create" mode.
@@ -1148,7 +1152,8 @@ private fun ProjectScreen(
                     NarrowCards()
                 }
 
-            if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
+            if (vm.timelineShown && vm.states.size > 1) TimelineBar(vm, Modifier.align(Alignment.TopCenter).padding(top = 80.dp, start = 8.dp, end = 8.dp).widthIn(max = 900.dp))
+            else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
                 Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { showAdvice = true }) { Text(tr("Ver sugestões")) }
@@ -1480,6 +1485,8 @@ private fun ProjectScreen(
             onAddFile = { addFiles(false) },
             onAddDrive = if (hasDriveApp) ({ addFiles(true) }) else null,
             onCross = { showCompare = false; showCross = true },
+            onAddState = { statePicker.launch(arrayOf("*/*")) },
+            onTimeline = { showCompare = false; vm.timelineShown = true; if (vm.activeState == null) vm.showState(0) },
             onDismiss = { showCompare = false },
         )
     }
