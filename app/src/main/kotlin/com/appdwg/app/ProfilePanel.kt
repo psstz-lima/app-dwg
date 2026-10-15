@@ -11,6 +11,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -75,17 +77,17 @@ fun ProfilePanel(
     var selected by remember { mutableStateOf<Int?>(null) }
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FitRow(spacedBy = 6.dp) {
                 // The window chips scroll sideways when the panel is narrow (phone) instead of squashing the chart.
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(tr("Perfil · {0}", profile.alignment), style = MaterialTheme.typography.titleSmall, maxLines = 1)
                     Text(tr("Janela"), style = MaterialTheme.typography.labelMedium)
                     PROFILE_RANGES.forEach { r ->
-                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) tr("Inteiro") else "±" + StationFormat.length(r, 0)) })
+                        FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) tr("Inteiro") else "±" + StationFormat.length(r, 0)) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                 }
-                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
             }
             if (editPvis != null) Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(tr("Greide: arraste um PVI (bolinha vermelha) para mudar estaca e cota; toque para escolher."), style = MaterialTheme.typography.labelMedium)
@@ -94,12 +96,12 @@ fun ProfilePanel(
                     val z = profile.design?.let { profile.interpolate(it, cursor) }?.takeIf { !it.isNaN() }
                         ?: profile.lines.firstOrNull()?.let { profile.interpolate(it.elevations, cursor) }?.takeIf { !it.isNaN() } ?: 0.0
                     onPvis((editPvis + com.appdwg.core.Profile.Pvi(cursor, z)).sortedBy { it.station })
-                }) { Text(tr("PVI no cursor")) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("PVI no cursor")) }
                 selected?.let { i ->
                     if (i in editPvis.indices) {
-                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+" + StationFormat.decimal(0.1, 2)) }
-                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−" + StationFormat.decimal(0.1, 2)) }
-                        OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text(tr("Remover PVI")) }
+                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("+" + StationFormat.decimal(0.1, 2)) }
+                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("−" + StationFormat.decimal(0.1, 2)) }
+                        OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Remover PVI")) }
                         Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
                             style = MaterialTheme.typography.labelMedium)
                         if (i > 0 && i < editPvis.size - 1) {
@@ -109,12 +111,12 @@ fun ProfilePanel(
                                 lt = t
                                 StationFormat.number(t)?.takeIf { it >= 0 }?.let { x -> onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(curveLength = StationFormat.fromLength(x)) }) }
                             }, label = { Text(tr("Curva vertical L ({0}, 0 = pelo K)", StationFormat.lengthUnit)) }, singleLine = true,
-                                modifier = Modifier.width(210.dp),
+                                modifier = Modifier.widthIn(max = 210.dp).fillMaxWidth(),
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal))
                         }
                     }
                 }
-                OutlinedButton(onClick = onRecalc) { Text(tr("Recalcular estrada")) }
+                OutlinedButton(onClick = onRecalc, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Recalcular estrada")) }
             }
             ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected) { selected = it }
         }

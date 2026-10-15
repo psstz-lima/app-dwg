@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -72,7 +73,7 @@ fun ExportDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.padding(16.dp).widthIn(max = 720.dp).fillMaxWidth()),
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Exportar")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -81,9 +82,9 @@ fun ExportDialog(
                     Text(tr("Salvar em"), style = MaterialTheme.typography.labelLarge, color = g.muted)
                     ViewSwitch(listOf(tr("Neste aparelho") to !toDrive, tr("☁ Google Drive") to toDrive), onPick = { onToDrive(it == 1) })
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     Text(tr("Sistema de coordenadas: {0}", crs.name), style = MaterialTheme.typography.bodySmall, color = g.muted, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = onCrs) { Text(tr("Trocar…")) }
+                    OutlinedButton(onClick = onCrs, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Trocar…")) }
                 }
 
                 ExportGroup(tr("Desenho e CAD"))
@@ -134,17 +135,14 @@ private fun ExportRow(icon: GIcon, title: String, subtitle: String, enabled: Boo
     val g = LocalG.current
     val vec = androidx.compose.runtime.remember(icon, g.iconStroke) { icon.vector(g.iconStroke) }
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(g.buttonRadius)
-    Row(
-        Modifier.fillMaxWidth().clip(shape).border(maxOf(g.borderWidth, 1.dp), g.border, shape)
+    FitRow(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(shape).border(maxOf(g.borderWidth, 1.dp), g.border, shape)
             .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+            .padding(horizontal = 12.dp, vertical = 10.dp), spacedBy = 12.dp) {
         val alpha = if (enabled) 1f else 0.45f
         androidx.compose.material3.Icon(vec, contentDescription = null, tint = g.accent.copy(alpha = alpha), modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = g.text.copy(alpha = alpha))
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = g.muted.copy(alpha = alpha))
+            Text(title, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = g.text.copy(alpha = alpha), maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = g.muted.copy(alpha = alpha), maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
         Text("›", color = g.muted.copy(alpha = alpha), style = MaterialTheme.typography.titleLarge)
     }

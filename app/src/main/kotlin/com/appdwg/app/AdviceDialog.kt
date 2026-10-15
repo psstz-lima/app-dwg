@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
@@ -24,7 +25,7 @@ fun AdviceDialog(advice: List<Advice>, onDo: (Advice) -> Unit, onDismiss: () -> 
     AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Sugestões para este projeto")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -36,7 +37,7 @@ fun AdviceDialog(advice: List<Advice>, onDo: (Advice) -> Unit, onDismiss: () -> 
                             Text(a.title, style = MaterialTheme.typography.bodyMedium)
                             Text(a.reason, style = MaterialTheme.typography.bodySmall)
                         }
-                        OutlinedButton(onClick = { onDo(a) }) { Text(tr("Fazer")) }
+                        OutlinedButton(onClick = { onDo(a) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fazer")) }
                     }
                 }
             }

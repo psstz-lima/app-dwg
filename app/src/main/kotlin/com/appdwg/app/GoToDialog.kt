@@ -4,6 +4,8 @@ import com.appdwg.core.tr
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,7 +51,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
     AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Ir para")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -67,15 +69,15 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                     Text(tr("Estaca e afastamento"), style = MaterialTheme.typography.labelLarge)
                     if (project.alignments.size > 1) {
                         var open by remember { mutableStateOf(false) }
-                        OutlinedButton(onClick = { open = true }) { Text(project.alignments[alignment].name) }
+                        OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(project.alignments[alignment].name) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             project.alignments.forEachIndexed { i, a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { alignment = i; open = false }) }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(station, { station = it }, label = { Text(tr("Estaca (12+5,40)")) }, singleLine = true, modifier = Modifier.width(180.dp))
+                        OutlinedTextField(station, { station = it }, label = { Text(tr("Estaca (12+5,40)")) }, singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth())
                         Spacer(Modifier.width(8.dp))
-                        OutlinedTextField(offset, { offset = it }, label = { Text(tr("Afast. (+D/−E)")) }, singleLine = true, modifier = Modifier.width(140.dp),
+                        OutlinedTextField(offset, { offset = it }, label = { Text(tr("Afast. (+D/−E)")) }, singleLine = true, modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
                         Spacer(Modifier.width(8.dp))
                         val a = project.alignments[alignment]
@@ -87,18 +89,18 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                             val len = kotlin.math.hypot(p1.x - p0.x, p1.y - p0.y).takeIf { it > 0 } ?: 1.0
                             val o = num(offset)!!
                             onGo(Point2(c.x + (p1.y - p0.y) / len * o, c.y - (p1.x - p0.x) / len * o))
-                        }) { Text(tr("Ir")) }
+                        }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Ir")) }
                     }
                 }
                 Spacer(Modifier.height(8.dp)); HorizontalDivider(); Spacer(Modifier.height(8.dp))
                 Text(tr("Coordenada"), style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val decimal = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                    OutlinedTextField(east, { east = it }, label = { Text("E") }, singleLine = true, modifier = Modifier.width(180.dp), keyboardOptions = decimal)
+                    OutlinedTextField(east, { east = it }, label = { Text("E") }, singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth(), keyboardOptions = decimal)
                     Spacer(Modifier.width(8.dp))
-                    OutlinedTextField(north, { north = it }, label = { Text("N") }, singleLine = true, modifier = Modifier.width(180.dp), keyboardOptions = decimal)
+                    OutlinedTextField(north, { north = it }, label = { Text("N") }, singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth(), keyboardOptions = decimal)
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(enabled = num(east) != null && num(north) != null, onClick = { onGo(Point2(num(east)!!, num(north)!!)) }) { Text(tr("Ir")) }
+                    OutlinedButton(enabled = num(east) != null && num(north) != null, onClick = { onGo(Point2(num(east)!!, num(north)!!)) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Ir")) }
                 }
             }
         },

@@ -4,6 +4,7 @@ import com.appdwg.core.tr
 
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,36 +49,36 @@ fun PointsDialog(
     AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Pontos (camada _POINTS)")) },
         text = {
             Column {
                 Text(tr("{0} ponto(s). Formato do Civil 3D: número, descrição, E, N, cota (PDENZ).", vm.userPoints.size))
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onImport) { Text(tr("Importar TXT/CSV")) }
-                    onImportDrive?.let { OutlinedButton(onClick = it) { Text(tr("☁ Importar do Google Drive")) } }
-                    OutlinedButton(onClick = onExport, enabled = vm.userPoints.isNotEmpty()) { Text(tr("Exportar PDENZ")) }
+                FitRow() {
+                    OutlinedButton(onClick = onImport, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Importar TXT/CSV")) }
+                    onImportDrive?.let { OutlinedButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("☁ Importar do Google Drive")) } }
+                    OutlinedButton(onClick = onExport, enabled = vm.userPoints.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Exportar PDENZ")) }
                 }
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onCreate) { Text(tr("Criar ponto na planta")) }
-                    OutlinedButton(onClick = onGenerate) { Text(tr("Gerar pontos…")) }
-                    OutlinedButton(onClick = { vm.surfaceFromPoints() }, enabled = vm.userPoints.count { !it.z.isNaN() } >= 3) {
+                FitRow() {
+                    OutlinedButton(onClick = onCreate, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Criar ponto na planta")) }
+                    OutlinedButton(onClick = onGenerate, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Gerar pontos…")) }
+                    OutlinedButton(onClick = { vm.surfaceFromPoints() }, enabled = vm.userPoints.count { !it.z.isNaN() } >= 3, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(tr("Gerar superfície"))
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 var showCodes by remember { mutableStateOf(false) }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { vm.autoDraw() }) { Text(tr("Desenho automático")) }
-                    OutlinedButton(onClick = { showCodes = true }) { Text(tr("Códigos de campo…")) }
+                FitRow() {
+                    OutlinedButton(onClick = { vm.autoDraw() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desenho automático")) }
+                    OutlinedButton(onClick = { showCodes = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Códigos de campo…")) }
                 }
                 Text(tr("Liga os pontos de mesma descrição (pé, crista, bordo…) em 3D polys editáveis; a superfície gerada depois as usa como obrigatórias."),
                     style = MaterialTheme.typography.bodySmall)
                 if (showCodes) CodesDialog(vm, onDismiss = { showCodes = false })
                 if (vm.lastGenerated.isNotEmpty()) {
-                    OutlinedButton(onClick = { vm.undoGenerated() }) { Text(tr("Desfazer última geração ({0} pontos)", vm.lastGenerated.size)) }
+                    OutlinedButton(onClick = { vm.undoGenerated() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desfazer última geração ({0} pontos)", vm.lastGenerated.size)) }
                 }
                 vm.pointsMessage?.let {
                     Spacer(Modifier.height(8.dp))
@@ -110,12 +111,12 @@ fun PointEditDialog(
         confirmButton = {
             OutlinedButton(enabled = valid, onClick = {
                 onSave(CogoPoint(number.trim(), description.trim(), num(e)!!, num(n)!!, num(z) ?: Double.NaN))
-            }) { Text(tr("Salvar")) }
+            }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Salvar")) }
         },
         dismissButton = {
             Row {
-                if (onDelete != null) OutlinedButton(onClick = onDelete) { Text(tr("Apagar")) }
-                OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) }
+                if (onDelete != null) OutlinedButton(onClick = onDelete, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Apagar")) }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Cancelar")) }
             }
         },
         title = { Text(if (old == null) tr("Novo ponto") else tr("Ponto {0}", old.number)) },
@@ -161,8 +162,8 @@ fun PointCard(
                 PointLine(a.name, StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                OutlinedButton(onClick = onEdit) { Text(tr("Editar")) }
-                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onEdit, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Editar")) }
+                OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
             }
         }
     }

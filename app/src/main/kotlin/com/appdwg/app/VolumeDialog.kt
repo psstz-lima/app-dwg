@@ -1,6 +1,9 @@
 package com.appdwg.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -56,18 +59,18 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.vol_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.vol_surface), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    names.forEach { s -> FilterChip(s == surfaceName, { st.surface = s; vm.clearVolume() }, { Text(s) }) }
+                    names.forEach { s -> FilterChip(s == surfaceName, { st.surface = s; vm.clearVolume() }, { Text(s) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 Text(stringResource(R.string.vol_area), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.Center) {
-                    FilterChip(!st.usePolygon || !hasPolygon, { st.usePolygon = false; vm.clearVolume() }, { Text(stringResource(R.string.vol_area_all)) })
-                    if (hasPolygon) FilterChip(st.usePolygon, { st.usePolygon = true; vm.clearVolume() }, { Text(pluralStringResource(R.plurals.vol_area_polygon, polygon.size, polygon.size)) })
-                    OutlinedButton(onClick = onDraw) { Text(stringResource(R.string.vol_draw)) }
+                    FilterChip(!st.usePolygon || !hasPolygon, { st.usePolygon = false; vm.clearVolume() }, { Text(stringResource(R.string.vol_area_all)) }, modifier = Modifier.heightIn(min = 48.dp))
+                    if (hasPolygon) FilterChip(st.usePolygon, { st.usePolygon = true; vm.clearVolume() }, { Text(pluralStringResource(R.plurals.vol_area_polygon, polygon.size, polygon.size)) }, modifier = Modifier.heightIn(min = 48.dp))
+                    OutlinedButton(onClick = onDraw, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.vol_draw)) }
                 }
                 if (!hasPolygon) Text(stringResource(R.string.vol_draw_hint), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.vol_base), style = MaterialTheme.typography.labelLarge)
@@ -75,19 +78,19 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                     listOf(R.string.vol_base_elevation, R.string.vol_base_lowest, R.string.vol_base_mean, R.string.vol_base_plane, R.string.vol_base_other)
                         .forEachIndexed { i, label ->
                             if (i == 4 && otherName == null) return@forEachIndexed
-                            FilterChip(st.base == i, { st.base = i; vm.clearVolume() }, { Text(stringResource(label)) })
+                            FilterChip(st.base == i, { st.base = i; vm.clearVolume() }, { Text(stringResource(label)) }, modifier = Modifier.heightIn(min = 48.dp))
                         }
                 }
                 when (st.base) {
                     0 -> OutlinedTextField(st.elevation, { st.elevation = it; vm.clearVolume() }, label = { Text(stringResource(R.string.vol_elevation, StationFormat.lengthUnit)) },
-                        singleLine = true, modifier = Modifier.width(180.dp), isError = elevation == null,
+                        singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth(), isError = elevation == null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     4 -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        names.filter { it != surfaceName }.forEach { s -> FilterChip(s == otherName, { st.other = s; vm.clearVolume() }, { Text(s) }) }
+                        names.filter { it != surfaceName }.forEach { s -> FilterChip(s == otherName, { st.other = s; vm.clearVolume() }, { Text(s) }, modifier = Modifier.heightIn(min = 48.dp)) }
                     }
                 }
                 Text(stringResource(R.string.vol_base_hint), style = MaterialTheme.typography.bodySmall)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     OutlinedButton(
                         enabled = surfaceName != null && (st.base != 0 || elevation != null),
                         onClick = {
@@ -100,7 +103,7 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                                 else -> VolumeBase.Other(project.surfaces.firstOrNull { it.name == otherName } ?: return@OutlinedButton)
                             }
                             vm.computeVolume(s, polygon.takeIf { st.usePolygon && hasPolygon }, base)
-                        },
+                        }, modifier = Modifier.heightIn(min = 48.dp)
                     ) { Text(stringResource(R.string.vol_compute)) }
                     TaskProgress(vm)
                 }

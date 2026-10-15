@@ -5,6 +5,8 @@ import com.appdwg.core.tr
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,11 +44,11 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
     AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                OutlinedButton(onClick = { vm.savePointCodes(codes + PointCode("NOVO", tr("Novo código"), listOf("NOVO"), "TOPO-NOVO", 0xFF607D8B.toInt())); editing = codes.size }) { Text(tr("Adicionar")) }
-                OutlinedButton(onClick = { vm.savePointCodes(PointCodes.defaults) }) { Text(tr("Restaurar padrão")) }
+                OutlinedButton(onClick = { vm.savePointCodes(codes + PointCode("NOVO", tr("Novo código"), listOf("NOVO"), "TOPO-NOVO", 0xFF607D8B.toInt())); editing = codes.size }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Adicionar")) }
+                OutlinedButton(onClick = { vm.savePointCodes(PointCodes.defaults) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Restaurar padrão")) }
             }
         },
         title = { Text(tr("Códigos de campo")) },
@@ -89,37 +91,37 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
                     val edited = PointCode(code.trim().uppercase(), name.trim(), aliases.split(',').map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf(code.trim()) },
                         layer.trim().ifEmpty { "TOPO-" + code.trim().uppercase() }, argb!!, connect, closed, breakline, symbol)
                     vm.savePointCodes(codes.toMutableList().apply { set(i, edited) }); editing = null
-                }) { Text(tr("OK")) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("OK")) }
             },
             dismissButton = {
                 Row {
-                    OutlinedButton(onClick = { vm.savePointCodes(codes.filterIndexed { k, _ -> k != i }); editing = null }) { Text(tr("Apagar")) }
-                    OutlinedButton(onClick = { editing = null }) { Text(tr("Cancelar")) }
+                    OutlinedButton(onClick = { vm.savePointCodes(codes.filterIndexed { k, _ -> k != i }); editing = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Apagar")) }
+                    OutlinedButton(onClick = { editing = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Cancelar")) }
                 }
             },
             title = { Text(tr("Código {0}", c.code)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(code, { code = it }, label = { Text(tr("Código")) }, singleLine = true, modifier = Modifier.width(110.dp))
+                    FitRow() {
+                        OutlinedTextField(code, { code = it }, label = { Text(tr("Código")) }, singleLine = true, modifier = Modifier.widthIn(max = 110.dp).fillMaxWidth())
                         OutlinedTextField(name, { name = it }, label = { Text(tr("Nome")) }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                     OutlinedTextField(aliases, { aliases = it }, label = { Text(tr("Descrições aceitas (separadas por vírgula)")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FitRow() {
                         OutlinedTextField(layer, { layer = it }, label = { Text(tr("Camada")) }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(color, { color = it }, label = { Text(tr("Cor (#RRGGBB)")) }, singleLine = true, modifier = Modifier.width(140.dp))
+                        OutlinedTextField(color, { color = it }, label = { Text(tr("Cor (#RRGGBB)")) }, singleLine = true, modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth())
                         Box(Modifier.size(24.dp).background(Color(argb ?: 0)))
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(connect, { connect = true }, { Text(tr("Liga em linha")) })
-                        FilterChip(!connect, { connect = false }, { Text(tr("Só ponto")) })
+                    FitRow(spacedBy = 6.dp) {
+                        FilterChip(connect, { connect = true }, { Text(tr("Liga em linha")) }, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(!connect, { connect = false }, { Text(tr("Só ponto")) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
-                    if (connect) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(breakline, { breakline = !breakline }, { Text(tr("Obrigatória da superfície")) })
-                        FilterChip(closed, { closed = !closed }, { Text(tr("Fechada")) })
-                    } else Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (connect) FitRow(spacedBy = 6.dp) {
+                        FilterChip(breakline, { breakline = !breakline }, { Text(tr("Obrigatória da superfície")) }, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(closed, { closed = !closed }, { Text(tr("Fechada")) }, modifier = Modifier.heightIn(min = 48.dp))
+                    } else FitRow(spacedBy = 6.dp) {
                         listOf("cruz" to tr("Cruz"), "poste" to tr("Poste"), "arvore" to tr("Árvore"), "caixa" to tr("Caixa")).forEach { (k, l) ->
-                            FilterChip(symbol == k, { symbol = k }, { Text(l) })
+                            FilterChip(symbol == k, { symbol = k }, { Text(l) }, modifier = Modifier.heightIn(min = 48.dp))
                         }
                     }
                 }

@@ -3,6 +3,8 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -67,25 +69,25 @@ fun BasemapDialog(
         title = { Text(tr("Mapa de fundo")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FitRow(spacedBy = 10.dp) {
                     Switch(store.enabled, store::enable)
                     Text(tr("Mostrar mapa sob o desenho"))
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (s in BASEMAP_SOURCES) FilterChip(store.source == s, { store.choose(s) }, label = { Text(s.label) })
+                    for (s in BASEMAP_SOURCES) FilterChip(store.source == s, { store.choose(s) }, label = { Text(s.label) }, modifier = Modifier.heightIn(min = 48.dp))
                 }
                 Text(tr("Fonte: {0}", store.source.credit), style = MaterialTheme.typography.bodySmall)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FitRow(spacedBy = 10.dp) {
                     Text(tr("Opacidade {0}%", (store.opacity * 100).toInt()), Modifier.width(130.dp))
-                    Slider(store.opacity, store::changeOpacity, valueRange = 0.2f..1f, modifier = Modifier.width(260.dp))
+                    Slider(store.opacity, store::changeOpacity, valueRange = 0.2f..1f, modifier = Modifier.widthIn(max = 260.dp).fillMaxWidth())
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FitRow(spacedBy = 10.dp) {
                     Switch(store.online, store::allowOnline)
                     Text(tr("Baixar da internet o que faltar ao navegar (desligado = só offline)"))
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FitRow(spacedBy = 10.dp) {
                     Text(tr("Sistema do projeto: {0}", crs.name), Modifier.weight(1f, fill = false))
-                    OutlinedButton(onClick = onCrs) { Text(tr("Trocar…")) }
+                    OutlinedButton(onClick = onCrs, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Trocar…")) }
                 }
 
                 Text(tr("Uso offline"), style = MaterialTheme.typography.titleSmall)
@@ -94,13 +96,13 @@ fun BasemapDialog(
                         tr("Para uso offline escolha Satélite, Ruas ou Topográfico."), style = MaterialTheme.typography.bodySmall)
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(!useView, { useView = false }, label = { Text(tr("Área do projeto")) }, enabled = projectArea != null)
-                        FilterChip(useView, { useView = true }, label = { Text(tr("Área na tela")) }, enabled = viewArea != null)
+                        FilterChip(!useView, { useView = false }, label = { Text(tr("Área do projeto")) }, enabled = projectArea != null, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(useView, { useView = true }, label = { Text(tr("Área na tela")) }, enabled = viewArea != null, modifier = Modifier.heightIn(min = 48.dp))
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.Center) {
                         Text(tr("Detalhe máximo:"), Modifier.align(Alignment.CenterVertically))
                         for ((z, label) in listOf(16 to "16 (~2,4 m/px)", 17 to "17 (~1,2 m/px)", 18 to "18 (~0,6 m/px)", 19 to "19 (~0,3 m/px)"))
-                            FilterChip(maxZoom == z, { maxZoom = z }, label = { Text(label) })
+                            FilterChip(maxZoom == z, { maxZoom = z }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                     val tooMany = count > MAX_TILES
                     Text(
@@ -111,25 +113,25 @@ fun BasemapDialog(
                     val p = store.progress
                     if (p != null) {
                         LinearProgressIndicator(progress = { p.first / p.second.coerceAtLeast(1).toFloat() }, modifier = Modifier.fillMaxWidth())
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FitRow(spacedBy = 10.dp) {
                             Text(tr("{0} de {1}", p.first, p.second))
-                            OutlinedButton(onClick = store::cancelDownload) { Text(tr("Parar")) }
+                            OutlinedButton(onClick = store::cancelDownload, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Parar")) }
                         }
                     } else {
                         OutlinedButton(
                             onClick = { if (area != null && zoneNumber != null) store.download(area, crs, maxZoom) },
-                            enabled = area != null && zoneNumber != null && count in 1..MAX_TILES,
+                            enabled = area != null && zoneNumber != null && count in 1..MAX_TILES, modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text(tr("Baixar para uso offline")) }
                     }
                 }
                 store.lastResult?.let { Text(it) }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FitRow(spacedBy = 10.dp) {
                     Text(if (usage < 0) tr("Calculando espaço…") else tr("Mapas salvos: {0}", mb(usage)))
-                    OutlinedButton(onClick = store::clear, enabled = usage > 0 && store.progress == null) { Text(tr("Apagar mapas salvos")) }
+                    OutlinedButton(onClick = store::clear, enabled = usage > 0 && store.progress == null, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Apagar mapas salvos")) }
                 }
             }
         },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
     )
 }
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -177,7 +178,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
                 .clip(RoundedCornerShape(16.dp)).background(g.panel.copy(alpha = 0.94f)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Escolha o local do projeto"), style = MaterialTheme.typography.titleMedium, color = g.text, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) }
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Cancelar")) }
                 }
                 Text(tr("Arraste e use a pinça para enquadrar a área. O quadro é a área do projeto."), style = MaterialTheme.typography.bodySmall, color = g.muted)
                 Text(tr("Mapa: © colaboradores do OpenStreetMap"), style = MaterialTheme.typography.labelSmall, color = g.muted)
@@ -200,7 +201,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
                     tr("Área: {0} × {1}", size(widthM), size(heightM)), color = g.text)
                 message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = g.accent) }
                 if (widthM > 30_000 || heightM > 30_000) Text(tr("Aproxime mais: a área passa de 30 km."), style = MaterialTheme.typography.bodySmall, color = g.muted)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FitRow() {
                     GButton(tr("Minha localização (GPS)"), {
                         if (locating) return@GButton
                         if (hasLocationPermission(context)) locate()

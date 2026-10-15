@@ -2,6 +2,7 @@ package com.appdwg.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -37,12 +38,12 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.ta_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.ta_surface), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    names.forEach { n -> FilterChip(n == current, { vm.analysisSurface = n; if (vm.analysisMode != 0) start(n) }, { Text(n) }) }
+                    names.forEach { n -> FilterChip(n == current, { vm.analysisSurface = n; if (vm.analysisMode != 0) start(n) }, { Text(n) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 Text(stringResource(R.string.ta_mode), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -50,7 +51,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
                         FilterChip(vm.analysisMode == i, {
                             vm.analysisMode = i
                             if (i != 0 && (vm.slopeImage == null || vm.analysisSurface != current)) start(current)
-                        }, { Text(stringResource(label)) })
+                        }, { Text(stringResource(label)) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                 }
                 TaskProgress(vm)
@@ -58,7 +59,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
                     Text(stringResource(R.string.ta_min_area), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(2_000.0, 10_000.0, 50_000.0, 200_000.0).forEach { a ->
-                            FilterChip(vm.flowMinArea == a, { vm.changeFlowMinArea(a) }, { Text(StationFormat.landArea(a, 1)) })
+                            FilterChip(vm.flowMinArea == a, { vm.changeFlowMinArea(a) }, { Text(StationFormat.landArea(a, 1)) }, modifier = Modifier.heightIn(min = 48.dp))
                         }
                     }
                     Text(stringResource(R.string.ta_flow_hint), style = MaterialTheme.typography.bodySmall)
