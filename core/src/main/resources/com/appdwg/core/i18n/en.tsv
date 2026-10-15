@@ -1324,3 +1324,22 @@ Declividade média	Average slope
 Entre {0} e {1}	Between {0} and {1}
 Calculando na superfície…	Computing on the surface…
 1 dedo gira · 2 dedos movem · pinça aproxima. Um toque curto marca um ponto na superfície.	1 finger orbits · 2 fingers pan · pinch zooms. A short tap marks a point on the surface.
+RA	AR
+Qualidade reduzida: memória do aparelho	Quality reduced: the device ran out of memory
+Este idioma não está instalado neste aparelho. Atualize o Gromatic pela Play Store.	This language is not installed on this device. Update Gromatic from the Play Store.
+Salvar arquivos baixados?	Save downloaded files?
+Este projeto tem arquivos baixados da nuvem (Google Drive ou outro). Salvar cópias na pasta Downloads do aparelho? O projeto em si continua no formato .gmt.	This project has files downloaded from the cloud (Google Drive or another). Save copies to the device's Downloads folder? The project itself stays in the .gmt format.
+Arquivos salvos na pasta Downloads.	Files saved to the Downloads folder.
+Não foi possível salvar os arquivos.	The files could not be saved.
+Não salvar	Don't save
+Câmera e localização	Camera and location
+A realidade aumentada usa a câmera para mostrar o terreno e a localização para posicioná-lo. O Gromatic não grava vídeo nem envia a posição.	Augmented reality uses the camera to show the terrain and location to place it. Gromatic does not record video or send the position.
+Continuar	Continue
+Permissão necessária	Permission needed
+Sem a câmera e a localização a vista aumentada não abre. Você pode permitir nas configurações do Android.	Without the camera and location the augmented view does not open. You can allow them in Android settings.
+Sem posição do GPS. A câmera abre, mas o projeto ainda não tem onde se apoiar.	No GPS position. The camera opens, but the project has nowhere to sit yet.
+Toque em dois ou três pontos conhecidos para calibrar. RMS horizontal aparece aqui.	Stand on two or three known points to calibrate. The horizontal RMS shows here.
+Calibrado. RMS horizontal {0} m.	Calibrated. Horizontal RMS {0} m.
+Calibrar	Calibrate
+Você está sobre qual ponto?	Which point are you standing on?
+O projeto não tem pontos para calibrar.	The project has no points to calibrate on.

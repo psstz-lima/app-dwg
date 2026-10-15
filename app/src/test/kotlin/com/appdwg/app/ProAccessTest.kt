@@ -146,5 +146,6 @@ class ProAccessTest {
         "sheets" to "Pranchas de seções",
         "cross_section" to "Comparar seções",
         "timeline" to "Linha do tempo da obra",
+        "ar" to "Realidade aumentada",
     )
 }

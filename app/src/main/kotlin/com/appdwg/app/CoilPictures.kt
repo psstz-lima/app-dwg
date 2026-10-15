@@ -2,7 +2,6 @@ package com.appdwg.app
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import coil3.BitmapImage
 import coil3.ImageLoader
 import coil3.request.CachePolicy
@@ -14,15 +13,22 @@ import coil3.request.allowRgb565
 import coil3.request.bitmapConfig
 import coil3.size.Precision
 import coil3.toBitmap
+import com.appdwg.core.Raster
 import java.io.InputStream
 import kotlinx.coroutines.runBlocking
 
 /**
- * JPEG, PNG and WebP for a drape or a drawing image. Coil subsamples to [maxSide] instead of
- * decoding the stream with [BitmapFactory] at full size.
+ * JPEG, PNG and WebP, including a JPEG tile carried as bytes.
+ * Coil subsamples to [maxSide]. The size of a local picture is read from its header.
  */
 internal object CoilPictures {
     @Volatile private var loader: ImageLoader? = null
+    @Volatile private var appContext: Context? = null
+
+    fun install(context: Context) {
+        appContext = context.applicationContext
+        loader(context)
+    }
 
     private fun loader(context: Context): ImageLoader =
         loader ?: synchronized(this) {
@@ -33,11 +39,11 @@ internal object CoilPictures {
         }
 
     /** Width, height and MIME, without allocating the pixels. */
-    fun sizeOf(open: () -> InputStream?): Triple<Int, Int, String?>? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        open()?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        return Triple(bounds.outWidth, bounds.outHeight, bounds.outMimeType)
+    fun sizeOf(open: () -> InputStream?): ImageHeader.Info? = ImageHeader.parse(open)
+
+    fun decodeInstalled(data: Any, maxSide: Int, config: Bitmap.Config): Bitmap? {
+        val context = appContext ?: return null
+        return decode(context, data, maxSide, config)
     }
 
     fun decode(context: Context, data: Any, maxSide: Int, config: Bitmap.Config): Bitmap? = runBlocking {
@@ -61,5 +67,20 @@ internal object CoilPictures {
             }
             is ErrorResult -> null
         }
+    }
+
+    /** One JPEG tile. Uses the context from [install] when the caller has none. */
+    fun raster(bytes: ByteArray, reduce: Int): Raster? {
+        val context = appContext ?: return null
+        return raster(context, bytes, reduce)
+    }
+
+    /** One JPEG tile, local or downloaded, decoded through Coil and returned as pixels. */
+    fun raster(context: Context, bytes: ByteArray, reduce: Int): Raster? {
+        val side = (8192 / reduce.coerceAtLeast(1)).coerceAtLeast(1)
+        val bitmap = decode(context, bytes, side, Bitmap.Config.RGB_565) ?: return null
+        val px = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(px, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        return Raster(bitmap.width, bitmap.height, px).also { if (!bitmap.isRecycled) bitmap.recycle() }
     }
 }

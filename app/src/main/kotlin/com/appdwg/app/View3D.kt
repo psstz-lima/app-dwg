@@ -70,6 +70,8 @@ fun View3D(
     overlayLines: DoubleArray = DoubleArray(0),
     /** World xyz of the highlighted polygon facets, nine doubles per triangle. */
     overlayTris: DoubleArray = DoubleArray(0),
+    /** The GPU refused the picture. The caller steps the quality down and tries again. */
+    onDrapeFailed: () -> Unit = {},
 ) {
     val scene = remember(project) { Scene3D.build(project) }
     val renderer = remember(project) { Renderer3D(scene) }
@@ -93,12 +95,14 @@ fun View3D(
         renderer.setOverlay(sceneFloats(overlayLines, scene), sceneFloats(overlayTris, scene))
         holder[0]?.requestRender()
     }
+    val failState = rememberUpdatedState(onDrapeFailed)
     val tapState = rememberUpdatedState(onTap)
     val snapState = rememberUpdatedState(snap)
     val projectState = rememberUpdatedState(project)
     val hiddenState = rememberUpdatedState(hiddenLayers)
     val pointsState = rememberUpdatedState(userPoints)
     val scope = rememberCoroutineScope()
+    renderer.onDrapeFailed = { scope.launch(Dispatchers.Main.immediate) { failState.value() } }
     val density = LocalDensity.current.density
     fun pick(x: Float, y: Float) {
         val tap = tapState.value ?: return
@@ -346,7 +350,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     // Picture over the surfaces: set from the UI, uploaded as a texture on the GL thread.
     @Volatile private var drape: Drape? = null
     @Volatile private var drapeDirty = false
-    private var drapeTexture = 0
+    private class GpuTile(val id: Int, val rect: FloatArray)
+    @Volatile private var gpuTiles: List<GpuTile> = emptyList()
+    var onDrapeFailed: (() -> Unit)? = null
     @Volatile private var pendingLines = FloatArray(0)
     @Volatile private var pendingTris = FloatArray(0)
     @Volatile private var overlayDirty = false
@@ -360,56 +366,100 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         drapeDirty = true
     }
 
+    private fun deleteTextures(ids: List<Int>) {
+        if (ids.isEmpty()) return
+        GLES30.glDeleteTextures(ids.size, ids.toIntArray(), 0)
+    }
+
     /**
-     * Uploads the draped picture once, on this GL thread. A later frame does not upload again
-     * unless [setDrape] (or a new surface) marks it dirty.
+     * Uploads the draped picture in tiles, on this GL thread. The previous textures stay bound
+     * until every new tile has uploaded. A failure keeps them and asks for a lower quality.
      */
     private fun uploadDrape() {
         val snapshot = drape
-        if (drapeTexture != 0) {
-            GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0)
-            drapeTexture = 0
+        while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
+        if (snapshot == null) {
+            val previous = gpuTiles
+            gpuTiles = emptyList()
+            deleteTextures(previous.map { it.id })
+            if (drape == null) drapeDirty = false
+            return
         }
-        var uploaded: android.graphics.Bitmap? = null
+        val source = snapshot.image.asAndroidBitmap()
+        if (source.isRecycled || source.width <= 0 || source.height <= 0) {
+            if (drape === snapshot) drapeDirty = false
+            return
+        }
+        val reported = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0]
+        val maxSize = reported.takeIf { it > 0 } ?: 2048
+        val tiles = GlTexture.plan(source.width, source.height, source.hasAlpha(), maxSize)
+        if (tiles == null) {
+            if (drape === snapshot) {
+                drapeDirty = false
+                onDrapeFailed?.invoke()
+            }
+            return
+        }
+        val built = ArrayList<GpuTile>()
+        var failed = false
         try {
-            val source = snapshot?.image?.asAndroidBitmap()
-            if (source != null && !source.isRecycled) {
-                val reported = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0]
-                val maxSize = reported.takeIf { it > 0 } ?: 2048
-                val bitmap = GlTexture.copy(source, maxSize)
-                uploaded = bitmap
-                if (bitmap != null && !bitmap.isRecycled) {
+            for (tile in tiles) {
+                val bitmap = GlTexture.tileBitmap(source, tile) ?: throw OutOfMemoryError()
+                try {
+                    if (bitmap.isRecycled) throw IllegalStateException("tile recycled")
                     val ids = IntArray(1)
                     GLES30.glGenTextures(1, ids, 0)
-                    drapeTexture = ids[0]
-                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
                     GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
                     GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
                     GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
                     GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
-                    // RGB_565 and odd widths are not 4-byte aligned. ARGB_8888 is; alignment 1 covers both.
-                    GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+                    GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, tile.unpackAlignment)
+                    while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
                     GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
                     if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
-                        GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0)
-                        drapeTexture = 0
-                    } else {
-                        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+                        GLES30.glDeleteTextures(1, ids, 0)
+                        failed = true
+                        break
                     }
+                    GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+                    val placed = GlTexture.placed(
+                        snapshot.bounds.minX, snapshot.bounds.maxY, snapshot.bounds.width, snapshot.bounds.height,
+                        source.width, source.height, tile,
+                    )
+                    built += GpuTile(
+                        ids[0],
+                        floatArrayOf(
+                            (placed[0] - scene.originX).toFloat(),
+                            (placed[1] - scene.originY).toFloat(),
+                            placed[2].toFloat(),
+                            placed[3].toFloat(),
+                        ),
+                    )
+                } finally {
+                    if (!bitmap.isRecycled) bitmap.recycle()
                 }
             }
         } catch (e: Throwable) {
             android.util.Log.e("Gromatic", "textura 3D", e)
-            if (drapeTexture != 0) {
-                runCatching { GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0) }
-                drapeTexture = 0
-            }
+            failed = true
         } finally {
             GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
-            uploaded?.let { if (!it.isRecycled) it.recycle() }
-            // One attempt per picture. A drape set while this ran stays dirty for the next frame.
-            if (drape === snapshot) drapeDirty = false
         }
+        if (drape !== snapshot) {
+            deleteTextures(built.map { it.id })
+            return
+        }
+        if (failed || built.size != tiles.size) {
+            deleteTextures(built.map { it.id })
+            drapeDirty = false
+            onDrapeFailed?.invoke()
+            return
+        }
+        val old = gpuTiles
+        gpuTiles = built
+        deleteTextures(old.map { it.id })
+        drapeDirty = false
     }
 
     fun update(hidden: Set<String>, layerColor: (String) -> Int?, background: Int, foreground: Int, zScale: Float, styles: Map<String, SurfaceStyle>) {
@@ -497,8 +547,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             lineBuffers += ids[0]
         }
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
-        // A new GL context has lost the old texture.
-        drapeTexture = 0
+        // A new GL context has lost the old textures. They are not deleted: the context is gone.
+        gpuTiles = emptyList()
         drapeDirty = true
         overlayLineBuf = 0
         overlayTriBuf = 0
@@ -543,22 +593,10 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(1f, 1f)
         GLES30.glUniform1i(uLit, 1)
-        val d = drape
         val uDrape = GLES30.glGetUniformLocation(program, "uDrape")
-        if (d != null && drapeTexture != 0) {
-            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
-            GLES30.glUniform1i(GLES30.glGetUniformLocation(program, "uTex"), 0)
-            GLES30.glUniform1i(uDrape, 1)
-            // Texture v runs down from the picture's top (north) edge.
-            GLES30.glUniform4f(
-                GLES30.glGetUniformLocation(program, "uDrapeRect"),
-                (d.bounds.minX - scene.originX).toFloat(), (d.bounds.maxY - scene.originY).toFloat(),
-                d.bounds.width.toFloat(), d.bounds.height.toFloat(),
-            )
-        } else {
-            GLES30.glUniform1i(uDrape, 0)
-        }
+        val uTex = GLES30.glGetUniformLocation(program, "uTex")
+        val uRect = GLES30.glGetUniformLocation(program, "uDrapeRect")
+        GLES30.glUniform1i(uDrape, 0)
         val uGray = GLES30.glGetUniformLocation(program, "uGray")
         scene.surfaces.forEachIndexed { i, m ->
             if (m.name in hidden) return@forEachIndexed
@@ -575,6 +613,33 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
             GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
+        }
+        val tiles = gpuTiles
+        if (tiles.isNotEmpty()) {
+            GLES30.glUniform1i(uDrape, 1)
+            GLES30.glUniform1i(uTex, 0)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glPolygonOffset(-1f, -1f)
+            for (tile in tiles) {
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tile.id)
+                GLES30.glUniform4f(uRect, tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
+                scene.surfaces.forEachIndexed { i, m ->
+                    if (m.name in hidden) return@forEachIndexed
+                    val st = styles[m.name] ?: SurfaceStyle()
+                    if (st.elevation == ElevationPaint.NONE) return@forEachIndexed
+                    val ids = meshBuffers[i]
+                    GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
+                    GLES30.glEnableVertexAttribArray(0)
+                    GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+                    GLES30.glEnableVertexAttribArray(1)
+                    GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
+                    GLES30.glEnableVertexAttribArray(2)
+                    GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
+                    GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
+                    GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
+                }
+            }
+            GLES30.glUniform1i(uDrape, 0)
         }
         GLES30.glUniform1i(uGray, 0)
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
@@ -749,7 +814,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             out vec4 fragColor;
             void main() {
                 vec3 c = vColor;
-                if (uDrape == 1 && vUv.x >= 0.0 && vUv.x <= 1.0 && vUv.y >= 0.0 && vUv.y <= 1.0) {
+                if (uDrape == 1) {
+                    if (vUv.x < 0.0 || vUv.y < 0.0 || vUv.x > 1.0 || vUv.y > 1.0) discard;
                     // Photos already carry their own shading, so the light is softened over them.
                     vec4 t = texture(uTex, vUv);
                     fragColor = vec4(mix(c * vShade, t.rgb * (0.7 + 0.3 * vShade), t.a), uAlpha);

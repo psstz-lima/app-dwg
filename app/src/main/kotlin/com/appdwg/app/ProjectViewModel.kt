@@ -38,6 +38,9 @@ import com.appdwg.core.CogoPoint
 import com.appdwg.core.POINTS_LAYER
 import com.appdwg.core.PointFile
 import com.appdwg.core.DxfWriter
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import com.appdwg.core.Platform
 import com.appdwg.core.Alignment
 import com.appdwg.core.AlignmentBuilder
@@ -131,10 +134,8 @@ private class Picture(val image: ImageBitmap, val extent: Bounds?, val sourceWid
 /** Extensions of world files, which place a JPG, PNG or TIFF picture in plan. */
 private val WORLD_FILE_EXTENSIONS = setOf("jgw", "jpgw", "jpegw", "pgw", "pngw", "tfw", "tifw", "tiffw", "wld", "bpw", "gfw")
 
-/** Longest side of a loaded raster image; larger pictures are downsampled to save memory. */
-private const val MAX_RASTER = 4096
-/** TIFFs with a side longer than this are shown in tiles from a pyramid instead of whole. */
-private const val TILED_FROM = 8192
+/** A cloud file copied into the cache, under the name the provider gave it. */
+private class CloudCopy(val file: java.io.File, val name: String, var exported: Boolean)
 
 class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -158,12 +159,34 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Google Drive: files are downloaded once to a local copy, with progress, then read from it ----
 
     /** Local copies of cloud files opened in this session, by their document. */
-    private val cloudCopies = java.util.concurrent.ConcurrentHashMap<Uri, java.io.File>()
+    private val cloudCopies = java.util.concurrent.ConcurrentHashMap<Uri, CloudCopy>()
     private val cacheMutex = Mutex()
+
+    private fun cached(uri: Uri): java.io.File? = cloudCopies[uri]?.file?.takeIf { it.isFile }
+
+    /** Cloud copies in the cache that have not been written to Downloads yet. */
+    fun unexportedCloudCount(): Int = cloudCopies.values.count { !it.exported && it.file.isFile }
+
+    /**
+     * Copies those files into the public Downloads folder, keeping their names.
+     * False when any copy fails. A file that did land is not asked about again.
+     */
+    fun exportCloudCopies(): Boolean {
+        val pending = cloudCopies.values.filter { !it.exported && it.file.isFile }
+        if (pending.isEmpty()) return true
+        val taken = HashSet<String>()
+        var ok = true
+        val app = getApplication<Application>()
+        for (copy in pending) {
+            val saved = PublicDownloads.save(app, copy.name, DownloadNames.mime(copy.name), copy.file, taken)
+            if (saved) copy.exported = true else ok = false
+        }
+        return ok
+    }
 
     /** The file's content: its downloaded copy when there is one. */
     private fun input(uri: Uri): java.io.InputStream? =
-        cloudCopies[uri]?.takeIf { it.exists() }?.inputStream() ?: getApplication<Application>().contentResolver.openInputStream(uri)
+        cached(uri)?.inputStream() ?: getApplication<Application>().contentResolver.openInputStream(uri)
 
     /** Size the provider reports without downloading the file, or null. */
     private fun reportedSize(uri: Uri): Long? = runCatching {
@@ -179,14 +202,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun ensureCached(uri: Uri, onCancel: (() -> Unit)? = null) {
         if (!PickedFile.needsStreamedCopy(uri.scheme, uri.authority)) return
         cacheMutex.withLock {
-            if (cloudCopies[uri]?.isFile == true) return@withLock
+            if (cached(uri) != null) return@withLock
             tracked(tr("Abrindo {0}", displayName(uri)), onCancel) { download(uri, it) }
         }
     }
 
     /** The cached copy when this URI was streamed, otherwise the provider's own descriptor. */
     private fun openLocal(uri: Uri): ParcelFileDescriptor? =
-        cloudCopies[uri]?.takeIf { it.isFile }?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
+        cached(uri)?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
             ?: getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")
 
     private fun mimeOf(uri: Uri): String? =
@@ -211,11 +234,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * Throws CancellationException when the user cancels. A copy already in place is left as it is.
      */
     private suspend fun download(uri: Uri, task: LoadTask) = withContext(Dispatchers.IO) {
-        if (cloudCopies[uri]?.isFile == true) return@withContext
+        if (cached(uri) != null) return@withContext
         val drive = CloudDocs.isDrive(uri.toString())
         val total = reportedSize(uri)?.takeIf { it > 0 }
         val dir = java.io.File(getApplication<Application>().cacheDir, "cloud").apply { mkdirs() }
         val file = java.io.File(dir, Integer.toHexString(uri.toString().hashCode()))
+        val display = displayName(uri).ifBlank { "arquivo" }
         task.step(if (drive) tr("Aguardando o Google Drive…") else tr("Aguardando o arquivo…"))
         val job = coroutineContext[Job]!!
         try {
@@ -244,7 +268,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             file.delete()
             throw e
         }
-        cloudCopies[uri] = file
+        cloudCopies[uri] = CloudCopy(file, display, exported = false)
     }
 
     /** Dialogs showing [tasks] right now; the card over the plan hides while there is one. */
@@ -1215,7 +1239,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             }.getOrNull()
             when {
                 tp == null -> { fd.close(); null }
-                maxOf(tp.width, tp.height) <= TILED_FROM -> { tp.close(); null }
+                !RasterBudget.tileTiff(tp.width, tp.height) -> { tp.close(); null }
                 else -> tp
             }
         } ?: return false
@@ -1246,8 +1270,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Decodes a picture to at most [MAX_RASTER] pixels per side. TIFF goes through the app's own
-     * reader (Android has none); JPEG, PNG and WebP go through Coil.
+     * Decodes a picture at full resolution when it fits the memory budget. TIFF goes through the
+     * app's own reader (Android has none); JPEG, PNG and WebP go through Coil.
      */
     private fun decodeRaster(uri: Uri, task: LoadTask): ImageBitmap? = decodePicture(uri, task)?.image
 
@@ -1265,14 +1289,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
         val (width, height, mime) = CoilPictures.sizeOf { input(uri) } ?: return null
         task.step(tr("Decodificando imagem"))
-        val data: Any = cloudCopies[uri]?.takeIf { it.isFile } ?: uri
-        val bitmap = CoilPictures.decode(getApplication(), data, MAX_RASTER, BitmapDecode.configForMime(mime)) ?: return null
+        val data: Any = cached(uri) ?: uri
+        val bitmap = CoilPictures.decode(getApplication(), data, RasterBudget.maxSide(width, height), BitmapDecode.configForMime(mime)) ?: return null
         return Picture(bitmap.asImageBitmap(), null, width, height)
     }
 
     /**
-     * Lays a TIFF larger than [TILED_FROM] pixels over the surfaces as a [TiledPicture]; null when the
-     * picture is not such a TIFF. Its pyramid is built in the background the first time.
+     * Lays a large TIFF over the surfaces as a [TiledPicture]; null when the picture is small enough
+     * to decode whole, or is not a TIFF. Its pyramid is built in the background the first time.
      */
     private suspend fun tiledDrape(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>): Unit? {
         val app = getApplication<Application>()
@@ -1285,7 +1309,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val key = openCache.keyOf(uri, size) { input(uri) } ?: return@withContext null
             val fd = openLocal(uri) ?: return@withContext null
             val probe = runCatching { TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, null) }.getOrNull()
-            if (probe == null || maxOf(probe.width, probe.height) <= TILED_FROM) { probe?.close() ?: fd.close(); return@withContext null }
+            if (probe == null || !RasterBudget.tileTiff(probe.width, probe.height)) { probe?.close() ?: fd.close(); return@withContext null }
             val worldText = world?.let { (w, _) -> input(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) } }
             val placed = worldText?.let { WorldFile.extent(it, probe.width, probe.height) }
             val tiles = if (placed != null) {
@@ -1505,7 +1529,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun areaCloud(scene: com.appdwg.core.Sentinel2.Scene, area: Bounds): Double? {
         val href = scene.scl ?: return null
         val input = HttpRandomInput.open(href) ?: return null
-        val reader = com.appdwg.core.TiffReader(input)
+        val reader = remoteTiff(input)
         val layout = reader.blocks()
         val pixel = scene.pixel * scene.width / layout.width
         val zone = scene.epsg.takeLast(2).toInt()
@@ -1531,16 +1555,23 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun findScenes(south: Double, west: Double, north: Double, east: Double, maxCloud: Double): List<com.appdwg.core.Sentinel2.Scene> {
         val to = java.time.LocalDate.now(); val from = to.minusYears(1)
         val body = com.appdwg.core.Sentinel2.searchBody(south, west, north, east, from.toString(), to.toString(), maxCloud, 60)
-        val c = (java.net.URL(com.appdwg.core.Sentinel2.SEARCH).openConnection() as java.net.HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 20_000; readTimeout = 60_000
-            setRequestProperty("User-Agent", USER_AGENT); setRequestProperty("Content-Type", "application/json")
+        val request = Request.Builder()
+            .url(com.appdwg.core.Sentinel2.SEARCH)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        Net.client.newCall(request).execute().use { response ->
+            if (response.code != 200) throw java.io.IOException(tr("resposta {0} do servidor", response.code))
+            val text = response.body?.string() ?: throw java.io.IOException(tr("resposta {0} do servidor", response.code))
+            return com.appdwg.core.Sentinel2.scenes(text, south, west, north, east)
         }
-        try {
-            c.outputStream.use { it.write(body.toByteArray()) }
-            if (c.responseCode != 200) throw java.io.IOException(tr("resposta {0} do servidor", c.responseCode))
-            return com.appdwg.core.Sentinel2.scenes(c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }, south, west, north, east)
-        } finally { c.disconnect() }
     }
+
+    /** A remote TIFF whose JPEG tiles are decoded by Coil, never by a bitmap factory on the stream. */
+    private fun remoteTiff(input: RandomInput) = TiffReader(
+        input,
+        jpeg = { CoilPictures.raster(getApplication(), it, 1) },
+        jpegReduced = { bytes, reduce -> CoilPictures.raster(getApplication(), bytes, reduce) },
+    )
 
     /**
      * The chosen picture (or the newest one with few clouds) over [area]: the window of its file
@@ -1566,7 +1597,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val s2 = com.appdwg.core.CrsCatalog.byEpsg(scene.epsg) ?: com.appdwg.core.CrsCatalog.utm(com.appdwg.core.Datum.WGS84, zone, scene.epsg.startsWith("327"), scene.epsg)
         val crs = crs()
         val input = HttpRandomInput.open(scene.href, cancelled) ?: error(tr("imagem não encontrada no servidor"))
-        val reader = com.appdwg.core.TiffReader(input)
+        val reader = remoteTiff(input)
         val layout = reader.blocks()
         // The picture's pixels the area needs (with a margin), from its corners in the picture's UTM zone.
         val px = (0..8).flatMap { i -> (0..8).map { j -> area.minX + area.width * i / 8 to area.minY + area.height * j / 8 } }.map { (x, y) ->
@@ -1636,19 +1667,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         var wait = 2000L
         repeat(4) { attempt ->
             if (cancelled()) throw kotlinx.coroutines.CancellationException()
-            val c = (java.net.URL(com.appdwg.core.Overpass.ENDPOINT).openConnection() as java.net.HttpURLConnection).apply {
-                requestMethod = "POST"; doOutput = true; connectTimeout = 20_000; readTimeout = 120_000
-                setRequestProperty("User-Agent", USER_AGENT)
-                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-            }
-            try {
-                c.outputStream.use { it.write(("data=" + java.net.URLEncoder.encode(query, "UTF-8")).toByteArray()) }
-                when (c.responseCode) {
-                    200 -> return c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+            val payload = "data=" + java.net.URLEncoder.encode(query, "UTF-8")
+            val request = Request.Builder()
+                .url(com.appdwg.core.Overpass.ENDPOINT)
+                .post(payload.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                .build()
+            Net.client.newCall(request).execute().use { response ->
+                when (response.code) {
+                    200 -> return response.body?.string() ?: throw java.io.IOException(tr("resposta {0} do servidor", response.code))
                     429, 502, 503, 504 -> if (attempt < 3) { Thread.sleep(wait); wait *= 2 } else throw java.io.IOException(tr("servidor do OpenStreetMap ocupado; tente mais tarde"))
-                    else -> throw java.io.IOException(tr("resposta {0} do servidor", c.responseCode))
+                    else -> throw java.io.IOException(tr("resposta {0} do servidor", response.code))
                 }
-            } finally { c.disconnect() }
+            }
         }
         throw java.io.IOException(tr("servidor do OpenStreetMap ocupado; tente mais tarde"))
     }
@@ -1784,10 +1814,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             crsOnlineMessage = try {
                 val c = withContext(Dispatchers.IO) {
-                    fun get(url: String) = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).run {
-                        connectTimeout = 10_000; readTimeout = 10_000; setRequestProperty("User-Agent", "Gromatic")
-                        if (responseCode != 200) error("HTTP $responseCode")
-                        inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                    fun get(url: String) = Net.client.newCall(Request.Builder().url(url).header("User-Agent", "Gromatic").build()).execute().use { response ->
+                        if (response.code != 200) error("HTTP ${response.code}")
+                        response.body?.string() ?: error("HTTP ${response.code}")
                     }
                     val proj4 = get("https://epsg.io/$code.proj4")
                     val name = runCatching { Regex("\"([^\"]+)\"").find(get("https://epsg.io/$code.wkt"))?.groupValues?.get(1) }.getOrNull() ?: "EPSG $code"
@@ -2257,13 +2286,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Logo picture for the title block, decoded small (it is printed a few centimetres wide). */
     private fun readLogo(uri: Uri): android.graphics.Bitmap? {
         val cr = getApplication<Application>().contentResolver
-        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 800) sample *= 2
-        return cr.openInputStream(uri)?.use {
-            BitmapDecode.decodeStream(it, BitmapDecode.configForMime(bounds.outMimeType), sample)
-        }
+        val info = ImageHeader.parse { cr.openInputStream(uri) } ?: return null
+        return CoilPictures.decode(getApplication(), uri, 800, BitmapDecode.configForMime(info.mime))
     }
 
     fun setSheetLogo(uri: Uri?) {
@@ -2932,6 +2956,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         projectMessage = null
     }
 
+    fun report(message: String) {
+        projectMessage = message
+    }
+
     private fun currentDoc(): ProjectDoc? {
         val main = sourceUri ?: return null
         val v = view ?: return null
@@ -3227,7 +3255,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The cached copy, a file URI, or the provider stream: a zip with a root manifest.json. */
     private fun gmtZip(uri: Uri): Boolean {
-        cloudCopies[uri]?.takeIf { it.isFile }?.let { return GmtArchive.isProjectZip(it) }
+        cached(uri)?.let { return GmtArchive.isProjectZip(it) }
         if (uri.scheme == "file") {
             val path = uri.path ?: return false
             return GmtArchive.isProjectZip(java.io.File(path))
@@ -3523,13 +3551,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
-                val raster = TiffReader(input, jpeg = { bytes ->
-                    BitmapDecode.decodeBytes(bytes, Bitmap.Config.RGB_565)?.let { b ->
-                        val px = IntArray(b.width * b.height)
-                        b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
-                        Raster(b.width, b.height, px).also { b.recycle() }
-                    }
-                }).read(MAX_RASTER) { task.step(tr("Decodificando TIFF"), it) }
+                val reader = TiffReader(
+                    input,
+                    jpeg = { CoilPictures.raster(getApplication(), it, 1) },
+                    jpegReduced = { bytes, reduce -> CoilPictures.raster(getApplication(), bytes, reduce) },
+                )
+                val layout = reader.blocks()
+                val raster = reader.read(RasterBudget.maxSide(layout.width, layout.height)) { task.step(tr("Decodificando TIFF"), it) }
                 val bitmap = Bitmap.createBitmap(raster.pixels, raster.width, raster.height, Bitmap.Config.ARGB_8888)
                 Picture(bitmap.asImageBitmap(), raster.extent, raster.sourceWidth, raster.sourceHeight)
             }
@@ -3546,7 +3574,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         return total
     }
 
-    private fun fileSize(uri: Uri): Long = cloudCopies[uri]?.takeIf { it.exists() }?.length() ?:
+    private fun fileSize(uri: Uri): Long = cached(uri)?.length() ?:
         runCatching { getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } }
             .getOrNull() ?: -1L
 

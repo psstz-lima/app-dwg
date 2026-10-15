@@ -2,7 +2,6 @@ package com.appdwg.app
 
 import com.appdwg.core.tr
 
-import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -38,11 +37,8 @@ import java.io.File
 /** Small copy of a note's photo for the screen. */
 fun thumbnail(file: File, maxSide: Int = 800): ImageBitmap? {
     if (!file.exists()) return null
-    val b = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeFile(file.path, b)
-    var s = 1
-    while (maxOf(b.outWidth, b.outHeight) / s > maxSide) s *= 2
-    return BitmapDecode.decodeFile(file.path, BitmapDecode.configForMime(b.outMimeType), s)?.asImageBitmap()
+    val mime = file.inputStream().use { ImageHeader.parse(it) }?.mime
+    return CoilPictures.decodeInstalled(file, maxSide, BitmapDecode.configForMime(mime))?.asImageBitmap()
 }
 
 /** Creates or edits a field note: text, elevation and a photo from the camera or the gallery. */

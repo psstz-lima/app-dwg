@@ -323,6 +323,7 @@ class LanguageStore(private val context: Context) {
 class GromaticApp : android.app.Application() {
     override fun onCreate() {
         super.onCreate()
+        CoilPictures.install(this)
         LanguageStore(this).applyStored()
     }
 }

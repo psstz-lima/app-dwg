@@ -483,6 +483,7 @@ fun MenuTitle(text: String) {
 fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbout: () -> Unit, onDismiss: () -> Unit,
                      units: UnitChoice = UnitChoice.AUTO, onUnits: (UnitChoice) -> Unit = {},
                      language: LanguageChoice = LanguageChoice.AUTO, onLanguage: (LanguageChoice) -> Unit = {},
+                     languageReady: Map<LanguageChoice, Boolean> = LanguageChoice.entries.associateWith { true },
                      /** Opens the open project's coordinate system; null without a project. */
                      crsName: String? = null, onCrs: (() -> Unit)? = null,
                      /** Gromatic Pro: whether it is on, and the screen that explains and sells it. */
@@ -510,15 +511,21 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                     androidx.compose.material3.HorizontalDivider()
                 }
                 Text(tr("Idioma"), fontWeight = FontWeight.Bold)
+                val languageMissing = languageReady.any { !it.value }
                 for (l in LanguageChoice.entries) {
+                    val ready = languageReady[l] != false
                     Row(
-                        Modifier.fillMaxWidth().selectable(l == language, role = Role.RadioButton) { onLanguage(l) }.padding(vertical = 2.dp),
+                        Modifier.fillMaxWidth().selectable(ready && l == language, enabled = ready, role = Role.RadioButton) { if (ready) onLanguage(l) }.padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        RadioButton(l == language, onClick = null)
-                        Text(l.label, fontWeight = FontWeight.Bold)
+                        RadioButton(l == language, onClick = null, enabled = ready)
+                        Text(l.label, fontWeight = FontWeight.Bold, color = if (ready) androidx.compose.ui.graphics.Color.Unspecified else LocalG.current.muted)
                     }
                 }
+                if (languageMissing) Text(
+                    tr("Este idioma não está instalado neste aparelho. Atualize o Gromatic pela Play Store."),
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                )
                 Text(tr("Muda o formato dos números (1.234,56 ou 1,234.56) e, no Automático, as unidades."),
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
                 androidx.compose.material3.HorizontalDivider()

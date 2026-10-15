@@ -56,6 +56,8 @@ class ViewState(project: LandXmlProject) {
     var exaggeration by mutableStateOf(1)
     /** Detail of the picture over the surfaces in 3D: 0 normal, 1 high, 2 highest. */
     var drapeQuality by mutableStateOf(0)
+    /** Camera-to-project pairs for the augmented view. */
+    var arControls by mutableStateOf<List<com.appdwg.core.ArControl>>(emptyList())
     // Site calibration of the GNSS position to the local grid.
     var calibrationPairs by mutableStateOf<List<com.appdwg.core.CalibrationPair>>(emptyList())
     var calibrationOn by mutableStateOf(false)
@@ -342,6 +344,11 @@ class ProjectDoc(
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
             put("drapeQuality", v.drapeQuality)
+            put("arControls", JSONArray(v.arControls.map { c ->
+                JSONObject()
+                    .put("c", JSONArray().put(c.camera.x).put(c.camera.y).put(c.camera.z))
+                    .put("p", JSONArray().put(c.project.x).put(c.project.y).put(c.project.z))
+            }))
             put("calibration", JSONArray(v.calibrationPairs.map { c ->
                 JSONObject().put("name", c.name).put("h", c.useHorizontal).put("v", c.useVertical)
                     .put("m", JSONArray().put(c.measured.x).put(c.measured.y).put(if (c.measured.z.isNaN()) JSONObject.NULL else c.measured.z))
@@ -401,6 +408,14 @@ class ProjectDoc(
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
             v.drapeQuality = o.optInt("drapeQuality", 0).coerceIn(0, 2)
+            o.optJSONArray("arControls")?.let { a ->
+                fun p3(j: JSONArray) = com.appdwg.core.Point3(j.getDouble(0), j.getDouble(1), j.optDouble(2))
+                v.arControls = List(a.length()) { a.getJSONObject(it) }.mapNotNull { c ->
+                    val cam = c.optJSONArray("c") ?: return@mapNotNull null
+                    val proj = c.optJSONArray("p") ?: return@mapNotNull null
+                    com.appdwg.core.ArControl(p3(cam), p3(proj))
+                }
+            }
             o.optJSONArray("calibration")?.let { a ->
                 fun p3(j: JSONArray) = com.appdwg.core.Point3(j.getDouble(0), j.getDouble(1), j.optDouble(2))
                 v.calibrationPairs = List(a.length()) { a.getJSONObject(it) }.map { c ->
