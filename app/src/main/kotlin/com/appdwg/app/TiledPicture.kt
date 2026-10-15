@@ -110,6 +110,8 @@ class TiledPicture private constructor(
     private val loading = HashSet<String>()
     /** JPEG pictures have no transparency: their tiles take half the memory as RGB 565. */
     private val config = if (layout.opaque) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+    val hasAlpha: Boolean get() = !layout.opaque
+    val bytesPerPixel: Int get() = if (hasAlpha) 4 else 2
     private val done = File(dir, "done")
     // The file is read by one tile at a time: a channel serves positional reads from many threads.
 
@@ -373,6 +375,50 @@ class TiledPicture private constructor(
             oy += (row - GlTexture.OVERLAP).coerceAtLeast(1)
         }
         return true
+    }
+
+    /**
+     * One window of the file, [fileW] × [fileH] pixels from ([fileX], [fileY]), reduced by 2^[level].
+     * Safe to call off the GL thread. Null when the window is empty or the bitmap cannot be allocated.
+     */
+    fun decodeWindow(fileX: Int, fileY: Int, fileW: Int, fileH: Int, level: Int): Bitmap? {
+        if (fileW <= 0 || fileH <= 0 || fileX >= width || fileY >= height) return null
+        val k = level.coerceIn(0, 30)
+        val f = 1 shl k
+        val x0 = fileX.coerceIn(0, width)
+        val y0 = fileY.coerceIn(0, height)
+        val x1 = (fileX + fileW).coerceIn(0, width)
+        val y1 = (fileY + fileH).coerceIn(0, height)
+        if (x1 <= x0 || y1 <= y0) return null
+        val outW = (x1 - x0 + f - 1) / f
+        val outH = (y1 - y0 + f - 1) / f
+        val bmp = try {
+            createBitmap(outW, outH, config)
+        } catch (_: OutOfMemoryError) {
+            return null
+        }
+        return try {
+            val canvas = Canvas(bmp)
+            val span = TILE * f
+            val tx0 = x0 / span
+            val tx1 = (x1 - 1) / span
+            val ty0 = y0 / span
+            val ty1 = (y1 - 1) / span
+            for (ty in ty0..ty1) for (tx in tx0..tx1) {
+                val t = runCatching { direct(k, tx, ty) }.getOrNull() ?: continue
+                try {
+                    val destX = (tx.toLong() * span - x0).toFloat() / f
+                    val destY = (ty.toLong() * span - y0).toFloat() / f
+                    canvas.drawBitmap(t, destX, destY, null)
+                } finally {
+                    if (!t.isRecycled) t.recycle()
+                }
+            }
+            bmp
+        } catch (_: OutOfMemoryError) {
+            if (!bmp.isRecycled) bmp.recycle()
+            null
+        }
     }
 
     fun close() {

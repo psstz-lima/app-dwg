@@ -4,14 +4,14 @@
 
 Versão 0.1.6
 
-• Máxima mostra cada pixel do arquivo, na planta e no 3D. Alta mostra a metade e Normal um quarto.
-• No 3D a imagem entra em blocos na resolução escolhida e continua nítida com o terreno inclinado.
+• Máxima mostra cada pixel do arquivo na planta e, no 3D, perto da câmera. Alta mostra a metade e Normal um quarto.
+• No 3D o que está longe fica mais leve, dentro da memória do aparelho, e os blocos entram aos poucos.
 • A planta volta a reduzir os blocos JPEG de verdade.
 
 ## en-US
 
 Version 0.1.6
 
-• Highest shows every pixel of the file, in plan and in 3D. High shows half and Normal a quarter.
-• In 3D the picture is uploaded in tiles at that resolution and stays sharp on a tilted surface.
+• Highest shows every pixel of the file in plan and, in 3D, near the camera. High shows half and Normal a quarter.
+• Farther away in 3D the picture stays lighter, inside the device memory, and the tiles stream in.
 • The plan reduces JPEG blocks properly again.
