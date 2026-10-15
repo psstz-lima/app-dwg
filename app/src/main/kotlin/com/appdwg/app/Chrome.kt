@@ -197,7 +197,14 @@ private fun Modifier.drawBehindLine(c: Color, w: Dp, top: Boolean) = drawBehind 
 }
 
 /** One tool of the rail: icon over its name; [active] while the tool is on; [locked] needs Gromatic Pro. */
-data class RailTool(val icon: GIcon, val label: String, val active: Boolean = false, val locked: Boolean = false, val onClick: () -> Unit)
+data class RailTool(
+    val icon: GIcon,
+    val label: String,
+    val active: Boolean = false,
+    val locked: Boolean = false,
+    val feature: ProFeature? = null,
+    val onClick: () -> Unit,
+)
 
 /** Tool bar along the bottom on phones: the rail's buttons in a scrolling row. */
 @Composable

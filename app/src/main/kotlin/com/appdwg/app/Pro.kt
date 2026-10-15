@@ -3,6 +3,8 @@ package com.appdwg.app
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.edit
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +31,9 @@ class ProPlan(val productId: String, val title: String, val price: String, val p
 
 /**
  * Gromatic Pro: subscriptions through Google Play Billing. The state is kept on the device and
- * trusted offline for [OFFLINE_DAYS] after the last check with Play; it is checked again whenever
- * the app opens with Play reachable. Debug builds can simulate Free or Pro.
+ * trusted offline for [OFFLINE_DAYS] after the last check with Play. It is checked again when the
+ * app starts, whenever it resumes, and immediately when a purchase comes back from Play (an empty
+ * purchase update re-queries instead of being ignored). Debug builds can simulate Free or Pro.
  */
 class ProStore(private val context: Context) {
     companion object {
@@ -79,33 +82,96 @@ class ProStore(private val context: Context) {
         }
     }
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val session = EntitlementSession()
+    private val gate = Any()
+    private val waiters = ArrayDeque<() -> Unit>()
+    private var connecting = false
+
+    /** Billing callbacks arrive off the main thread; Compose only sees state written on it. */
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+    }
+
     private val client: BillingClient = BillingClient.newBuilder(context)
-        .setListener { result, purchases -> if (result.responseCode == BillingClient.BillingResponseCode.OK) handle(purchases.orEmpty(), fromQuery = false)
-            else if (result.responseCode != BillingClient.BillingResponseCode.USER_CANCELED) message = context.getString(R.string.pro_error, result.debugMessage) }
+        .setListener { result, purchases ->
+            onMain {
+                when (result.responseCode) {
+                    BillingClient.BillingResponseCode.OK ->
+                        // Play sends null when the update has to be read with queryPurchases.
+                        if (purchases.isNullOrEmpty()) refresh() else handle(purchases, fromQuery = false, gen = session.generation)
+                    BillingClient.BillingResponseCode.USER_CANCELED -> Unit
+                    else -> message = context.getString(R.string.pro_error, result.debugMessage)
+                }
+            }
+        }
         .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().enablePrepaidPlans().build())
         .enableAutoServiceReconnection()
         .build()
 
+    /**
+     * One connection at a time. A second [BillingClient.startConnection] while the first is still
+     * connecting is rejected by Play and would drop that caller's query.
+     */
     private fun connected(then: () -> Unit) {
-        if (client.isReady) { then(); return }
-        client.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(r: BillingResult) {
-                if (r.responseCode == BillingClient.BillingResponseCode.OK) then()
-                else { message = context.getString(R.string.pro_unavailable, r.debugMessage.ifBlank { r.responseCode.toString() }); busy = false }
+        val action = synchronized(gate) {
+            if (client.isReady) 1
+            else {
+                waiters.add(then)
+                if (connecting) 0 else { connecting = true; 2 }
             }
-            override fun onBillingServiceDisconnected() {}
-        })
+        }
+        when (action) {
+            1 -> then()
+            2 -> client.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(r: BillingResult) {
+                    if (r.responseCode == BillingClient.BillingResponseCode.OK) {
+                        val jobs = synchronized(gate) { connecting = false; waiters.toList().also { waiters.clear() } }
+                        if (jobs.isEmpty()) refresh() else jobs.forEach { it() }
+                    } else {
+                        val already = r.debugMessage.contains("already in the process of connecting")
+                        synchronized(gate) { connecting = false }
+                        if (already) mainHandler.postDelayed({ drainOrRetry() }, 300) else failSetup(r)
+                    }
+                }
+                override fun onBillingServiceDisconnected() { synchronized(gate) { connecting = false } }
+            })
+        }
     }
 
-    /** Checks the subscription with Play (at start and on "Restaurar compra"). */
+    private fun drainOrRetry() {
+        if (client.isReady) {
+            val jobs = synchronized(gate) { waiters.toList().also { waiters.clear() } }
+            if (jobs.isEmpty()) refresh() else jobs.forEach { it() }
+        } else {
+            val pending = synchronized(gate) { waiters.toList().also { waiters.clear() } }
+            pending.forEach { connected(it) }
+        }
+    }
+
+    private fun failSetup(r: BillingResult) {
+        synchronized(gate) { waiters.clear() }
+        onMain {
+            message = context.getString(R.string.pro_unavailable, r.debugMessage.ifBlank { r.responseCode.toString() })
+            busy = false
+        }
+    }
+
+    /**
+     * Checks the subscription with Play: at start, on resume, right after a purchase update, and
+     * on "Restaurar compra". A failed check leaves the cached license in place.
+     */
     fun refresh(userAsked: Boolean = false) {
-        if (userAsked) { busy = true; message = null }
+        val gen = session.nextQuery()
+        if (userAsked) onMain { busy = true; message = null }
         connected {
             client.queryPurchasesAsync(QueryPurchasesParams.newBuilder().setProductType(BillingClient.ProductType.SUBS).build()) { r, list ->
-                busy = false
-                if (r.responseCode == BillingClient.BillingResponseCode.OK) {
-                    handle(list, fromQuery = true)
-                    if (userAsked) message = context.getString(if (isPro) R.string.pro_restored else R.string.pro_none_found)
+                onMain {
+                    busy = false
+                    if (r.responseCode == BillingClient.BillingResponseCode.OK) {
+                        handle(list, fromQuery = true, gen = gen)
+                        if (userAsked) message = context.getString(if (isPro) R.string.pro_restored else R.string.pro_none_found)
+                    }
                 }
             }
         }
@@ -118,9 +184,13 @@ class ProStore(private val context: Context) {
                 QueryProductDetailsParams.Product.newBuilder().setProductId(it).setProductType(BillingClient.ProductType.SUBS).build()
             }
             client.queryProductDetailsAsync(QueryProductDetailsParams.newBuilder().setProductList(products).build()) { r, result ->
-                if (r.responseCode != BillingClient.BillingResponseCode.OK) { message = context.getString(R.string.pro_unavailable, r.debugMessage); return@queryProductDetailsAsync }
-                plans = result.productDetailsList.mapNotNull { d -> plan(d) }.sortedBy { if (it.productId == MONTHLY) 0 else 1 }
-                if (plans.isEmpty()) message = context.getString(R.string.pro_no_plans)
+                onMain {
+                    if (r.responseCode != BillingClient.BillingResponseCode.OK) {
+                        message = context.getString(R.string.pro_unavailable, r.debugMessage); return@onMain
+                    }
+                    plans = result.productDetailsList.mapNotNull { d -> plan(d) }.sortedBy { if (it.productId == MONTHLY) 0 else 1 }
+                    if (plans.isEmpty()) message = context.getString(R.string.pro_no_plans)
+                }
             }
         }
     }
@@ -142,23 +212,32 @@ class ProStore(private val context: Context) {
 
     fun buy(activity: Activity, plan: ProPlan) {
         connected {
-            val params = BillingFlowParams.newBuilder().setProductDetailsParamsList(listOf(
-                BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(plan.details).setOfferToken(plan.offerToken).build(),
-            )).build()
-            val r = client.launchBillingFlow(activity, params)
-            if (r.responseCode != BillingClient.BillingResponseCode.OK) message = context.getString(R.string.pro_error, r.debugMessage)
+            onMain {
+                val params = BillingFlowParams.newBuilder().setProductDetailsParamsList(listOf(
+                    BillingFlowParams.ProductDetailsParams.newBuilder().setProductDetails(plan.details).setOfferToken(plan.offerToken).build(),
+                )).build()
+                val r = client.launchBillingFlow(activity, params)
+                if (r.responseCode != BillingClient.BillingResponseCode.OK) message = context.getString(R.string.pro_error, r.debugMessage)
+            }
         }
     }
 
-    private fun handle(purchases: List<Purchase>, fromQuery: Boolean) {
-        val ours = purchases.filter { p -> p.products.any { it == MONTHLY || it == YEARLY } }
-        val active = ours.any { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-        // A purchase not acknowledged in 3 days is refunded by Play.
-        for (p in ours) if (p.purchaseState == Purchase.PurchaseState.PURCHASED && !p.isAcknowledged) {
+    private fun handle(purchases: List<Purchase>, fromQuery: Boolean, gen: Int) {
+        val subs = purchases.map { ProEntitlement.from(it) }
+        val active = ProEntitlement.active(subs)
+        for (p in purchases) if (ProEntitlement.needsAcknowledge(ProEntitlement.from(p))) {
             client.acknowledgePurchase(AcknowledgePurchaseParams.newBuilder().setPurchaseToken(p.purchaseToken).build()) { }
         }
-        if (fromQuery || active) store(active)
-        if (!fromQuery && active) message = context.getString(R.string.pro_thanks)
-        if (ours.any { it.purchaseState == Purchase.PurchaseState.PENDING }) message = context.getString(R.string.pro_pending)
+        if (!fromQuery && active) {
+            // Drop a query that started before this purchase and might still return empty.
+            session.notePurchase()
+            store(true)
+            message = context.getString(R.string.pro_thanks)
+        } else if (fromQuery && session.acceptQuery(gen)) {
+            store(active)
+        }
+        if (subs.any { it.state == Purchase.PurchaseState.PENDING && it.productIds.any { id -> id == MONTHLY || id == YEARLY } }) {
+            message = context.getString(R.string.pro_pending)
+        }
     }
 }

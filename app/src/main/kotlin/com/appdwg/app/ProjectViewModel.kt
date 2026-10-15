@@ -3086,7 +3086,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             // The free version opens small files only (the cloud reports the size before downloading).
             if (CloudDocs.isDrive(uri.toString())) {
                 val known = reportedSize(uri)
-                if (!pro.isPro && known != null && known > FreeLimits.MAX_FILE_BYTES) {
+                if (!ProAccess.allows(ProFeature.OPEN_LARGE_FILE, pro.isPro) && known != null && known > FreeLimits.MAX_FILE_BYTES) {
                     state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
                         StationFormat.decimal(known / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString()))
                     proRequested = true
@@ -3107,7 +3107,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             val size = withContext(Dispatchers.IO) { fileSize(uri) }
-            if (!pro.isPro && size > FreeLimits.MAX_FILE_BYTES) {
+            if (!ProAccess.allows(ProFeature.OPEN_LARGE_FILE, pro.isPro) && size > FreeLimits.MAX_FILE_BYTES) {
                 state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
                     StationFormat.decimal(size / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString()))
                 proRequested = true

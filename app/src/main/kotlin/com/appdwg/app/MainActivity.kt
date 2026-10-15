@@ -122,6 +122,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // The language may have been changed in Android's per-app settings meanwhile.
         viewModel.languages.refresh()
+        // A purchase finished in the Play sheet, or a license-tester subscription, is visible on return.
+        viewModel.pro.refresh()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -167,7 +169,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
     fun projectName() = ((state as? ProjectState.Loaded)?.fileName ?: "projeto").substringBefore(".xml.aecc.pnt").substringBeforeLast('.') + ".gmt"
     fun save(then: () -> Unit = {}) {
-        if (!viewModel.pro.isPro) { viewModel.proRequested = true; return }
+        if (!ProAccess.allows(ProFeature.SAVE, viewModel.pro.isPro)) { viewModel.proRequested = true; return }
         val target = viewModel.projectUri
         if (target != null) viewModel.saveProject(target, then) else { afterSave = then; saver.launch(projectName()) }
     }
@@ -176,7 +178,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
     val openFile = { guarded { picker.launch(arrayOf("*/*")) } }
     val openFromDrive = { guarded { inDrive.set(true); picker.launch(arrayOf("*/*")) } }
-    fun saveAs(drive: Boolean) { if (!viewModel.pro.isPro) { viewModel.proRequested = true; return }; afterSave = null; inDrive.set(drive); saver.launch(projectName()) }
+    fun saveAs(drive: Boolean) { if (!ProAccess.allows(ProFeature.SAVE_AS, viewModel.pro.isPro)) { viewModel.proRequested = true; return }; afterSave = null; inDrive.set(drive); saver.launch(projectName()) }
     val activity = androidx.activity.compose.LocalActivity.current
     androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) {
         if (viewModel.fullScreen) viewModel.fullScreen = false else guarded { activity?.finish() }
@@ -256,7 +258,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
             units = viewModel.units.choice, onUnits = { viewModel.units.choose(it) },
             language = viewModel.languages.choice, onLanguage = { viewModel.languages.choose(it) },
             crsName = if (state is ProjectState.Loaded) viewModel.crs().name else null,
-            onCrs = if (state is ProjectState.Loaded) ({ showAppearance = false; if (viewModel.pro.isPro) viewModel.crsDialogRequested = true else viewModel.proRequested = true }) else null,
+            onCrs = if (state is ProjectState.Loaded) ({ showAppearance = false; if (ProAccess.allows(ProFeature.CRS, viewModel.pro.isPro)) viewModel.crsDialogRequested = true else viewModel.proRequested = true }) else null,
             pro = viewModel.pro.isPro, onPro = { showAppearance = false; viewModel.proRequested = true })
         if (viewModel.proRequested) ProDialog(viewModel.pro, onDismiss = { viewModel.proRequested = false })
         if (showRecent) {
@@ -302,7 +304,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
             }
             when (state) {
                 ProjectState.Empty -> EmptyState(openFile, if (hasDrive) openFromDrive else null,
-                    onNewProject = { if (viewModel.pro.isPro) showNewProject = true else viewModel.proRequested = true })
+                    onNewProject = { if (ProAccess.allows(ProFeature.NEW_PROJECT, viewModel.pro.isPro)) showNewProject = true else viewModel.proRequested = true })
                 is ProjectState.Loading -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     LoadProgress(state.task)
                 }
@@ -763,46 +765,49 @@ private fun ProjectScreen(
     val surfaceEditLabel = androidx.compose.ui.res.stringResource(R.string.se_tool)
     val bulletinLabel = androidx.compose.ui.res.stringResource(R.string.bm_tool)
     val isPro = vm.pro.isPro
+    fun proOpen(feature: ProFeature) = ProAccess.allows(feature, isPro)
     fun allTools(): List<RailTool> = buildList {
-        if (!show3d) add(RailTool(GIcon.MEASURE, tr("Medir"), measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
-        add(RailTool(GIcon.POINTS, tr("Pontos"), addingPoints) { showPoints = true })
-        add(RailTool(GIcon.LINES, tr("Linhas"), editing) {
+        if (!show3d) add(RailTool(GIcon.MEASURE, tr("Medir"), measuring, feature = ProFeature.MEASURE) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
+        add(RailTool(GIcon.POINTS, tr("Pontos"), addingPoints, feature = ProFeature.POINTS) { showPoints = true })
+        add(RailTool(GIcon.LINES, tr("Linhas"), editing, feature = ProFeature.LINES) {
             editing = !editing; measuring = false; showSection = false; showProfile = false; show3d = false
             // Without lines to pick, the editor starts drawing a new one.
             edit.pick = if (project.polylines.isEmpty()) EditPick.DRAW else EditPick.SELECT; edit.picked = emptyList()
         })
-        if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) add(RailTool(GIcon.LAYERS, tr("Camadas")) { showLayers = true })
+        if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) add(RailTool(GIcon.LAYERS, tr("Camadas"), feature = ProFeature.LAYERS) { showLayers = true })
         if (project.surfaces.isNotEmpty()) {
-            add(RailTool(GIcon.CONTOURS, tr("Curvas"), showContours) { showContourDialog = true })
-            add(RailTool(GIcon.IMAGE, tr("Imagem"), vm.drape != null && vm.drapeVisible) { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true })
+            add(RailTool(GIcon.CONTOURS, tr("Curvas"), showContours, feature = ProFeature.CONTOURS) { showContourDialog = true })
+            add(RailTool(GIcon.IMAGE, tr("Imagem"), vm.drape != null && vm.drapeVisible, feature = ProFeature.IMAGE) { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true })
         }
-        add(RailTool(GIcon.COMPARE, tr("Comparar"), differenceOverlay != null) { showCompare = true })
+        add(RailTool(GIcon.COMPARE, tr("Comparar"), differenceOverlay != null, feature = ProFeature.COMPARE) { showCompare = true })
         if (project.surfaces.isNotEmpty()) {
-            add(RailTool(GIcon.PLATFORM, tr("Plataforma"), drawingPlatform || vm.platform != null) { showPlatform = true })
-            add(RailTool(GIcon.ROAD, tr("Estrada"), drawingRoad || v.roadBuilt) { showRoad = true })
+            add(RailTool(GIcon.PLATFORM, tr("Plataforma"), drawingPlatform || vm.platform != null, feature = ProFeature.PLATFORM) { showPlatform = true })
+            add(RailTool(GIcon.ROAD, tr("Estrada"), drawingRoad || v.roadBuilt, feature = ProFeature.ROAD) { showRoad = true })
         }
-        if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel) { showSurfaceEdit = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
-        if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões")) { showAdvice = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet) { showBasin = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
-        add(RailTool(GIcon.MODELS, tr("Modelos")) { showModels = true })
-        add(RailTool(GIcon.NOTE, tr("Anotar"), addingNote) { addingNote = true; measuring = false; show3d = false })
-        add(RailTool(GIcon.GPS, "GPS", vm.gnss.connected) { showGps = true })
-        add(RailTool(GIcon.CALIBRATE, calibLabel, v.calibrationOn) { showCalibration = true })
-        add(RailTool(GIcon.CALC, tr("Cálculos")) { showCalc = true })
-        add(RailTool(GIcon.MAP, tr("Mapa"), vm.basemap.enabled) { showBasemap = true })
-        add(RailTool(GIcon.DOWNLOAD, tr("Baixar dados")) { showArea = true })
-        add(RailTool(GIcon.GOTO, tr("Ir para")) { showGoTo = true })
-        add(RailTool(GIcon.EXPORT, tr("Exportar")) { showExport = true })
-        if (vm.hasReferences) add(RailTool(GIcon.REFS, tr("Referências")) { showReferences = true })
-        if (project.warnings.isNotEmpty()) add(RailTool(GIcon.WARNING, tr("Avisos")) { showWarnings = true })
+        if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel, feature = ProFeature.BULLETIN) { showBulletin = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel, feature = ProFeature.SURFACE_EDIT) { showSurfaceEdit = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0, feature = ProFeature.ANALYSIS) { showAnalysis = true })
+        if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões"), feature = ProFeature.ADVICE) { showAdvice = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet, feature = ProFeature.BASIN) { showBasin = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null, feature = ProFeature.VOLUME) { showVolume = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null, feature = ProFeature.AS_BUILT) { showAsBuilt = true })
+        add(RailTool(GIcon.MODELS, tr("Modelos"), feature = ProFeature.MODELS) { showModels = true })
+        add(RailTool(GIcon.NOTE, tr("Anotar"), addingNote, feature = ProFeature.NOTES) { addingNote = true; measuring = false; show3d = false })
+        add(RailTool(GIcon.GPS, "GPS", vm.gnss.connected, feature = ProFeature.GPS) { showGps = true })
+        add(RailTool(GIcon.CALIBRATE, calibLabel, v.calibrationOn, feature = ProFeature.CALIBRATE) { showCalibration = true })
+        add(RailTool(GIcon.CALC, tr("Cálculos"), feature = ProFeature.CALC) { showCalc = true })
+        add(RailTool(GIcon.MAP, tr("Mapa"), vm.basemap.enabled, feature = ProFeature.MAP) { showBasemap = true })
+        add(RailTool(GIcon.DOWNLOAD, tr("Baixar dados"), feature = ProFeature.DOWNLOAD) { showArea = true })
+        add(RailTool(GIcon.GOTO, tr("Ir para"), feature = ProFeature.GOTO) { showGoTo = true })
+        add(RailTool(GIcon.EXPORT, tr("Exportar"), feature = ProFeature.EXPORT) { showExport = true })
+        if (vm.hasReferences) add(RailTool(GIcon.REFS, tr("Referências"), feature = ProFeature.REFS) { showReferences = true })
+        if (project.warnings.isNotEmpty()) add(RailTool(GIcon.WARNING, tr("Avisos"), feature = ProFeature.WARNINGS) { showWarnings = true })
     }
     // The free version shows every tool with a padlock; touching one opens the Gromatic Pro screen.
-    fun railTools(): List<RailTool> = allTools().let { all ->
-        if (isPro) all else all.map { it.copy(active = false, locked = true, onClick = { vm.proRequested = true }) }
+    // Pro leaves each tool on its own action: nothing on the rail stays locked.
+    fun railTools(): List<RailTool> = allTools().map { tool ->
+        val feature = tool.feature ?: return@map tool
+        if (proOpen(feature)) tool else tool.copy(active = false, locked = true, onClick = { vm.proRequested = true })
     }
     val current = info
     @Composable
@@ -825,7 +830,7 @@ private fun ProjectScreen(
                 // At the side, so the points being measured stay visible on a tablet.
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).widthIn(max = 380.dp).fillMaxWidth(),
             )
-        } else if (!isPro) {
+        } else if (!proOpen(ProFeature.TAP_INFO)) {
             FreeHint(Modifier.align(Alignment.BottomCenter).padding(12.dp)) { vm.proRequested = true }
         } else if (current == null) {
             Text(
@@ -845,8 +850,9 @@ private fun ProjectScreen(
                 }
             }
             // The properties card folds into a small button, so the plan stays clear on a phone.
-            if (vm.themes.panelOpen) Column(Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth()) {
-                OutlinedButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
+            // A folded tablet panel still shows the card: the tap has to reveal the location.
+            if (ProAccess.tapInfoCardOnPlan(isPro, wide, vm.themes.panelOpen, vm.fullScreen)) Column(Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth()) {
+                if (vm.themes.panelOpen) OutlinedButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
                 InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
             } else GButton(tr("Propriedades") + " ▴", { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
@@ -938,7 +944,7 @@ private fun ProjectScreen(
                             showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
                             showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
                             // Free version: the plan is for viewing only.
-                            !isPro -> {}
+                            !proOpen(ProFeature.TAP_INFO) -> {}
                             else -> {
                                 tapped = it; selectedPoint = null
                                 modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
@@ -966,7 +972,7 @@ private fun ProjectScreen(
                     gpsAccuracy = gnssFix?.sigmaH ?: gnssFix?.hdop?.let { it * 3 },
                     gpsColor = fixColor(gnssFix?.quality),
                     notes = vm.notes,
-                    onNoteTap = if (measuring || addingPoints || editing || !isPro) null else { n -> openNote = n; tapped = null; selectedPoint = null },
+                    onNoteTap = if (measuring || addingPoints || editing || !proOpen(ProFeature.NOTE_OPEN)) null else { n -> openNote = n; tapped = null; selectedPoint = null },
                     basemap = vm.basemap.takeIf { it.enabled && !crs.isGeographic && !crs.local },
                     basemapCrs = crs,
                     onLineSelected = { ref ->
@@ -1010,7 +1016,7 @@ private fun ProjectScreen(
                     arrows = if (vm.analysisMode >= 2) vm.flowArrows else emptyList(),
                     points = vm.userPoints,
                     pointCodes = vm.pointCodes,
-                    onPointTap = if (measuring || addingPoints || !isPro) null else { pt -> selectedPoint = pt; tapped = null },
+                    onPointTap = if (measuring || addingPoints || !proOpen(ProFeature.POINT_INFO)) null else { pt -> selectedPoint = pt; tapped = null },
                     selectedPoint = selectedPoint,
                     focus = focus,
                     focusKey = focusKey,
@@ -1032,8 +1038,15 @@ private fun ProjectScreen(
                         if (has3d) add("3D" to show3d)
                         if (project.alignments.isNotEmpty()) { add(tr("Seção") to (showSection && !show3d)); add(tr("Perfil") to (showProfile && !show3d)) }
                     }
-                    ViewSwitch(views, locked = { i -> !isPro && i > 0 }, onPick = { i ->
-                        if (!isPro && i > 0) { vm.proRequested = true; return@ViewSwitch }
+                    fun viewFeature(label: String): ProFeature? = when (label) {
+                        "3D" -> ProFeature.VIEW_3D
+                        tr("Seção") -> ProFeature.VIEW_SECTION
+                        tr("Perfil") -> ProFeature.VIEW_PROFILE
+                        else -> null
+                    }
+                    ViewSwitch(views, locked = { i -> viewFeature(views[i].first)?.let { !proOpen(it) } == true }, onPick = { i ->
+                        val feature = viewFeature(views[i].first)
+                        if (feature != null && !proOpen(feature)) { vm.proRequested = true; return@ViewSwitch }
                         when (views[i].first) {
                             tr("Planta") -> { show3d = false; showSection = false; showProfile = false }
                             "3D" -> { show3d = true; showSection = false; showProfile = false }
@@ -1213,7 +1226,7 @@ private fun ProjectScreen(
                         onClose = { showSection = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
                     )
-                } else if (!wide || full) {
+                } else if (!wide || full || !vm.themes.panelOpen) {
                     NarrowCards()
                 }
 
@@ -1256,12 +1269,13 @@ private fun ProjectScreen(
                     }
                 }
             }
-            if (current != null && !measuring && selectedPoint == null) {
+            if (current != null && !measuring && selectedPoint == null &&
+                ProAccess.tapInfoInSidePanel(isPro, wide, vm.themes.panelOpen, full)) {
                 InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
             }
             if (differenceOverlay != null && difference != null && !show3d) DifferenceLegend(difference, Modifier)
             if ((vm.analysisMode == 1 || vm.analysisMode == 3) && !show3d) SlopeLegend(vm, Modifier)
-            if (!isPro) FreeHint(Modifier.fillMaxWidth()) { vm.proRequested = true }
+            if (!proOpen(ProFeature.TAP_INFO)) FreeHint(Modifier.fillMaxWidth()) { vm.proRequested = true }
             else if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
                 Text(tr("Toque na planta para ver estaca, afastamento e cotas."), style = MaterialTheme.typography.bodyMedium, color = g.muted)
             }
@@ -1312,7 +1326,7 @@ private fun ProjectScreen(
                     })
                 }
             },
-            right = if (!isPro) buildList {
+            right = if (!listOf(ProFeature.FILES, ProFeature.SURFACES, ProFeature.POINT_LABELS).all { proOpen(it) }) buildList {
                 add(FooterItem(StationFormat.lengthUnit) { close ->
                     MenuTitle(tr("Unidades"))
                     for (u in UnitChoice.entries) MenuLine(u.label, checked = vm.units.choice == u) { close(); vm.units.choose(u) }
@@ -1551,9 +1565,12 @@ private fun ProjectScreen(
             onOther = { compareOther = it },
             onAddFile = { addFiles(false) },
             onAddDrive = if (hasDriveApp) ({ addFiles(true) }) else null,
-            onCross = { showCompare = false; showCross = true },
+            onCross = { showCompare = false; if (proOpen(ProFeature.CROSS_SECTION)) showCross = true else vm.proRequested = true },
             onAddState = { statePicker.launch(arrayOf("*/*")) },
-            onTimeline = { showCompare = false; vm.timelineShown = true; if (vm.activeState == null) vm.showState(0) },
+            onTimeline = {
+                showCompare = false
+                if (proOpen(ProFeature.TIMELINE)) { vm.timelineShown = true; if (vm.activeState == null) vm.showState(0) } else vm.proRequested = true
+            },
             onDismiss = { showCompare = false },
         )
     }
@@ -1695,7 +1712,7 @@ private fun ProjectScreen(
             },
             toDrive = if (hasDrive) exportToDrive else null,
             onToDrive = { exportToDrive = it },
-            onSheets = { showExport = false; showSheets = true },
+            onSheets = { showExport = false; if (proOpen(ProFeature.SHEETS)) showSheets = true else vm.proRequested = true },
             onDismiss = { showExport = false },
         )
     }

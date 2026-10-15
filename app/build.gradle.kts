@@ -86,4 +86,6 @@ dependencies {
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // Unit tests (Pro catalog and purchase JSON). 4.13.2 is the JUnit 4 line the Android test task runs.
+    testImplementation("junit:junit:4.13.2")
 }
