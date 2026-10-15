@@ -9,6 +9,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -16,8 +18,19 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
+import com.appdwg.core.CogoPoint
 import com.appdwg.core.LandXmlProject
+import com.appdwg.core.Point2
+import com.appdwg.core.Ray
+import com.appdwg.core.SnapTargets
+import com.appdwg.core.Surface
+import com.appdwg.core.TinMeasure
+import com.appdwg.core.ViewRay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -32,7 +45,8 @@ import kotlin.math.tan
 
 /**
  * 3D view of the surfaces and 3D lines, drawn with OpenGL ES 3. One finger orbits around the
- * target, two fingers pan, pinch zooms.
+ * target, two fingers pan, pinch zooms. A short tap, while a measure or area tool is active,
+ * drops a vertex on the TIN.
  */
 @Composable
 fun View3D(
@@ -47,6 +61,15 @@ fun View3D(
     modifier: Modifier = Modifier,
     /** Display style of each surface: fill by elevation or shading, mesh and border lines. */
     surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
+    /** Short tap adds a vertex. Null while no measure or area tool is active. */
+    onTap: ((Point2) -> Unit)? = null,
+    /** Snap that tap to COGO points, polyline vertices and alignment vertices, in screen space. */
+    snap: Boolean = false,
+    userPoints: List<CogoPoint> = emptyList(),
+    /** World xyz pairs of the measure line, draped on the TIN. */
+    overlayLines: DoubleArray = DoubleArray(0),
+    /** World xyz of the highlighted polygon facets, nine doubles per triangle. */
+    overlayTris: DoubleArray = DoubleArray(0),
 ) {
     val scene = remember(project) { Scene3D.build(project) }
     val renderer = remember(project) { Renderer3D(scene) }
@@ -66,22 +89,60 @@ fun View3D(
         renderer.setDrape(drape)
         holder[0]?.requestRender()
     }
+    LaunchedEffect(overlayLines, overlayTris) {
+        renderer.setOverlay(sceneFloats(overlayLines, scene), sceneFloats(overlayTris, scene))
+        holder[0]?.requestRender()
+    }
+    val tapState = rememberUpdatedState(onTap)
+    val snapState = rememberUpdatedState(snap)
+    val projectState = rememberUpdatedState(project)
+    val hiddenState = rememberUpdatedState(hiddenLayers)
+    val pointsState = rememberUpdatedState(userPoints)
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current.density
+    fun pick(x: Float, y: Float) {
+        val tap = tapState.value ?: return
+        scope.launch(Dispatchers.Default) {
+            val ray = renderer.worldRay(x, y) ?: return@launch
+            val surfaces = visibleSurfaces(projectState.value, hiddenState.value)
+            val hit = TinMeasure.nearestHit(surfaces, ray) ?: return@launch
+            val point = if (snapState.value) {
+                val px = 24f * density
+                val near = renderer.worldPerPixel() * px * 12.0
+                val targets = SnapTargets.near(
+                    projectState.value, pointsState.value, hiddenState.value,
+                    hit.x, hit.y, near, surfaces.firstOrNull(), hit.z,
+                )
+                SnapTargets.nearest(targets, x.toDouble(), y.toDouble(), px.toDouble()) { p -> renderer.project(p.x, p.y, p.z) }
+                    ?: Point2(hit.x, hit.y)
+            } else Point2(hit.x, hit.y)
+            withContext(Dispatchers.Main.immediate) { tap(point) }
+        }
+    }
 
     AndroidView(
         modifier = modifier.pointerInput(project) {
             awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false)
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val start = down.position
+                val t0 = down.uptimeMillis
                 var lastCentroid: Offset? = null
                 var lastSpread = 0f
                 var lastCount = 0
+                var dragging = false
+                var fingers = 1
+                var uptime = t0
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Main)
                     val pressed = event.changes.filter { it.pressed }
                     if (pressed.isEmpty()) break
+                    uptime = event.changes.first().uptimeMillis
+                    if (pressed.size > fingers) fingers = pressed.size
                     val centroid = pressed.fold(Offset.Zero) { acc, c -> acc + c.position } / pressed.size.toFloat()
                     val spread = pressed.map { (it.position - centroid).getDistance() }.average().toFloat()
+                    if (pressed.size > 1 || (centroid - start).getDistance() > 12f) dragging = true
                     // A change in finger count restarts the reference, so lifting a finger does not jump.
-                    if (pressed.size == lastCount && lastCentroid != null) {
+                    if (dragging && pressed.size == lastCount && lastCentroid != null) {
                         val d = centroid - lastCentroid!!
                         if (pressed.size == 1) {
                             renderer.orbit(d.x, d.y)
@@ -96,6 +157,8 @@ fun View3D(
                     lastCount = pressed.size
                     event.changes.forEach { it.consume() }
                 }
+                // A short tap marks a vertex. A drag still orbits, pans and zooms.
+                if (!dragging && fingers == 1 && uptime - t0 <= 400L) pick(start.x, start.y)
             }
         },
         factory = { context ->
@@ -119,9 +182,10 @@ class Scene3D(
     val lines: List<LineBatch>,
     /** Half of the largest horizontal extent, to place the camera. */
     val radius: Float,
-    /** Plan position of the scene's (0, 0). */
+    /** Plan position and elevation of the scene's (0, 0, 0). */
     val originX: Double = 0.0,
     val originY: Double = 0.0,
+    val originZ: Double = 0.0,
     /** 3D models, flat shaded, named by layer. */
     val models: List<Mesh> = emptyList(),
 ) {
@@ -237,7 +301,7 @@ class Scene3D(
                 }
                 Mesh(m.layer, v, IntArray(t.size) { it })
             }
-            return Scene3D(meshes, batches, (max(bx1 - bx0, by1 - by0) / 2).toFloat().coerceAtLeast(1f), ox, oy, models)
+            return Scene3D(meshes, batches, (max(bx1 - bx0, by1 - by0) / 2).toFloat().coerceAtLeast(1f), ox, oy, oz, models)
         }
 
         private fun ramp(t: Float): Int {
@@ -271,8 +335,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var zScale = 1f
     @Volatile private var styles: Map<String, SurfaceStyle> = emptyMap()
 
-    private var width = 1
-    private var height = 1
+    @Volatile private var width = 1
+    @Volatile private var height = 1
     private var program = 0
     private val meshBuffers = ArrayList<IntArray>()
     private val lineBuffers = ArrayList<Int>()
@@ -283,6 +347,13 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var drape: Drape? = null
     @Volatile private var drapeDirty = false
     private var drapeTexture = 0
+    @Volatile private var pendingLines = FloatArray(0)
+    @Volatile private var pendingTris = FloatArray(0)
+    @Volatile private var overlayDirty = false
+    private var overlayLineBuf = 0
+    private var overlayTriBuf = 0
+    private var overlayLineCount = 0
+    private var overlayTriCount = 0
 
     fun setDrape(drape: Drape?) {
         this.drape = drape
@@ -369,6 +440,32 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         distance = (distance * factor).coerceIn(scene.radius * 0.0005f, scene.radius * 20f)
     }
 
+    /** World ray through a screen pixel, with the vertical exaggeration undone. Safe off the GL thread. */
+    fun worldRay(screenX: Float, screenY: Float): Ray? = ViewRay.world(
+        screenX, screenY, width, height,
+        yaw, pitch, distance, tx, ty, tz, zScale,
+        FOV, scene.radius, scene.originX, scene.originY, scene.originZ,
+    )
+
+    /** Screen pixel of a world point, or null when it is behind the camera. */
+    fun project(x: Double, y: Double, z: Double): Pair<Double, Double>? = ViewRay.project(
+        x, y, z, width, height,
+        yaw, pitch, distance, tx, ty, tz, zScale,
+        FOV, scene.radius, scene.originX, scene.originY, scene.originZ,
+    )
+
+    /** Metres per pixel at the orbit target, for a snap prefilter. */
+    fun worldPerPixel(): Double {
+        val h = height.coerceAtLeast(1)
+        return 2.0 * distance * tan(Math.toRadians(FOV / 2.0)) / h
+    }
+
+    fun setOverlay(lines: FloatArray, tris: FloatArray) {
+        pendingLines = lines
+        pendingTris = tris
+        overlayDirty = true
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         program = buildProgram()
         meshBuffers.clear()
@@ -403,6 +500,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         // A new GL context has lost the old texture.
         drapeTexture = 0
         drapeDirty = true
+        overlayLineBuf = 0
+        overlayTriBuf = 0
+        overlayDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -428,9 +528,12 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         Matrix.multiplyMM(mvp, 0, proj, 0, viewM, 0)
 
         if (drapeDirty) uploadDrape()
+        if (overlayDirty) uploadOverlay()
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uZScale"), zScale)
+        val uAlpha = GLES30.glGetUniformLocation(program, "uAlpha")
+        GLES30.glUniform1f(uAlpha, 1f)
         val uBias = GLES30.glGetUniformLocation(program, "uDepthBias")
         GLES30.glUniform1f(uBias, 0f)
         val uLit = GLES30.glGetUniformLocation(program, "uLit")
@@ -530,6 +633,58 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, b.vertices.size / 3)
         }
+        drawOverlay(uAlpha, uBias, uColor, uLit, uDrape)
+    }
+
+    /** Highlight draped on the surface. Uploaded when the polygon changes, drawn as one batch. */
+    private fun drawOverlay(uAlpha: Int, uBias: Int, uColor: Int, uLit: Int, uDrape: Int) {
+        if (overlayTriCount == 0 && overlayLineCount == 0) return
+        GLES30.glUniform1i(uLit, 0)
+        GLES30.glUniform1i(uDrape, 0)
+        GLES30.glDisableVertexAttribArray(1)
+        GLES30.glDisableVertexAttribArray(2)
+        GLES30.glUniform3f(uColor, 0f, 0.722f, 0.831f)
+        if (overlayTriCount > 0) {
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glUniform1f(uAlpha, 0.35f)
+            GLES30.glUniform1f(uBias, 0.002f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, overlayTriBuf)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, overlayTriCount)
+            GLES30.glDisable(GLES30.GL_BLEND)
+            GLES30.glUniform1f(uAlpha, 1f)
+        }
+        if (overlayLineCount > 0) {
+            GLES30.glUniform1f(uBias, 0.004f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, overlayLineBuf)
+            GLES30.glEnableVertexAttribArray(0)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+            GLES30.glDrawArrays(GLES30.GL_LINES, 0, overlayLineCount)
+        }
+        GLES30.glUniform1f(uBias, 0f)
+    }
+
+    private fun uploadOverlay() {
+        val lines = pendingLines
+        val tris = pendingTris
+        overlayLineBuf = replaceBuffer(overlayLineBuf, lines)
+        overlayLineCount = lines.size / 3
+        overlayTriBuf = replaceBuffer(overlayTriBuf, tris)
+        overlayTriCount = tris.size / 3
+        // A polygon that arrived while this uploaded stays dirty for the next frame.
+        if (pendingLines === lines && pendingTris === tris) overlayDirty = false
+    }
+
+    private fun replaceBuffer(old: Int, data: FloatArray): Int {
+        if (old != 0) GLES30.glDeleteBuffers(1, intArrayOf(old), 0)
+        if (data.isEmpty()) return 0
+        val ids = IntArray(1)
+        GLES30.glGenBuffers(1, ids, 0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, data.size * 4, floats(data), GLES30.GL_DYNAMIC_DRAW)
+        return ids[0]
     }
 
     private fun buildProgram(): Int {
@@ -590,16 +745,17 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             in vec2 vUv;
             uniform int uDrape;
             uniform sampler2D uTex;
+            uniform float uAlpha;
             out vec4 fragColor;
             void main() {
                 vec3 c = vColor;
                 if (uDrape == 1 && vUv.x >= 0.0 && vUv.x <= 1.0 && vUv.y >= 0.0 && vUv.y <= 1.0) {
                     // Photos already carry their own shading, so the light is softened over them.
                     vec4 t = texture(uTex, vUv);
-                    fragColor = vec4(mix(c * vShade, t.rgb * (0.7 + 0.3 * vShade), t.a), 1.0);
+                    fragColor = vec4(mix(c * vShade, t.rgb * (0.7 + 0.3 * vShade), t.a), uAlpha);
                     return;
                 }
-                fragColor = vec4(c * vShade, 1.0);
+                fragColor = vec4(c * vShade, uAlpha);
             }
         """.trimIndent()
 
@@ -609,4 +765,24 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         private fun ints(a: IntArray): IntBuffer =
             ByteBuffer.allocateDirect(a.size * 4).order(ByteOrder.nativeOrder()).asIntBuffer().apply { put(a); position(0) }
     }
+}
+
+/** Surfaces the 3D view actually draws. An edited copy stands in for its original. */
+private fun visibleSurfaces(project: LandXmlProject, hidden: Set<String>): List<Surface> {
+    val replaced = project.surfaces.map { it.name }.filter { n -> project.surfaces.any { it.name == n + EDITED_SUFFIX } }.toSet()
+    return project.surfaces.filter { it.name !in hidden && it.name !in replaced && it.triangleCount > 0 }
+}
+
+/** World coordinates shifted to the scene origin, so the GPU floats keep their precision. */
+private fun sceneFloats(world: DoubleArray, scene: Scene3D): FloatArray {
+    if (world.isEmpty()) return FloatArray(0)
+    val out = FloatArray(world.size)
+    var i = 0
+    while (i + 2 < world.size) {
+        out[i] = (world[i] - scene.originX).toFloat()
+        out[i + 1] = (world[i + 1] - scene.originY).toFloat()
+        out[i + 2] = (world[i + 2] - scene.originZ).toFloat()
+        i += 3
+    }
+    return out
 }

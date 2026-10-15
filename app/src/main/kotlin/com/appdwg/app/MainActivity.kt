@@ -1,6 +1,10 @@
 package com.appdwg.app
 
+import com.appdwg.core.AreaOnSurface
+import com.appdwg.core.TinMeasure
 import com.appdwg.core.tr
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 import android.content.Intent
 import android.net.Uri
@@ -728,6 +732,42 @@ private fun ProjectScreen(
         if (measurePoints.isEmpty()) null
         else Measure.of(measurePoints, measurePoints.map { PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation })
     }
+    // The polygon being drawn: measure, a platform outline, or a grid area. The same points in plan and 3D.
+    val areaPoly = when {
+        measuring -> measurePoints
+        drawingPlatform -> platformOutline
+        genPick == GenPick.AREA_DRAW -> gen.drawnArea
+        else -> emptyList()
+    }
+    val areaClosed = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
+    var groundLength by remember { mutableStateOf<Double?>(null) }
+    var areaReport by remember { mutableStateOf<AreaOnSurface?>(null) }
+    var drapeLines by remember { mutableStateOf(DoubleArray(0)) }
+    var drapeTris by remember { mutableStateOf(DoubleArray(0)) }
+    var surfacePending by remember { mutableStateOf(false) }
+    LaunchedEffect(areaPoly, areaClosed, project, offLayers, frozenLayers) {
+        if (areaPoly.size < 2) {
+            groundLength = null
+            areaReport = null
+            drapeLines = DoubleArray(0)
+            drapeTris = DoubleArray(0)
+            surfacePending = false
+            return@LaunchedEffect
+        }
+        surfacePending = true
+        val poly = areaPoly
+        val closed = areaClosed
+        val surfaces = project.surfaces.filter { s ->
+            s.name !in offLayers && s.name !in frozenLayers && s.triangleCount > 0 &&
+                project.surfaces.none { it.name == s.name + EDITED_SUFFIX }
+        }
+        val built = withContext(Dispatchers.Default) { surfaceMeasure(surfaces, poly, closed) }
+        groundLength = built.ground
+        areaReport = built.area
+        drapeLines = built.lines
+        drapeTris = built.tris
+        surfacePending = false
+    }
     val g = LocalG.current
     val colors = PlanColors(
         background = g.planBg,
@@ -772,7 +812,7 @@ private fun ProjectScreen(
     val isPro = vm.pro.isPro
     fun proOpen(feature: ProFeature) = ProAccess.allows(feature, isPro)
     fun allTools(): List<RailTool> = buildList {
-        if (!show3d) add(RailTool(GIcon.MEASURE, tr("Medir"), measuring, feature = ProFeature.MEASURE) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
+        add(RailTool(GIcon.MEASURE, tr("Medir"), measuring, feature = ProFeature.MEASURE) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, tr("Pontos"), addingPoints, feature = ProFeature.POINTS) { showPoints = true })
         add(RailTool(GIcon.LINES, tr("Linhas"), editing, feature = ProFeature.LINES) {
             editing = !editing; measuring = false; showSection = false; showProfile = false; show3d = false
@@ -817,6 +857,22 @@ private fun ProjectScreen(
     val current = info
     @Composable
     fun BoxScope.NarrowCards() {
+        if (show3d) {
+            // A plan tap's card stays behind; 3D shows the measure or the area being drawn.
+            if (measuring) {
+                MeasureCard(
+                    measurement,
+                    onUndo = { measurePoints = measurePoints.dropLast(1) },
+                    onClear = { measurePoints = emptyList() },
+                    onDone = { measuring = false },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).widthIn(max = 380.dp).fillMaxWidth(),
+                    onSurface = true, ground = groundLength, report = areaReport, pending = surfacePending,
+                )
+            } else if ((drawingPlatform || genPick == GenPick.AREA_DRAW) && areaPoly.size >= 3 && (areaReport != null || surfacePending)) {
+                SurfaceFacts(areaReport, surfacePending, Modifier.align(Alignment.TopEnd).padding(top = 72.dp, end = 8.dp).widthIn(max = 320.dp))
+            }
+            return
+        }
         if (selectedPoint != null) {
             val pt = selectedPoint!!
             val q = remember(project, pt, frozenLayers) { PointQuery.at(project, Point2(pt.x, pt.y), frozenLayers.toSet()) }
@@ -834,6 +890,7 @@ private fun ProjectScreen(
                 onDone = { measuring = false },
                 // At the side, so the points being measured stay visible on a tablet.
                 modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).widthIn(max = 380.dp).fillMaxWidth(),
+                ground = groundLength, report = areaReport, pending = surfacePending,
             )
         } else if (!proOpen(ProFeature.TAP_INFO)) {
             FreeHint(Modifier.align(Alignment.BottomCenter).padding(12.dp)) { vm.proRequested = true }
@@ -866,41 +923,7 @@ private fun ProjectScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().background(g.bg)) {
-    Row(Modifier.weight(1f).fillMaxWidth().then(if (g.floating) Modifier.padding(top = 4.dp) else Modifier)) {
-        val full = vm.fullScreen
-        if (!full && !compact) ToolRail(railTools())
-        Box(
-            Modifier.weight(1f).fillMaxHeight()
-                .then(if (g.floating) Modifier.padding(start = 12.dp, end = if (wide) 12.dp else 12.dp, bottom = 12.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
-                .background(g.planBg)
-                .onSizeChanged { planWidthPx = it.width },
-        ) {
-                if (show3d) key(project) {
-                    View3D(
-                        project = project,
-                        hiddenLayers = hidden,
-                        layerColor = layerColor,
-                        background = g.planBg,
-                        foreground = g.text,
-                        exaggeration = exaggeration.toFloat(),
-                        drape = drape3d ?: drape,
-                        modifier = Modifier.fillMaxSize(),
-                        surfaceStyle = { v.styleOf(it) },
-                    )
-                } else PlanView(
-                    project = project,
-                    // An edited surface stands in for its original on the plan, so its holes and changes show.
-                    terrain = terrain.filter { t -> project.surfaces.none { it.name == t.name + EDITED_SUFFIX } },
-                    colors = colors,
-                    marker = info?.position,
-                    markerOnAxis = info?.alignment?.stationOffset?.pointOnAlignment,
-                    hiddenLayers = hidden,
-                    layerColor = layerColor,
-                    rasters = rasters,
-                    tiledRasters = vm.tiledRasters.filterKeys { it !in vm.unloaded },
-                    drape = drape,
-                    onTap = {
+    val onPlanTap: (Point2) -> Unit = {
                         // Tapping the same snapped point twice would add a zero-length leg.
                         when {
                             v.pickingOutlet -> {
@@ -919,10 +942,10 @@ private fun ProjectScreen(
                                 val c = edit.windowCorner
                                 if (c == null) edit.windowCorner = it else {
                                     val minX = minOf(c.x, it.x); val maxX = maxOf(c.x, it.x); val minY = minOf(c.y, it.y); val maxY = maxOf(c.y, it.y)
-                                    val hidden = offLayers.toSet() + frozenLayers
+                                    val hiddenHere = offLayers.toSet() + frozenLayers
                                     val inside = project.polylines.indices.filter { i ->
                                         val l = project.polylines[i]
-                                        l.layer !in hidden && l.xs.indices.any { k -> l.xs[k] in minX..maxX && l.ys[k] in minY..maxY }
+                                        l.layer !in hiddenHere && l.xs.indices.any { k -> l.xs[k] in minX..maxX && l.ys[k] in minY..maxY }
                                     }
                                     edit.selected = (edit.selected + inside).distinct()
                                     edit.windowCorner = null; edit.pick = EditPick.SELECT
@@ -945,17 +968,56 @@ private fun ProjectScreen(
                                 editingPoint = null to CogoPoint(PointFile.nextNumber(vm.userPoints), "", it.x, it.y, z)
                             }
                             measuring -> if (it != measurePoints.lastOrNull()) measurePoints = measurePoints + it
-                            // With the section open, a tap picks the station on the chosen alignment.
                             showSection && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> sectionStation = so.station }
                             showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
-                            // Free version: the plan is for viewing only.
                             !proOpen(ProFeature.TAP_INFO) -> {}
                             else -> {
                                 tapped = it; selectedPoint = null
                                 modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
                             }
                         }
-                    },
+    }
+    Column(Modifier.fillMaxSize().background(g.bg)) {
+    Row(Modifier.weight(1f).fillMaxWidth().then(if (g.floating) Modifier.padding(top = 4.dp) else Modifier)) {
+        val full = vm.fullScreen
+        if (!full && !compact) ToolRail(railTools())
+        Box(
+            Modifier.weight(1f).fillMaxHeight()
+                .then(if (g.floating) Modifier.padding(start = 12.dp, end = if (wide) 12.dp else 12.dp, bottom = 12.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
+                .background(g.planBg)
+                .onSizeChanged { planWidthPx = it.width },
+        ) {
+                val pickingArea = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
+                if (show3d) key(project) {
+                    View3D(
+                        project = project,
+                        hiddenLayers = hidden,
+                        layerColor = layerColor,
+                        background = g.planBg,
+                        foreground = g.text,
+                        exaggeration = exaggeration.toFloat(),
+                        drape = drape3d ?: drape,
+                        modifier = Modifier.fillMaxSize(),
+                        surfaceStyle = { v.styleOf(it) },
+                        onTap = if (pickingArea) onPlanTap else null,
+                        snap = pickingArea,
+                        userPoints = vm.userPoints,
+                        overlayLines = drapeLines,
+                        overlayTris = if (areaClosed && areaPoly.size >= 3) drapeTris else DoubleArray(0),
+                    )
+                } else PlanView(
+                    project = project,
+                    // An edited surface stands in for its original on the plan, so its holes and changes show.
+                    terrain = terrain.filter { t -> project.surfaces.none { it.name == t.name + EDITED_SUFFIX } },
+                    colors = colors,
+                    marker = info?.position,
+                    markerOnAxis = info?.alignment?.stationOffset?.pointOnAlignment,
+                    hiddenLayers = hidden,
+                    layerColor = layerColor,
+                    rasters = rasters,
+                    tiledRasters = vm.tiledRasters.filterKeys { it !in vm.unloaded },
+                    drape = drape,
+                    onTap = onPlanTap, // defined above; 3D uses the same vertex flow
                     modifier = Modifier.fillMaxSize(),
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
@@ -1106,7 +1168,7 @@ private fun ProjectScreen(
                     plusMinus = !compact,
                 )
             }
-                if (show3d) {
+                if (show3d && !measuring && !drawingPlatform && genPick == null) {
                     Text(
                         tr("1 dedo gira · 2 dedos movem · pinça aproxima"),
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
@@ -1256,16 +1318,27 @@ private fun ProjectScreen(
             if (measuring) MeasureCard(measurement, onUndo = { measurePoints = measurePoints.dropLast(1) }, onClear = { measurePoints = emptyList() },
                 onDone = { measuring = false }, modifier = Modifier.fillMaxWidth(),
                 saved = v.savedMeasures.size, onSave = { v.savedMeasures = v.savedMeasures + listOf(measurePoints); measurePoints = emptyList() },
-                onClearSaved = { v.savedMeasures = emptyList() })
-            selectedPoint?.let { pt ->
+                onClearSaved = { v.savedMeasures = emptyList() },
+                onSurface = show3d, ground = groundLength, report = areaReport, pending = surfacePending)
+            if (show3d) {
+                if (!measuring) {
+                    val marking = drawingPlatform || genPick == GenPick.AREA_DRAW
+                    Text(
+                        tr(if (marking) "1 dedo gira · 2 dedos movem · pinça aproxima. Um toque curto marca um ponto na superfície."
+                            else "1 dedo gira · 2 dedos movem · pinça aproxima"),
+                        style = MaterialTheme.typography.bodyMedium, color = g.muted,
+                    )
+                    if (marking) SurfaceFacts(areaReport, surfacePending, Modifier.fillMaxWidth())
+                }
+            } else selectedPoint?.let { pt ->
                 val q = remember(project, pt, frozenLayers) { PointQuery.at(project, Point2(pt.x, pt.y), frozenLayers.toSet()) }
                 PointCard(pt, q.alignment?.takeIf { !it.stationOffset.outside }, q.terrainElevation,
                     onEdit = { editingPoint = pt to pt }, onClose = { selectedPoint = null }, modifier = Modifier.fillMaxWidth())
             }
-            openNote?.let { n ->
+            if (!show3d) openNote?.let { n ->
                 NoteCard(vm, n, onEdit = { editingNote = n to false; openNote = null }, onClose = { openNote = null }, modifier = Modifier.fillMaxWidth())
             }
-            modelHit?.takeIf { current != null }?.let { m ->
+            if (!show3d) modelHit?.takeIf { current != null }?.let { m ->
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
                         Text(m.name, style = MaterialTheme.typography.titleSmall)
@@ -1274,20 +1347,20 @@ private fun ProjectScreen(
                     }
                 }
             }
-            if (current != null && !measuring && selectedPoint == null &&
+            if (!show3d && current != null && !measuring && selectedPoint == null &&
                 ProAccess.tapInfoInSidePanel(isPro, wide, vm.themes.panelOpen, full)) {
                 InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
             }
             if (differenceOverlay != null && difference != null && !show3d) DifferenceLegend(difference, Modifier)
             if ((vm.analysisMode == 1 || vm.analysisMode == 3) && !show3d) SlopeLegend(vm, Modifier)
-            if (!proOpen(ProFeature.TAP_INFO)) FreeHint(Modifier.fillMaxWidth()) { vm.proRequested = true }
-            else if (current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
+            if (!show3d && !proOpen(ProFeature.TAP_INFO)) FreeHint(Modifier.fillMaxWidth()) { vm.proRequested = true }
+            else if (!show3d && current == null && !measuring && selectedPoint == null && openNote == null && gpsPoint == null) {
                 Text(tr("Toque na planta para ver estaca, afastamento e cotas."), style = MaterialTheme.typography.bodyMedium, color = g.muted)
             }
         } }
     }
     // Footer: the tapped point, else the GPS position; station on the axis; plan scale; GPS fix.
-    val shown = current ?: gpsInfo
+    val shown = if (show3d) gpsInfo else (current ?: gpsInfo)
     val metersPerInch = viewport?.let { vp -> if (planWidthPx > 0) vp.width / planWidthPx * xdpi else null }
     if (!vm.fullScreen && compact) ToolBar(railTools())
     if (!vm.fullScreen) {
@@ -1458,7 +1531,7 @@ private fun ProjectScreen(
 
     if (showSurfaceEdit) {
         SurfaceEditDialog(vm, project, surfaceEditState, measurePoints, tapped, onDraw = {
-            showSurfaceEdit = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
+            showSurfaceEdit = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; tapped = null
         }, onDismiss = { showSurfaceEdit = false })
     }
 
@@ -1515,7 +1588,7 @@ private fun ProjectScreen(
 
     if (showVolume) {
         VolumeDialog(vm, project, volumeState, measurePoints, onDraw = {
-            showVolume = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
+            showVolume = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; tapped = null
         }, onDismiss = { showVolume = false })
     }
 
@@ -1596,7 +1669,8 @@ private fun ProjectScreen(
         GeneratePointsDialog(
             gen, project, vm.userPoints, viewport,
             onPick = { pick ->
-                showGen = false; measuring = false; showSection = false; showProfile = false; show3d = false
+                showGen = false; measuring = false; showSection = false; showProfile = false
+                if (pick != GenPick.AREA_DRAW) show3d = false
                 if (pick == GenPick.AREA_DRAW) gen.drawnArea = emptyList()
                 genPick = pick
             },
@@ -1625,7 +1699,7 @@ private fun ProjectScreen(
 
     if (showPlatform) {
         PlatformDialog(vm, project, onDraw = {
-            showPlatform = false; measuring = false; showSection = false; showProfile = false; show3d = false
+            showPlatform = false; measuring = false; showSection = false; showProfile = false
             drawingPlatform = true
         }, onDismiss = { showPlatform = false })
     }
@@ -1683,7 +1757,7 @@ private fun ProjectScreen(
 
     if (showArea) {
         AreaDialog(vm, viewport, v.measurePoints, onDrawArea = {
-            showArea = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; show3d = false; tapped = null
+            showArea = false; measuring = true; measurePoints = emptyList(); showSection = false; showProfile = false; tapped = null
         }, onDismiss = { showArea = false }, chosen = v.area)
     }
 
@@ -1877,6 +1951,10 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
 private fun MeasureCard(
     m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier,
     saved: Int = 0, onSave: () -> Unit = {}, onClearSaved: () -> Unit = {},
+    onSurface: Boolean = false,
+    ground: Double? = null,
+    report: AreaOnSurface? = null,
+    pending: Boolean = false,
 ) {
     // Taps on the card must not reach the plan underneath and add a point.
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
@@ -1885,7 +1963,8 @@ private fun MeasureCard(
             val leg = m?.legs?.lastOrNull()
             if (m == null || leg == null) {
                 Text(
-                    tr("Toque na planta para marcar os pontos. O toque encaixa em pontos e vértices próximos.") +
+                    tr(if (onSurface) "Toque na superfície para marcar os pontos. O toque encaixa em pontos e vértices próximos."
+                        else "Toque na planta para marcar os pontos. O toque encaixa em pontos e vértices próximos.") +
                         if (m != null) tr(" Marque o próximo ponto.") else "",
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1903,9 +1982,12 @@ private fun MeasureCard(
                     Line(tr("Comprimento"), StationFormat.length(m.length, 3))
                     m.rise?.let { r -> Line(tr("Desnível 1º → último"), signedLength(r)) }
                 }
+                ground?.let { Line(tr("Comprimento no terreno"), StationFormat.length(it, 3)) }
                 m.slopeLength?.let { Line(tr("Comprimento inclinado"), StationFormat.length(it, 3)) }
                 m.area?.let { Line(tr("Área"), Measure.area(it)) }
                 m.perimeter?.let { Line(tr("Perímetro"), StationFormat.length(it, 3)) }
+                if (m.area != null) SurfaceFactLines(report, pending)
+                else if (pending) Text(tr("Calculando na superfície…"), style = MaterialTheme.typography.bodySmall)
             }
             if (saved > 0) Text(tr("{0} medição(ões) salva(s) na planta (M1, M2…).", saved), style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
@@ -1925,6 +2007,77 @@ private fun signed(v: Double, digits: Int) = (if (v >= 0) "+" else "−") + Stat
 
 /** Signed length in the shown unit: "+0,250 m" or "+0.820 ft". */
 private fun signedLength(v: Double, digits: Int = 3) = (if (v >= 0) "+" else "−") + StationFormat.length(abs(v), digits)
+
+/** Area, elevations, slope and cut/fill of the polygon on the TIN. */
+@Composable
+private fun SurfaceFacts(report: AreaOnSurface?, pending: Boolean, modifier: Modifier) {
+    Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
+        Column(Modifier.padding(12.dp)) {
+            Text(tr("Área"), style = MaterialTheme.typography.titleSmall)
+            report?.let {
+                Line(tr("Área"), Measure.area(it.planArea))
+                Line(tr("Perímetro"), StationFormat.length(it.perimeterPlan, 3))
+            }
+            SurfaceFactLines(report, pending)
+        }
+    }
+}
+
+@Composable
+private fun SurfaceFactLines(report: AreaOnSurface?, pending: Boolean) {
+    if (report == null) {
+        if (pending) Text(tr("Calculando na superfície…"), style = MaterialTheme.typography.bodySmall)
+        return
+    }
+    Line(tr("Área na superfície"), Measure.area(report.surfaceArea))
+    Line(tr("Perímetro na superfície"), StationFormat.length(report.perimeter3d, 3))
+    Line(tr("Cota mínima"), StationFormat.length(report.minElevation, 3))
+    Line(tr("Cota máxima"), StationFormat.length(report.maxElevation, 3))
+    Line(tr("Cota média"), StationFormat.length(report.averageElevation, 3))
+    Line(tr("Declividade média"), StationFormat.decimal(report.averageSlopePercent, 2) + " %")
+    val cut = report.cut
+    val fill = report.fill
+    if (cut != null && fill != null) {
+        Text(tr("Entre {0} e {1}", report.baseName ?: "", report.otherName ?: ""), style = MaterialTheme.typography.labelMedium)
+        Line(tr("Corte"), StationFormat.volume(cut))
+        Line(tr("Aterro"), StationFormat.volume(fill))
+    }
+    if (pending) Text(tr("Calculando na superfície…"), style = MaterialTheme.typography.bodySmall)
+}
+
+private class SurfaceBuilt(val ground: Double?, val area: AreaOnSurface?, val lines: DoubleArray, val tris: DoubleArray)
+
+/** Ground length, draped segments and the area report. Runs off the UI thread. */
+private fun surfaceMeasure(surfaces: List<com.appdwg.core.Surface>, poly: List<Point2>, closed: Boolean): SurfaceBuilt {
+    val base = surfaces.getOrNull(0)
+    val other = surfaces.getOrNull(1)
+    var area: AreaOnSurface? = null
+    var host = base
+    if (closed && poly.size >= 3 && base != null) {
+        area = TinMeasure.area(base, poly, other, geometry = true)
+        if (area == null) {
+            for (s in surfaces.drop(1)) {
+                val found = TinMeasure.area(s, poly, null, geometry = true)
+                if (found != null) { area = found; host = s; break }
+            }
+        }
+    }
+    var open = host?.let { TinMeasure.ground(it, poly, closed = false) }
+    if (open == null) {
+        for (s in surfaces) {
+            if (s === host) continue
+            val g = TinMeasure.ground(s, poly, closed = false) ?: continue
+            open = g
+            host = s
+            break
+        }
+    }
+    val surface = host
+    val lines = if (surface != null && closed && poly.size >= 3)
+        TinMeasure.ground(surface, poly, closed = true)?.segments ?: open?.segments ?: DoubleArray(0)
+    else open?.segments ?: DoubleArray(0)
+    return SurfaceBuilt(open?.length, area, lines, area?.facets ?: DoubleArray(0))
+}
 
 @Composable
 private fun Line(label: String, value: String) {
