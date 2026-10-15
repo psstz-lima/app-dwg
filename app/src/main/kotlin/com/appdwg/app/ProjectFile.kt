@@ -167,8 +167,8 @@ data class BulletinItem(
  * One survey state of the works timeline (primitiva, medição 1, 2…): the file read for it ("" for
  * the project's own drawing), the picture laid over it and the date it was surveyed (dd/mm/aaaa).
  */
-data class SurveyState(val name: String, val date: String, val file: String, val image: List<String>) {
-    fun toJson(): JSONObject = JSONObject().put("name", name).put("date", date).put("file", file).put("image", JSONArray(image))
+data class SurveyState(val name: String, val date: String, val file: String, val image: List<String>, val imageName: String = "") {
+    fun toJson(): JSONObject = JSONObject().put("name", name).put("date", date).put("file", file).put("image", JSONArray(image)).put("imageName", imageName)
 
     /** Date as yyyymmdd for sorting; without a readable date the primitiva comes first, the others last. */
     val sortKey: String get() = Regex("""(\d{1,2})/(\d{1,2})/(\d{4})""").find(date)?.destructured
@@ -176,7 +176,7 @@ data class SurveyState(val name: String, val date: String, val file: String, val
 
     companion object {
         fun fromJson(o: JSONObject) = SurveyState(o.optString("name"), o.optString("date"), o.optString("file"),
-            o.optJSONArray("image")?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty())
+            o.optJSONArray("image")?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty(), o.optString("imageName"))
     }
 }
 

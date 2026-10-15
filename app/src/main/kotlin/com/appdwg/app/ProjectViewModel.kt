@@ -272,7 +272,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun loadDrape(uris: List<Uri>, fromState: Boolean = false) {
         val project = (state as? ProjectState.Loaded)?.project ?: return
         // A picture chosen while a state is shown becomes that state's picture.
-        if (!fromState) activeState?.let { a -> states.getOrNull(a)?.let { st -> states = states.toMutableList().apply { set(a, st.copy(image = uris.map { it.toString() })) } } }
+        if (!fromState) activeState?.let { a -> states.getOrNull(a)?.let { st ->
+            states = states.toMutableList().apply { set(a, st.copy(image = uris.map { it.toString() }, imageName = pictureName(uris.map { displayName(it) }))) }
+        } }
         val named = uris.map { it to displayName(it) }
         val world = named.firstOrNull { it.second.substringAfterLast('.', "").lowercase() in WORLD_FILE_EXTENSIONS }
         val picture = named.firstOrNull { it !== world }
@@ -457,6 +459,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun today(): String = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.ROOT).format(java.util.Date())
 
+    /** Name of the picture among chosen files (not its world file). */
+    private fun pictureName(names: List<String>) = names.firstOrNull { it.substringAfterLast('.', "").lowercase() !in WORLD_FILE_EXTENSIONS }.orEmpty()
+
     private fun isPicture(name: String) = name.substringAfterLast('.', "").lowercase().let { it in WORLD_FILE_EXTENSIONS || it in setOf("tif", "tiff", "jpg", "jpeg", "png", "webp") }
 
     /**
@@ -471,15 +476,17 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         uris.forEach { u -> runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(u, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
-        val image = named.filter { it !== survey && isPicture(it.second) }.map { it.first.toString() }
+        val pictures = named.filter { it !== survey && isPicture(it.second) }
+        val image = pictures.map { it.first.toString() }
+        val imageName = pictureName(pictures.map { it.second })
         compareMessage = null
         viewModelScope.launch {
-            if (states.isEmpty()) states = listOf(SurveyState(tr("Primitiva"), "", "", drapeUris.map { it.toString() }))
+            if (states.isEmpty()) states = listOf(SurveyState(tr("Primitiva"), "", "", drapeUris.map { it.toString() }, drape?.name.orEmpty()))
             val name = tr("Medição {0}", states.size)
             val before = addedFiles.size
             addFileNow(survey.first, name)
             if (addedFiles.size == before) return@launch
-            val added = SurveyState(name, today(), addedFiles.last().label, image)
+            val added = SurveyState(name, today(), addedFiles.last().label, image, imageName)
             states = (states + added).sortedBy { it.sortKey }
             showState(states.indexOf(added))
         }
@@ -1711,9 +1718,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun roadAxis(rp: RoadParams, project: LandXmlProject): Alignment? {
         if (rp.alignmentIndex >= 0) return project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }.getOrNull(rp.alignmentIndex)
         if (rp.pis.size < 2) return null
-        return AlignmentBuilder.fromPis(tr("Eixo"), rp.pis.mapIndexed { i, p ->
-            if (i == 0 || i == rp.pis.size - 1) Pi(p) else Pi(p, rp.radii.getOrNull(i)?.takeIf { it > 0 } ?: rp.radius, rp.spirals.getOrNull(i) ?: rp.spiral)
-        })
+        return AlignmentBuilder.fromPis(tr("Eixo"), AlignmentBuilder.fitRadii(typedPis(rp)))
+    }
+
+    private fun typedPis(rp: RoadParams) = rp.pis.mapIndexed { i, p ->
+        if (i == 0 || i == rp.pis.size - 1) Pi(p) else Pi(p, rp.radii.getOrNull(i)?.takeIf { it > 0 } ?: rp.radius, rp.spirals.getOrNull(i) ?: rp.spiral)
+    }
+
+    /** PIs (numbered from 1) whose radius had to shrink to fit its tangents, with the radius used. */
+    fun shrunkRadii(rp: RoadParams): List<Pair<Int, Double>> {
+        if (rp.alignmentIndex >= 0 || rp.pis.size < 3) return emptyList()
+        val typed = typedPis(rp)
+        return AlignmentBuilder.fitRadii(typed).mapIndexedNotNull { i, p -> if (p.radius < typed[i].radius - 1e-6) (i + 1) to p.radius else null }
     }
 
     private suspend fun designRoadNow() {

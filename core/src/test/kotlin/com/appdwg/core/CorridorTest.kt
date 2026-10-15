@@ -112,4 +112,20 @@ class CorridorTest {
         assertEquals(7.0, edge(240.0, 1), 1e-9)
         assertEquals(-5.0, edge(240.0, -1), 1e-9)
     }
+
+    @Test
+    fun radiusTooLargeForShortTangentsIsShrunkToFit() {
+        // Zigzag with 60 m legs: a 200 m radius would need far longer tangents.
+        val pis = listOf(Pi(Point2(0.0, 0.0)), Pi(Point2(60.0, 0.0), 200.0), Pi(Point2(60.0, 60.0), 200.0), Pi(Point2(120.0, 60.0)))
+        val fit = AlignmentBuilder.fitRadii(pis)
+        assertTrue(fit[1].radius < 200.0 && fit[2].radius < 200.0)
+        // The axis stays near the PIs instead of looping far away.
+        val a = AlignmentBuilder.fromPis("A", fit)
+        a.vertices.forEach { assertTrue(it.x in -1.0..121.0 && it.y in -1.0..61.0, "$it") }
+        // Length is no longer than the polyline through the PIs.
+        assertTrue(a.length <= 180.0 + 1e-6)
+        // A radius that fits is kept.
+        val wide = listOf(Pi(Point2(0.0, 0.0)), Pi(Point2(500.0, 0.0), 200.0), Pi(Point2(500.0, 500.0)))
+        assertEquals(200.0, AlignmentBuilder.fitRadii(wide)[1].radius, 1e-9)
+    }
 }

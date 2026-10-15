@@ -1186,3 +1186,5 @@ Medição {0}	Measurement {0}
 Sem superfície em: {0}.	No surface in: {0}.
 {0} → {1}	{0} → {1}
 {0} e {1} não se sobrepõem.	{0} and {1} do not overlap.
+Raio grande demais para as tangentes; reduzido para caber: {0}.	Radius too large for the tangents; reduced to fit: {0}.
+Só um estado está à vista. Toque em Mostrar todos para comparar superfícies, ou use Volumes entre estados.	Only one state is shown. Tap Show all to compare surfaces, or use Volumes between states.

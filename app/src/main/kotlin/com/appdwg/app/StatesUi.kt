@@ -33,16 +33,12 @@ import androidx.compose.ui.unit.dp
 import com.appdwg.core.StationFormat
 import kotlinx.coroutines.delay
 
-/** File name of a state's picture, for the list. */
-private fun pictureName(s: SurveyState) = s.image.map { android.net.Uri.decode(it).substringAfterLast('/').substringAfterLast(':') }
-    .firstOrNull { it.substringAfterLast('.').lowercase() in setOf("tif", "tiff", "jpg", "jpeg", "png", "webp") }
-
 /**
  * Survey states of the works (primitiva, medição 1, 2…), each with its file, picture and date:
  * shown one at a time, stepped through on the timeline and compared by volume.
  */
 @Composable
-fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -> Unit) {
+fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -> Unit, onMapShown: () -> Unit) {
     var editing by remember { mutableStateOf<Int?>(null) }
     Text(tr("Estados da obra (linha do tempo)"), style = MaterialTheme.typography.labelLarge)
     if (vm.states.isEmpty()) {
@@ -53,7 +49,7 @@ fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -
             RadioButton(selected = vm.activeState == i, onClick = { vm.showState(i) })
             Column(Modifier.weight(1f)) {
                 Text(s.name + (if (s.date.isNotBlank()) " · ${s.date}" else ""), maxLines = 1)
-                Text(pictureName(s)?.let { tr("Imagem: {0}", it) } ?: tr("Sem imagem"), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                Text(if (s.image.isEmpty()) tr("Sem imagem") else tr("Imagem: {0}", s.imageName.ifEmpty { "✓" }), style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
             TextButton(onClick = { editing = i }) { Text(tr("Editar")) }
             if (s.file.isNotEmpty()) TextButton(onClick = { vm.removeState(i) }) { Text(tr("Remover")) }
@@ -72,14 +68,14 @@ fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("{0} → {1}: corte {2} · aterro {3}", d.baseName, d.otherName, StationFormat.volume(d.cutVolume), StationFormat.volume(d.fillVolume)),
                 Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { vm.showStateDifference(d) }) { Text(tr("Ver mapa")) }
+            TextButton(onClick = { vm.showStateDifference(d); onMapShown() }) { Text(tr("Ver mapa")) }
         }
     }
     vm.stateTotal?.takeIf { vm.statePeriods.size > 1 }?.let { d ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("Acumulado {0} → {1}: corte {2} · aterro {3}", d.baseName, d.otherName, StationFormat.volume(d.cutVolume), StationFormat.volume(d.fillVolume)),
                 Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = { vm.showStateDifference(d) }) { Text(tr("Ver mapa")) }
+            TextButton(onClick = { vm.showStateDifference(d); onMapShown() }) { Text(tr("Ver mapa")) }
         }
     }
     editing?.let { i ->

@@ -70,7 +70,7 @@ fun CompareDialog(
         title = { Text(tr("Arquivos do projeto e comparação")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                StatesSection(vm, onAddState, onTimeline)
+                StatesSection(vm, onAddState, onTimeline, onMapShown = onDismiss)
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
@@ -85,7 +85,7 @@ fun CompareDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         // Files read from disk can be switched off; generated surfaces (road, platform) cannot.
                         if (uri != null) androidx.compose.material3.Checkbox(label !in vm.hiddenFiles, { vm.setFileVisible(label, it) })
-                        Text(label, Modifier.weight(1f), maxLines = 1)
+                        Text(vm.states.firstOrNull { it.file == label }?.name ?: label, Modifier.weight(1f), maxLines = 1)
                         OutlinedButton(onClick = { vm.removeFile(label) }) { Text(tr("Remover")) }
                     }
                 }
@@ -98,7 +98,9 @@ fun CompareDialog(
                 HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
                 Text(tr("Comparar superfícies"), style = MaterialTheme.typography.labelLarge)
-                if (names.size < 2) {
+                if (names.size < 2 && vm.activeState != null) {
+                    Text(tr("Só um estado está à vista. Toque em Mostrar todos para comparar superfícies, ou use Volumes entre estados."), style = MaterialTheme.typography.bodySmall)
+                } else if (names.size < 2) {
                     Text(tr("É preciso ter duas superfícies. Adicione um arquivo com outra superfície."), style = MaterialTheme.typography.bodySmall)
                 } else {
                     SurfacePicker(tr("A (base, terreno)"), names, base, onBase)

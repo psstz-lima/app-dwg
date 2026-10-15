@@ -123,6 +123,11 @@ fun RoadDialog(
                                 numField(rp.radius, tr("Raio ({0})", StationFormat.lengthUnit)) { rp = rp.copy(radius = it, radii = emptyList(), spirals = emptyList()) }
                                 numField(rp.spiral, tr("Espiral Ls ({0}, 0 = sem)", StationFormat.lengthUnit), 190) { rp = rp.copy(spiral = it, radii = emptyList(), spirals = emptyList()) }
                             }
+                            vm.shrunkRadii(rp).takeIf { it.isNotEmpty() }?.let { list ->
+                                Text(tr("Raio grande demais para as tangentes; reduzido para caber: {0}.",
+                                    list.joinToString(", ") { (n, r) -> "PI $n → ${StationFormat.length(r, 0)}" }),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            }
                             HorizontalDivider()
                             Text(tr("Traçado automático"), style = MaterialTheme.typography.labelLarge)
                             Text(tr("Marque só a saída e a chegada (o primeiro e o último PI). O app procura caminhos pelo terreno dentro da rampa máxima, com raio mínimo pela velocidade ({0} km/h, e máx. {1} %), desviando de construções e água do OSM baixado.",
