@@ -8,7 +8,6 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -1248,7 +1247,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Decodes a picture to at most [MAX_RASTER] pixels per side. TIFF goes through the app's own
-     * reader (Android has none); JPEG, PNG and WebP through the platform.
+     * reader (Android has none); JPEG, PNG and WebP go through Coil.
      */
     private fun decodeRaster(uri: Uri, task: LoadTask): ImageBitmap? = decodePicture(uri, task)?.image
 
@@ -1264,16 +1263,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             displayName(uri).endsWith(".jp2", ignoreCase = true) ->
                 error(tr("JPEG 2000 não é suportado. Converta para TIFF ou JPG"))
         }
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        input(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0) return null
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
+        val (width, height, mime) = CoilPictures.sizeOf { input(uri) } ?: return null
         task.step(tr("Decodificando imagem"))
-        val bitmap = input(uri)?.use {
-            BitmapDecode.decodeStream(it, BitmapDecode.configForMime(bounds.outMimeType), sample)
-        } ?: return null
-        return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
+        val data: Any = cloudCopies[uri]?.takeIf { it.isFile } ?: uri
+        val bitmap = CoilPictures.decode(getApplication(), data, MAX_RASTER, BitmapDecode.configForMime(mime)) ?: return null
+        return Picture(bitmap.asImageBitmap(), null, width, height)
     }
 
     /**

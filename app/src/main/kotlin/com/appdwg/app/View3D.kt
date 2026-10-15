@@ -1,7 +1,5 @@
 package com.appdwg.app
 
-import android.graphics.Bitmap
-import androidx.core.graphics.scale
 import android.opengl.GLES30
 import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
@@ -291,35 +289,55 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         drapeDirty = true
     }
 
-    /** Uploads the picture, scaled down when it exceeds what the GPU takes. */
+    /**
+     * Uploads the draped picture once, on this GL thread. A later frame does not upload again
+     * unless [setDrape] (or a new surface) marks it dirty.
+     */
     private fun uploadDrape() {
-        drapeDirty = false
+        val snapshot = drape
         if (drapeTexture != 0) {
             GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0)
             drapeTexture = 0
         }
-        val d = drape ?: return
-        val original = d.image.asAndroidBitmap()
-        var bitmap = original
-        val maxSize = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0].coerceAtLeast(2048)
-        if (bitmap.width > maxSize || bitmap.height > maxSize) {
-            val f = maxSize.toFloat() / max(bitmap.width, bitmap.height)
-            bitmap = bitmap.scale((bitmap.width * f).toInt().coerceAtLeast(1), (bitmap.height * f).toInt().coerceAtLeast(1), true)
-        }
+        var uploaded: android.graphics.Bitmap? = null
         try {
-            val ids = IntArray(1)
-            GLES30.glGenTextures(1, ids, 0)
-            drapeTexture = ids[0]
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
-            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
-            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
-            GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+            val source = snapshot?.image?.asAndroidBitmap()
+            if (source != null && !source.isRecycled) {
+                val reported = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0]
+                val maxSize = reported.takeIf { it > 0 } ?: 2048
+                val bitmap = GlTexture.copy(source, maxSize)
+                uploaded = bitmap
+                if (bitmap != null && !bitmap.isRecycled) {
+                    val ids = IntArray(1)
+                    GLES30.glGenTextures(1, ids, 0)
+                    drapeTexture = ids[0]
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
+                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+                    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+                    // RGB_565 and odd widths are not 4-byte aligned. ARGB_8888 is; alignment 1 covers both.
+                    GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+                    GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
+                    if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                        GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0)
+                        drapeTexture = 0
+                    } else {
+                        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+                    }
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.e("Gromatic", "textura 3D", e)
+            if (drapeTexture != 0) {
+                runCatching { GLES30.glDeleteTextures(1, intArrayOf(drapeTexture), 0) }
+                drapeTexture = 0
+            }
         } finally {
-            // The scaled copy is only the upload buffer. The drape's own bitmap stays with its ImageBitmap.
-            if (bitmap !== original) bitmap.recycle()
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+            uploaded?.let { if (!it.isRecycled) it.recycle() }
+            // One attempt per picture. A drape set while this ran stays dirty for the next frame.
+            if (drape === snapshot) drapeDirty = false
         }
     }
 
