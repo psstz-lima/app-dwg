@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,8 +26,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = {
-            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            FitRow(spacedBy = 12.dp) {
                 AppMark(Modifier.size(48.dp))
                 Text(tr("Sobre o Gromatic"))
             }
@@ -69,6 +69,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 Text(tr("Sistemas de coordenadas: catálogo por região (UTM, LTM, RTM, Lambert e geográficas), Transversa de Mercator pelas séries de Krüger; transformações de SAD69, SAD69(96) e Córrego Alegre para SIRGAS 2000 com os parâmetros do IBGE."), style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
     )
 }

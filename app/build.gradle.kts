@@ -14,8 +14,8 @@ android {
         applicationId = "app.gromatic"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.1.6"
+        versionCode = 8
+        versionName = "0.1.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Native debug symbols travel inside the AAB (Play Console "native code without debug symbols").
         ndk {
@@ -51,6 +51,10 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -103,4 +107,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     // Unit tests (Pro catalog and purchase JSON). 4.13.2 is the JUnit 4 line the Android test task runs.
     testImplementation("junit:junit:4.13.2")
+    testImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("org.robolectric:robolectric:4.15.1")
 }

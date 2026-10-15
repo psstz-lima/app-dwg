@@ -1,6 +1,8 @@
 package com.appdwg.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -70,26 +72,26 @@ fun CalibrationDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         title = { Text(stringResource(R.string.calib_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.calib_height), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(geo.heightMode == HeightMode.RECEIVER, { geo.changeMode(HeightMode.RECEIVER) }, { Text(stringResource(R.string.calib_height_receiver)) })
-                    FilterChip(geo.heightMode == HeightMode.GEOID_GRID, { geo.changeMode(HeightMode.GEOID_GRID) }, { Text(stringResource(R.string.calib_height_grid)) })
-                    FilterChip(geo.heightMode == HeightMode.FIXED_N, { geo.changeMode(HeightMode.FIXED_N) }, { Text(stringResource(R.string.calib_height_fixed)) })
+                    FilterChip(geo.heightMode == HeightMode.RECEIVER, { geo.changeMode(HeightMode.RECEIVER) }, { Text(stringResource(R.string.calib_height_receiver)) }, modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(geo.heightMode == HeightMode.GEOID_GRID, { geo.changeMode(HeightMode.GEOID_GRID) }, { Text(stringResource(R.string.calib_height_grid)) }, modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(geo.heightMode == HeightMode.FIXED_N, { geo.changeMode(HeightMode.FIXED_N) }, { Text(stringResource(R.string.calib_height_fixed)) }, modifier = Modifier.heightIn(min = 48.dp))
                 }
                 Text(stringResource(R.string.calib_height_hint), style = MaterialTheme.typography.bodySmall)
                 when (geo.heightMode) {
                     HeightMode.GEOID_GRID -> {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = onLoadGrid) { Text(stringResource(R.string.calib_load_grid)) }
+                        FitRow() {
+                            OutlinedButton(onClick = onLoadGrid, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.calib_load_grid)) }
                             geo.gridMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         }
                         Text(stringResource(R.string.calib_grid_hint), style = MaterialTheme.typography.bodySmall)
                     }
                     HeightMode.FIXED_N -> OutlinedTextField(nText, { t -> nText = t; StationFormat.parseLength(t)?.let { geo.changeFixedN(it) } },
-                        label = { Text(stringResource(R.string.calib_fixed_n, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(200.dp),
+                        label = { Text(stringResource(R.string.calib_fixed_n, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 200.dp).fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
                     HeightMode.RECEIVER -> {}
                 }
@@ -102,9 +104,9 @@ fun CalibrationDialog(
                 HorizontalDivider()
                 Text(stringResource(R.string.calib_pairs), style = MaterialTheme.typography.labelLarge)
                 Text(stringResource(R.string.calib_pairs_hint), style = MaterialTheme.typography.bodySmall)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     androidx.compose.foundation.layout.Box {
-                        OutlinedButton(onClick = { pickOpen = true }, enabled = known.isNotEmpty()) {
+                        OutlinedButton(onClick = { pickOpen = true }, enabled = known.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(picked?.let { "${it.number} · E ${StationFormat.lengthValue(it.x)} N ${StationFormat.lengthValue(it.y)} Z ${if (it.z.isNaN()) "—" else StationFormat.lengthValue(it.z)}" } ?: stringResource(R.string.calib_pick_point), maxLines = 1)
                         }
                         DropdownMenu(pickOpen, { pickOpen = false }) {
@@ -121,13 +123,13 @@ fun CalibrationDialog(
                             v.calibrationPairs = v.calibrationPairs.filter { it.name != p.number } +
                                 CalibrationPair(p.number, m, Point3(p.x, p.y, p.z), useVertical = !p.z.isNaN() && !m.z.isNaN())
                             picked = null
-                        },
+                        }, modifier = Modifier.heightIn(min = 48.dp)
                     ) { Text(stringResource(R.string.calib_measure)) }
                 }
                 if (fix == null) Text(stringResource(R.string.calib_no_fix), style = MaterialTheme.typography.bodySmall)
 
                 v.calibrationPairs.forEachIndexed { i, p ->
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FitRow(Modifier.fillMaxWidth(), spacedBy = 4.dp) {
                         Text(p.name, Modifier.width(70.dp), fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Checkbox(p.useHorizontal, { on -> v.calibrationPairs = v.calibrationPairs.toMutableList().also { it[i] = p.copy(useHorizontal = on) } })
                         Text(stringResource(R.string.calib_use_h))
@@ -137,7 +139,7 @@ fun CalibrationDialog(
                         val r = cal?.residual(p)
                         Text(if (r == null) "" else stringResource(R.string.calib_residual, n(StationFormat.toLength(r.x)), n(StationFormat.toLength(r.y)), n(StationFormat.toLength(r.z))),
                             Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = { v.calibrationPairs = v.calibrationPairs.filterIndexed { j, _ -> j != i } }) { Text(stringResource(R.string.calib_remove)) }
+                        OutlinedButton(onClick = { v.calibrationPairs = v.calibrationPairs.filterIndexed { j, _ -> j != i } }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.calib_remove)) }
                     }
                 }
 

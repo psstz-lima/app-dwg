@@ -111,7 +111,7 @@ val FieldDark = GTheme(
     topBar = Color(0xFF161D22), onTopBar = Color(0xFFE8EDF0), rail = Color(0xFF161D22), onRail = Color(0xFF8FA1AD),
     railActive = Color(0x24F2A93B), onRailActive = Color(0xFFF2A93B), footer = Color(0xFF161D22), onFooter = Color(0xFF8FA1AD),
     planBg = Color(0xFF11181C), contour = Color(0xFF2C3A43), contourMajor = Color(0xFF4A5F6C), axis = Color(0xFFF2A93B), points = Color(0xFFF2A93B),
-    radius = 10.dp, buttonRadius = 8.dp, floating = false, borderWidth = 1.dp, target = 44.dp, iconStroke = 1.8f, underlineTabs = false,
+    radius = 10.dp, buttonRadius = 8.dp, floating = false, borderWidth = 1.dp, target = 48.dp, iconStroke = 1.8f, underlineTabs = false,
     sans = Barlow, mono = JetBrainsMono,
     markContour = Color(0xFF7FD1AE), markTriangle = Color(0xFFE8EDF0), markAxis = Color(0xFFF2A93B),
 )
@@ -124,7 +124,7 @@ val Engineering = GTheme(
     topBar = Color.White, onTopBar = Color(0xFF15212B), rail = Color.White, onRail = Color(0xFF5B6B78),
     railActive = Color(0xFFE6EDF8), onRailActive = Color(0xFF1F4FA0), footer = Color.White, onFooter = Color(0xFF5B6B78),
     planBg = Color(0xFFFBFCFD), contour = Color(0xFFD3DBE3), contourMajor = Color(0xFFA9B7C4), axis = Color(0xFF1F4FA0), points = Color(0xFF1F4FA0),
-    radius = 6.dp, buttonRadius = 6.dp, floating = false, borderWidth = 1.dp, target = 44.dp, iconStroke = 1.7f, underlineTabs = true,
+    radius = 6.dp, buttonRadius = 6.dp, floating = false, borderWidth = 1.dp, target = 48.dp, iconStroke = 1.7f, underlineTabs = true,
     sans = PlexSans, mono = PlexMono,
     markContour = Color(0xFF2E8B6A), markTriangle = Color(0xFF15212B), markAxis = Color(0xFF1F4FA0),
 )
@@ -137,7 +137,7 @@ val Earth = GTheme(
     topBar = Color(0xFFEEEBE3), onTopBar = Color(0xFF26291C), rail = Color(0xFF26291C), onRail = Color(0xFFCFCBB8),
     railActive = Color(0xFFF0B27A), onRailActive = Color(0xFF26291C), footer = Color(0xFFEEEBE3), onFooter = Color(0xFF5F5E4F),
     planBg = Color(0xFFF7F4EC), contour = Color(0xFFDDD3BE), contourMajor = Color(0xFFB9AC8D), axis = Color(0xFFA9521A), points = Color(0xFF26291C),
-    radius = 20.dp, buttonRadius = 25.dp, floating = true, borderWidth = 0.dp, target = 44.dp, iconStroke = 1.8f, underlineTabs = false,
+    radius = 20.dp, buttonRadius = 25.dp, floating = true, borderWidth = 0.dp, target = 48.dp, iconStroke = 1.8f, underlineTabs = false,
     sans = Manrope, mono = DmMono,
     markContour = Color(0xFF9CC9A0), markTriangle = Color(0xFFF7F4EC), markAxis = Color(0xFFF0B27A),
 )

@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -62,16 +64,16 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
             OutlinedButton(onClick = {
                 vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
                 onDismiss()
-            }) { Text(tr("Salvar")) }
+            }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Salvar")) }
         },
         dismissButton = {
             Row {
                 if (isNew && onSaveAndNew != null) OutlinedButton(onClick = {
                     vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
                     onSaveAndNew()
-                }) { Text(tr("Salvar e nova")) }
-                if (!isNew) OutlinedButton(onClick = { vm.deleteNote(initial); onDismiss() }) { Text(tr("Apagar")) }
-                OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Salvar e nova")) }
+                if (!isNew) OutlinedButton(onClick = { vm.deleteNote(initial); onDismiss() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Apagar")) }
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Cancelar")) }
             }
         },
         title = { Text(if (isNew) tr("Nova anotação") else tr("Anotação {0}", initial.id)) },
@@ -79,15 +81,15 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("E ${StationFormat.lengthValue(initial.x)} · N ${StationFormat.lengthValue(initial.y)} · ${initial.time}", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(text, { text = it }, label = { Text(tr("Texto")) }, minLines = 2)
-                OutlinedTextField(z, { z = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(180.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(z, { z = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth())
+                FitRow() {
                     OutlinedButton(onClick = {
                         val f = vm.newPhotoFile()
                         pending = f
                         camera.launch(FileProvider.getUriForFile(context, context.packageName + ".notes", f))
-                    }) { Text(tr("Tirar foto")) }
-                    OutlinedButton(onClick = { gallery.launch("image/*") }) { Text(tr("Da galeria")) }
-                    if (photo != null) OutlinedButton(onClick = { photo = null }) { Text(tr("Remover foto")) }
+                    }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Tirar foto")) }
+                    OutlinedButton(onClick = { gallery.launch("image/*") }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Da galeria")) }
+                    if (photo != null) OutlinedButton(onClick = { photo = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Remover foto")) }
                 }
                 thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 260.dp)) }
             }
@@ -107,8 +109,8 @@ fun NoteCard(vm: ProjectViewModel, note: FieldNote, onEdit: () -> Unit, onClose:
                 style = MaterialTheme.typography.bodySmall)
             thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 220.dp)) }
             Row {
-                OutlinedButton(onClick = onEdit) { Text(tr("Editar")) }
-                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onEdit, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Editar")) }
+                OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
             }
         }
     }

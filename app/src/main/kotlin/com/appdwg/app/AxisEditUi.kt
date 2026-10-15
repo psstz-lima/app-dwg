@@ -5,6 +5,8 @@ import com.appdwg.core.tr
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
@@ -46,21 +48,21 @@ fun PiEditor(rp: RoadParams, i: Int, onChange: (RoadParams) -> Unit, onSelect: (
     val end = i == 0 || i == rp.pis.size - 1
     Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedButton(onClick = { onSelect(i - 1) }, enabled = i > 0) { Text("◀") }
+        OutlinedButton(onClick = { onSelect(i - 1) }, enabled = i > 0, modifier = Modifier.heightIn(min = 48.dp)) { Text("◀") }
         Text(tr("PI {0}", i + 1) + if (end) " · " + tr("início/fim, sem curva") else "", style = MaterialTheme.typography.labelLarge)
-        OutlinedButton(onClick = { onSelect(i + 1) }, enabled = i < rp.pis.size - 1) { Text("▶") }
+        OutlinedButton(onClick = { onSelect(i + 1) }, enabled = i < rp.pis.size - 1, modifier = Modifier.heightIn(min = 48.dp)) { Text("▶") }
         if (!end) {
             var r by remember(i, rp.radiusList()[i]) { mutableStateOf(StationFormat.lengthValue(rp.radiusList()[i], 1)) }
             var ls by remember(i, rp.spiralList()[i]) { mutableStateOf(StationFormat.lengthValue(rp.spiralList()[i], 1)) }
             OutlinedTextField(r, { t ->
                 r = t
                 StationFormat.number(t)?.takeIf { it > 0 }?.let { x -> onChange(rp.copy(radii = rp.radiusList().toMutableList().apply { set(i, StationFormat.fromLength(x)) })) }
-            }, label = { Text(tr("Raio ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(130.dp),
+            }, label = { Text(tr("Raio ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 130.dp).fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
             OutlinedTextField(ls, { t ->
                 ls = t
                 StationFormat.number(t)?.takeIf { it >= 0 }?.let { x -> onChange(rp.copy(spirals = rp.spiralList().toMutableList().apply { set(i, StationFormat.fromLength(x)) })) }
-            }, label = { Text(tr("Transição Ls ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(150.dp),
+            }, label = { Text(tr("Transição Ls ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 150.dp).fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
         }
         if (i < rp.pis.size - 1) OutlinedButton(onClick = {
@@ -70,12 +72,12 @@ fun PiEditor(rp: RoadParams, i: Int, onChange: (RoadParams) -> Unit, onSelect: (
                 radii = rp.radiusList().toMutableList().apply { add(i + 1, rp.radius) },
                 spirals = rp.spiralList().toMutableList().apply { add(i + 1, rp.spiral) }))
             onSelect(i + 1)
-        }) { Text(tr("Inserir PI depois")) }
+        }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Inserir PI depois")) }
         OutlinedButton(onClick = {
             onChange(rp.copy(pis = rp.pis.filterIndexed { k, _ -> k != i }, radii = rp.radiusList().filterIndexed { k, _ -> k != i },
                 spirals = rp.spiralList().filterIndexed { k, _ -> k != i }))
             onSelect(null)
-        }) { Text(tr("Apagar PI")) }
+        }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Apagar PI")) }
     }
 }
 
@@ -137,14 +139,14 @@ fun AlignmentElementsDialog(alignments: List<com.appdwg.core.Alignment>, onDismi
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.95f)),
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Elementos do eixo")) },
         text = {
             androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     alignments.forEachIndexed { i, al -> androidx.compose.material3.FilterChip(pick == i, { pick = i }, { Text(al.name) }) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FitRow(spacedBy = 6.dp) {
                     androidx.compose.material3.FilterChip(!vertical, { vertical = false }, { Text(tr("Horizontais")) })
                     androidx.compose.material3.FilterChip(vertical, { vertical = true }, { Text(tr("Verticais")) })
                 }
@@ -207,11 +209,11 @@ fun AxisDisplayDialog(v: ViewState, onDismiss: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         dismissButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { v.axisHidden = (AxisInfo.all - AxisInfo.STATIONS - AxisInfo.LINE).toSet() }) { Text(tr("Só estacas")) }
-                OutlinedButton(onClick = { v.axisHidden = emptySet() }) { Text(tr("Tudo")) }
+            FitRow(spacedBy = 6.dp) {
+                OutlinedButton(onClick = { v.axisHidden = (AxisInfo.all - AxisInfo.STATIONS - AxisInfo.LINE).toSet() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Só estacas")) }
+                OutlinedButton(onClick = { v.axisHidden = emptySet() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Tudo")) }
             }
         },
         title = { Text(tr("Exibir no eixo")) },

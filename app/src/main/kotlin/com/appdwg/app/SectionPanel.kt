@@ -11,6 +11,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -90,14 +92,14 @@ fun SectionPanel(
     // Taps on the panel must not reach the plan underneath.
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            FitRow(spacedBy = 4.dp) {
                 // Scrolls sideways on a narrow panel (phone) instead of squashing the controls.
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(tr("Seção"), style = MaterialTheme.typography.titleSmall)
                     if (alignmentNames.size > 1) {
                         var open by remember { mutableStateOf(false) }
-                        OutlinedButton(onClick = { open = true }) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
+                        OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             alignmentNames.forEachIndexed { i, n ->
                                 DropdownMenuItem(text = { Text(n) }, onClick = { onAlignment(i); open = false })
@@ -107,15 +109,15 @@ fun SectionPanel(
                         Text(alignmentNames.firstOrNull() ?: "", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                     }
                     // Steps land on whole 20 m stakes, so a station off a stake goes to the next one.
-                    OutlinedButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }) { Text("−20") }
+                    OutlinedButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("−20") }
                     StationField(station, onStation)
-                    OutlinedButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
+                    OutlinedButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("+20") }
                     Text(tr("Largura"), style = MaterialTheme.typography.labelMedium)
                     SECTION_WIDTHS.forEach { w ->
-                        FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±" + StationFormat.lengthValue(w, 0)) })
+                        FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±" + StationFormat.lengthValue(w, 0)) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                 }
-                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onClose, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
             }
             if (section == null) {
                 Text(tr("Sem seção nesta estaca."), Modifier.padding(16.dp))
@@ -139,7 +141,7 @@ private fun StationField(station: Double, onStation: (Double) -> Unit) {
         isError = StationFormat.parse(text) == null,
         // A hardware Enter applies the station and is consumed here, down and up, so the key-up
         // does not land on whatever takes focus next (it used to switch on Medir).
-        modifier = Modifier.width(140.dp).onPreviewKeyEvent { e ->
+        modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth().onPreviewKeyEvent { e ->
             if (e.key != Key.Enter && e.key != Key.NumPadEnter) return@onPreviewKeyEvent false
             if (e.type == KeyEventType.KeyDown) {
                 StationFormat.parse(text)?.let(onStation)

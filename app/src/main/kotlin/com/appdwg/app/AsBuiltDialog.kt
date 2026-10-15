@@ -3,6 +3,8 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -93,43 +95,43 @@ fun AsBuiltDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.asbuilt_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-        dismissButton = if (report != null) ({ OutlinedButton(onClick = { vm.clearAsBuilt() }) { Text(stringResource(R.string.asbuilt_clear)) } }) else null,
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
+        dismissButton = if (report != null) ({ OutlinedButton(onClick = { vm.clearAsBuilt() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.asbuilt_clear)) } }) else null,
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.asbuilt_intro), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.asbuilt_points), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(st.source == 0, { st.source = 0 }, { Text(stringResource(R.string.asbuilt_points_user, user.size)) })
+                    FilterChip(st.source == 0, { st.source = 0 }, { Text(stringResource(R.string.asbuilt_points_user, user.size)) }, modifier = Modifier.heightIn(min = 48.dp))
                     if (filePoints.isNotEmpty()) {
-                        FilterChip(st.source == 1, { st.source = 1 }, { Text(stringResource(R.string.asbuilt_points_file, filePoints.size)) })
-                        FilterChip(st.source == 2, { st.source = 2 }, { Text(stringResource(R.string.asbuilt_points_all, user.size + filePoints.size)) })
+                        FilterChip(st.source == 1, { st.source = 1 }, { Text(stringResource(R.string.asbuilt_points_file, filePoints.size)) }, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(st.source == 2, { st.source = 2 }, { Text(stringResource(R.string.asbuilt_points_all, user.size + filePoints.size)) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
-                    OutlinedButton(onClick = onImport) { Text(stringResource(R.string.asbuilt_import)) }
-                    onImportDrive?.let { OutlinedButton(onClick = it) { Text(tr("☁ Google Drive")) } }
+                    OutlinedButton(onClick = onImport, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.asbuilt_import)) }
+                    onImportDrive?.let { OutlinedButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("☁ Google Drive")) } }
                 }
                 Text(stringResource(R.string.asbuilt_design), style = MaterialTheme.typography.labelLarge)
                 if (surfaces.isEmpty()) Text(stringResource(R.string.asbuilt_no_surface), style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    surfaces.forEach { n -> FilterChip(n == surfaceName, { st.surface = n }, { Text(n) }) }
+                    surfaces.forEach { n -> FilterChip(n == surfaceName, { st.surface = n }, { Text(n) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 if (project.alignments.isNotEmpty()) {
                     Text(stringResource(R.string.asbuilt_alignment), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(st.alignment == null, { st.alignment = null }, { Text(stringResource(R.string.asbuilt_none)) })
-                        project.alignments.forEach { a -> FilterChip(st.alignment == a.name, { st.alignment = a.name }, { Text(a.name) }) }
+                        FilterChip(st.alignment == null, { st.alignment = null }, { Text(stringResource(R.string.asbuilt_none)) }, modifier = Modifier.heightIn(min = 48.dp))
+                        project.alignments.forEach { a -> FilterChip(st.alignment == a.name, { st.alignment = a.name }, { Text(a.name) }, modifier = Modifier.heightIn(min = 48.dp)) }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FitRow(spacedBy = 12.dp) {
                     OutlinedTextField(st.toleranceCm, { st.toleranceCm = it }, label = { Text(stringResource(R.string.asbuilt_tolerance, if (com.appdwg.core.Display.imperial) "in" else "cm")) },
-                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(170.dp),
+                        singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.widthIn(max = 170.dp).fillMaxWidth(),
                         isError = tolerance == null)
                     OutlinedButton(
                         onClick = {
                             val s = project.surfaces.firstOrNull { it.name == surfaceName } ?: return@OutlinedButton
                             vm.checkAsBuilt(points, s, project.alignments.firstOrNull { it.name == st.alignment }, tolerance ?: return@OutlinedButton)
                         },
-                        enabled = points.isNotEmpty() && surfaceName != null && tolerance != null,
+                        enabled = points.isNotEmpty() && surfaceName != null && tolerance != null, modifier = Modifier.heightIn(min = 48.dp)
                     ) { Text(stringResource(R.string.asbuilt_check)) }
                 }
                 if (points.isEmpty()) Text(stringResource(R.string.asbuilt_no_points), style = MaterialTheme.typography.bodySmall)
@@ -147,16 +149,16 @@ fun AsBuiltDialog(
                     Text(stringResource(R.string.asbuilt_stats, len(report.mean), len(report.rms), len(report.stdDev), len(report.min), len(report.max)),
                         style = MaterialTheme.typography.bodySmall)
                     Text(stringResource(R.string.asbuilt_sign), style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onCsv) { Text(stringResource(R.string.asbuilt_csv)) }
-                        OutlinedButton(onClick = onPdf) { Text(stringResource(R.string.asbuilt_pdf)) }
+                    FitRow() {
+                        OutlinedButton(onClick = onCsv, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.asbuilt_csv)) }
+                        OutlinedButton(onClick = onPdf, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.asbuilt_pdf)) }
                     }
                     vm.exportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     Spacer(Modifier.height(4.dp))
                     // Worst first: the points that need attention.
                     report.rows.sortedByDescending { it.delta?.let { d -> kotlin.math.abs(d) } ?: -1.0 }.take(200).forEach { r ->
                         val s = report.status(r)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FitRow(Modifier.fillMaxWidth()) {
                             Text(r.point.number, Modifier.width(56.dp), maxLines = 1, style = MaterialTheme.typography.bodySmall)
                             Text(r.stationOffset?.let { StationFormat.estaca(it.station) } ?: "", Modifier.width(90.dp), maxLines = 1, style = MaterialTheme.typography.bodySmall)
                             Text(r.delta?.let { (if (it > 0) "+" else "") + StationFormat.length(it, 3) } ?: "—", Modifier.width(90.dp),

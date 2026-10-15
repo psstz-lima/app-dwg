@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,7 +45,7 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
         // Wide, so the matrix fits on a tablet.
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Comparação cruzada")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -59,15 +60,15 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                         Text(if (i >= 0) "${i + 1}." else "", Modifier.width(28.dp))
                         Text(s.name, Modifier.weight(1f), maxLines = 1)
                         if (i >= 0) {
-                            OutlinedButton(onClick = { vm.moveCross(s.name, -1) }, enabled = i > 0) { Text("↑") }
-                            OutlinedButton(onClick = { vm.moveCross(s.name, 1) }, enabled = i < marked.size - 1) { Text("↓") }
+                            OutlinedButton(onClick = { vm.moveCross(s.name, -1) }, enabled = i > 0, modifier = Modifier.heightIn(min = 48.dp)) { Text("↑") }
+                            OutlinedButton(onClick = { vm.moveCross(s.name, 1) }, enabled = i < marked.size - 1, modifier = Modifier.heightIn(min = 48.dp)) { Text("↓") }
                         }
                     }
                 }
                 Row {
-                    OutlinedButton(onClick = { vm.computeMatrix() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text(tr("Calcular matriz")) }
+                    OutlinedButton(onClick = { vm.computeMatrix() }, enabled = marked.size >= 2 && vm.tasks.isEmpty(), modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Calcular matriz")) }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { vm.computeStages() }, enabled = marked.size >= 2 && vm.tasks.isEmpty()) { Text(tr("Calcular etapas")) }
+                    OutlinedButton(onClick = { vm.computeStages() }, enabled = marked.size >= 2 && vm.tasks.isEmpty(), modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Calcular etapas")) }
                 }
                 TaskProgress(vm)
                 vm.compareMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

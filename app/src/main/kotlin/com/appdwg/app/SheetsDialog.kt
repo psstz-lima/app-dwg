@@ -1,6 +1,7 @@
 package com.appdwg.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -63,30 +64,30 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         title = { Text(stringResource(R.string.sh_title)) },
-        dismissButton = { OutlinedButton(onClick = { v.sheetParams = keep(); onDismiss() }) { Text(stringResource(R.string.close)) } },
+        dismissButton = { OutlinedButton(onClick = { v.sheetParams = keep(); onDismiss() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
         confirmButton = {
             OutlinedButton(enabled = axis != null, onClick = {
                 val q = keep().copy(alignment = axisName, from = StationFormat.parse(fromText), to = StationFormat.parse(toText))
                 v.sheetParams = q; onMake(q)
-            }) { Text(stringResource(R.string.sh_make)) }
+            }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.sh_make)) }
         },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.sh_hint), style = MaterialTheme.typography.bodySmall)
                 Text(stringResource(R.string.sh_alignment), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    names.forEach { n -> FilterChip(n == axisName, { p = p.copy(alignment = n, from = null, to = null) }, { Text(axisLabel(n)) }) }
+                    names.forEach { n -> FilterChip(n == axisName, { p = p.copy(alignment = n, from = null, to = null) }, { Text(axisLabel(n)) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 if (names.isEmpty()) Text(tr("O projeto não tem eixo. Desenhe os PIs ou gere um eixo automático pelo meio da área medida."), style = MaterialTheme.typography.bodySmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { v.sheetParams = keep(); onDrawAxis() }) { Text(tr("Desenhar eixo")) }
-                    if (v.roadParams.pis.isEmpty()) OutlinedButton(onClick = { if (vm.generateAutoAxis()) p = p.copy(alignment = PIS_AXIS, from = null, to = null) }) { Text(tr("Gerar eixo automático")) }
+                    OutlinedButton(onClick = { v.sheetParams = keep(); onDrawAxis() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desenhar eixo")) }
+                    if (v.roadParams.pis.isEmpty()) OutlinedButton(onClick = { if (vm.generateAutoAxis()) p = p.copy(alignment = PIS_AXIS, from = null, to = null) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Gerar eixo automático")) }
                 }
                 if (vm.states.size >= 2) {
                     Text(tr("Medição"), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(p.measurement, { p = p.copy(measurement = !p.measurement) }, { Text(tr("Perfis dos estados ({0})", vm.states.size)) })
-                        FilterChip(p.complete, { p = p.copy(complete = !p.complete) }, { Text(tr("Completar onde a medição não alcança")) }, enabled = p.measurement)
+                        FilterChip(p.measurement, { p = p.copy(measurement = !p.measurement) }, { Text(tr("Perfis dos estados ({0})", vm.states.size)) }, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(p.complete, { p = p.copy(complete = !p.complete) }, { Text(tr("Completar onde a medição não alcança")) }, enabled = p.measurement, modifier = Modifier.heightIn(min = 48.dp))
                     }
                     if (p.measurement) Text(tr("Cada seção traz os perfis de {0}, as áreas de corte e aterro entre eles e, no fim, o quadro de volumes.",
                         vm.states.joinToString(", ") { it.name }), style = MaterialTheme.typography.bodySmall)
@@ -102,15 +103,15 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
                 }
                 Text(stringResource(R.string.sh_paper), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("A3", "A4").forEach { f -> FilterChip(p.paper == f, { p = p.copy(paper = f) }, { Text(f) }) }
+                    listOf("A3", "A4").forEach { f -> FilterChip(p.paper == f, { p = p.copy(paper = f) }, { Text(f) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 Text(stringResource(R.string.sh_scale), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(100, 200, 250, 500).forEach { s -> FilterChip(p.scale == s, { p = p.copy(scale = s) }, { Text("1:$s") }) }
+                    listOf(100, 200, 250, 500).forEach { s -> FilterChip(p.scale == s, { p = p.copy(scale = s) }, { Text("1:$s") }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 Text(stringResource(R.string.sh_exag), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(1, 2, 5, 10).forEach { e -> FilterChip(p.exaggeration == e, { p = p.copy(exaggeration = e) }, { Text("×$e") }) }
+                    listOf(1, 2, 5, 10).forEach { e -> FilterChip(p.exaggeration == e, { p = p.copy(exaggeration = e) }, { Text("×$e") }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 HorizontalDivider()
                 Text(stringResource(R.string.sh_block), style = MaterialTheme.typography.labelLarge)
@@ -123,8 +124,8 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(if (v.sheetParams.logo != null) tr("Logo escolhido") else tr("Sem logo"), Modifier.padding(top = 12.dp))
-                    OutlinedButton(onClick = onPickLogo) { Text(tr("Escolher logo")) }
-                    if (v.sheetParams.logo != null) OutlinedButton(onClick = { vm.setSheetLogo(null) }) { Text(tr("Remover")) }
+                    OutlinedButton(onClick = onPickLogo, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Escolher logo")) }
+                    if (v.sheetParams.logo != null) OutlinedButton(onClick = { vm.setSheetLogo(null) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Remover")) }
                 }
                 TaskProgress(vm)
                 vm.exportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

@@ -3,6 +3,8 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -154,83 +156,83 @@ fun GeneratePointsDialog(
                     val (pts, why) = generatePoints(g, project, existing, viewport)
                     g.preview = pts.orEmpty(); g.message = why
                     if (pts != null) onPreview()
-                }) { Text(tr("Pré-visualizar")) }
-                OutlinedButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }) { Text(tr("Criar {0} pontos", g.preview.size)) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Pré-visualizar")) }
+                OutlinedButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Criar {0} pontos", g.preview.size)) }
             }
         },
-        dismissButton = { OutlinedButton(onClick = { g.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
+        dismissButton = { OutlinedButton(onClick = { g.preview = emptyList(); onDismiss() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Gerar pontos (camada _POINTS)")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = !g.grid, onClick = { g.grid = false; g.preview = emptyList() }, label = { Text(tr("Sobre linha")) })
-                    FilterChip(selected = g.grid, onClick = { g.grid = true; g.preview = emptyList(); if (g.zSource == ZSource.LINE) g.zSource = ZSource.SURFACE }, label = { Text(tr("Malha")) })
+                FitRow() {
+                    FilterChip(selected = !g.grid, onClick = { g.grid = false; g.preview = emptyList() }, label = { Text(tr("Sobre linha")) }, modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(selected = g.grid, onClick = { g.grid = true; g.preview = emptyList(); if (g.zSource == ZSource.LINE) g.zSource = ZSource.SURFACE }, label = { Text(tr("Malha")) }, modifier = Modifier.heightIn(min = 48.dp))
                 }
                 if (!g.grid) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { onPick(GenPick.LINE) }) { Text(if (g.line == null) tr("Tocar na linha") else tr("Trocar linha")) }
+                    FitRow() {
+                        OutlinedButton(onClick = { onPick(GenPick.LINE) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (g.line == null) tr("Tocar na linha") else tr("Trocar linha")) }
                         Text(when (val l = g.line) {
                             null -> tr("nenhuma linha escolhida")
                             is LineRef.Axis -> tr("Eixo {0}", project.alignments.getOrNull(l.index)?.name)
                             is LineRef.Drawing -> project.polylines.getOrNull(l.index)?.let { tr("Linha na camada {0}", it.layer) + if (it.zs != null) " (3D)" else "" } ?: "?"
                         }, style = MaterialTheme.typography.bodyMedium)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(g.spacing, { g.spacing = it }, label = { Text(tr("Distância entre pontos ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
-                        OutlinedTextField(g.offsets, { g.offsets = it }, label = { Text(tr("Offsets (+D / −E), ex.: -3,5; 0; 3,5")) }, singleLine = true, modifier = Modifier.width(330.dp), keyboardOptions = text)
+                    FitRow() {
+                        OutlinedTextField(g.spacing, { g.spacing = it }, label = { Text(tr("Distância entre pontos ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 220.dp).fillMaxWidth(), keyboardOptions = text)
+                        OutlinedTextField(g.offsets, { g.offsets = it }, label = { Text(tr("Offsets (+D / −E), ex.: -3,5; 0; 3,5")) }, singleLine = true, modifier = Modifier.widthIn(max = 330.dp).fillMaxWidth(), keyboardOptions = text)
                         Checkbox(checked = g.includeVertices, onCheckedChange = { g.includeVertices = it })
                         Text(tr("Incluir vértices"), style = MaterialTheme.typography.bodySmall)
                     }
                     if (g.line is LineRef.Axis) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(g.from, { g.from = it }, label = { Text(tr("Estaca inicial (opcional)")) }, singleLine = true, modifier = Modifier.width(220.dp))
-                            OutlinedTextField(g.to, { g.to = it }, label = { Text(tr("Estaca final (opcional)")) }, singleLine = true, modifier = Modifier.width(220.dp))
+                        FitRow() {
+                            OutlinedTextField(g.from, { g.from = it }, label = { Text(tr("Estaca inicial (opcional)")) }, singleLine = true, modifier = Modifier.widthIn(max = 220.dp).fillMaxWidth())
+                            OutlinedTextField(g.to, { g.to = it }, label = { Text(tr("Estaca final (opcional)")) }, singleLine = true, modifier = Modifier.widthIn(max = 220.dp).fillMaxWidth())
                         }
                     }
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        GridArea.entries.forEach { a -> FilterChip(selected = g.area == a, onClick = { g.area = a }, label = { Text(a.label) }) }
+                    FitRow(spacedBy = 6.dp) {
+                        GridArea.entries.forEach { a -> FilterChip(selected = g.area == a, onClick = { g.area = a }, label = { Text(a.label) }, modifier = Modifier.heightIn(min = 48.dp)) }
                     }
                     when (g.area) {
-                        GridArea.DRAWN -> OutlinedButton(onClick = { onPick(GenPick.AREA_DRAW) }) {
+                        GridArea.DRAWN -> OutlinedButton(onClick = { onPick(GenPick.AREA_DRAW) }, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(if (g.drawnArea.size >= 3) tr("Redesenhar polígono ({0} vértices)", g.drawnArea.size) else tr("Desenhar polígono na planta"))
                         }
-                        GridArea.LINE -> OutlinedButton(onClick = { onPick(GenPick.AREA_LINE) }) {
+                        GridArea.LINE -> OutlinedButton(onClick = { onPick(GenPick.AREA_LINE) }, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(if (g.areaLine == null) tr("Tocar na polilinha fechada") else tr("Trocar polilinha"))
                         }
                         else -> {}
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(g.dx, { g.dx = it }, label = { Text(tr("Espaçamento X ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
-                        OutlinedTextField(g.dy, { g.dy = it }, label = { Text(tr("Espaçamento Y ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
-                        OutlinedTextField(g.rotation, { g.rotation = it }, label = { Text(tr("Rotação (°)")) }, singleLine = true, modifier = Modifier.width(130.dp), keyboardOptions = text)
-                        OutlinedButton(onClick = { onPick(GenPick.ROTATION) }) { Text(tr("Alinhar a uma linha")) }
+                    FitRow() {
+                        OutlinedTextField(g.dx, { g.dx = it }, label = { Text(tr("Espaçamento X ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 170.dp).fillMaxWidth(), keyboardOptions = text)
+                        OutlinedTextField(g.dy, { g.dy = it }, label = { Text(tr("Espaçamento Y ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 170.dp).fillMaxWidth(), keyboardOptions = text)
+                        OutlinedTextField(g.rotation, { g.rotation = it }, label = { Text(tr("Rotação (°)")) }, singleLine = true, modifier = Modifier.widthIn(max = 130.dp).fillMaxWidth(), keyboardOptions = text)
+                        OutlinedButton(onClick = { onPick(GenPick.ROTATION) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Alinhar a uma linha")) }
                     }
                 }
                 HorizontalDivider()
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                FitRow(spacedBy = 6.dp) {
                     Text(tr("Cota"), Modifier.width(50.dp))
                     ZSource.entries.forEach { z ->
                         if (z == ZSource.LINE && (g.grid || path?.zs == null)) return@forEach
-                        FilterChip(selected = g.zSource == z, onClick = { g.zSource = z }, label = { Text(z.label) })
+                        FilterChip(selected = g.zSource == z, onClick = { g.zSource = z }, label = { Text(z.label) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                     if (g.zSource == ZSource.SURFACE || (g.grid && g.area == GridArea.SURFACE)) {
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
-                            OutlinedButton(onClick = { open = true }) { Text(g.surface ?: names.firstOrNull() ?: tr("sem superfície"), maxLines = 1) }
+                            OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(g.surface ?: names.firstOrNull() ?: tr("sem superfície"), maxLines = 1) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { g.surface = n; open = false }) }
                             }
                         }
                     }
                     if (g.zSource == ZSource.FIXED) {
-                        OutlinedTextField(g.fixedZ, { g.fixedZ = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(140.dp), keyboardOptions = text)
+                        OutlinedTextField(g.fixedZ, { g.fixedZ = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth(), keyboardOptions = text)
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(g.refHeight, { g.refHeight = it }, label = { Text(tr("Altura referencial (+/− {0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(220.dp), keyboardOptions = text)
-                    OutlinedTextField(g.prefix, { g.prefix = it }, label = { Text(tr("Prefixo da descrição")) }, singleLine = true, modifier = Modifier.width(220.dp))
+                FitRow() {
+                    OutlinedTextField(g.refHeight, { g.refHeight = it }, label = { Text(tr("Altura referencial (+/− {0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 220.dp).fillMaxWidth(), keyboardOptions = text)
+                    OutlinedTextField(g.prefix, { g.prefix = it }, label = { Text(tr("Prefixo da descrição")) }, singleLine = true, modifier = Modifier.widthIn(max = 220.dp).fillMaxWidth())
                 }
                 Text(tr("Numeração continua a partir do ponto {0}.", PointFile.nextNumber(existing)), style = MaterialTheme.typography.bodySmall)
                 g.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

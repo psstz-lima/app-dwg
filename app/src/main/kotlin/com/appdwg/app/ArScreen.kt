@@ -125,6 +125,7 @@ fun ArScreen(
     if (!cameraOk || !locationOk) {
         if (explain) {
             AlertDialog(
+                modifier = Modifier.safeBars(),
                 onDismissRequest = onClose,
                 title = { Text(tr("Câmera e localização")) },
                 text = { Text(tr("A realidade aumentada usa a câmera para mostrar o terreno e a localização para posicioná-lo. O Gromatic não grava vídeo nem envia a posição.")) },
@@ -137,6 +138,7 @@ fun ArScreen(
             )
         } else {
             AlertDialog(
+                modifier = Modifier.safeBars(),
                 onDismissRequest = onClose,
                 title = { Text(tr("Permissão necessária")) },
                 text = { Text(tr("Sem a câmera e a localização a vista aumentada não abre. Você pode permitir nas configurações do Android.")) },
@@ -183,7 +185,7 @@ fun ArScreen(
                 },
                 color = Color.White,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FitRow() {
                 GButton(tr("Calibrar"), { if (origin != null) picking = origin }, enabled = origin != null)
                 if (controls.isNotEmpty()) GButton(tr("Limpar"), { onControls(emptyList()) })
                 GButton(tr("Fechar"), onClose)
@@ -192,6 +194,7 @@ fun ArScreen(
         picking?.let { observed ->
             val names = (project.cgPoints.map { it.name to it.position } + userPoints.map { it.number to Point3(it.x, it.y, it.z) }).take(40)
             AlertDialog(
+                modifier = Modifier.safeBars(),
                 onDismissRequest = { picking = null },
                 title = { Text(tr("Você está sobre qual ponto?")) },
                 text = {

@@ -4,6 +4,7 @@ import com.appdwg.core.tr
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -60,11 +61,11 @@ fun CompareDialog(
     AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                OutlinedButton(onClick = onAddFile) { Text(tr("Adicionar arquivos")) }
-                onAddDrive?.let { OutlinedButton(onClick = it) { Text(tr("☁ Google Drive")) } }
+                OutlinedButton(onClick = onAddFile, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Adicionar arquivos")) }
+                onAddDrive?.let { OutlinedButton(onClick = it, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("☁ Google Drive")) } }
             }
         },
         title = { Text(tr("Arquivos do projeto e comparação")) },
@@ -86,7 +87,7 @@ fun CompareDialog(
                         // Files read from disk can be switched off; generated surfaces (road, platform) cannot.
                         if (uri != null) androidx.compose.material3.Checkbox(label !in vm.hiddenFiles, { vm.setFileVisible(label, it) })
                         Text(vm.states.firstOrNull { it.file == label }?.name ?: label, Modifier.weight(1f), maxLines = 1)
-                        OutlinedButton(onClick = { vm.removeFile(label) }) { Text(tr("Remover")) }
+                        OutlinedButton(onClick = { vm.removeFile(label) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Remover")) }
                     }
                 }
                 TaskProgress(vm)
@@ -108,11 +109,11 @@ fun CompareDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedButton(
                             onClick = { if (base != null && other != null) vm.compare(base, other) },
-                            enabled = base != null && other != null && base != other && vm.tasks.isEmpty(),
+                            enabled = base != null && other != null && base != other && vm.tasks.isEmpty(), modifier = Modifier.heightIn(min = 48.dp)
                         ) { Text(tr("Calcular B − A")) }
-                        if (vm.difference != null) OutlinedButton(onClick = { vm.clearDifference() }) { Text(tr("Limpar")) }
+                        if (vm.difference != null) OutlinedButton(onClick = { vm.clearDifference() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Limpar")) }
                     }
-                    OutlinedButton(onClick = onCross) { Text(tr("Comparação cruzada e por etapas…")) }
+                    OutlinedButton(onClick = onCross, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Comparação cruzada e por etapas…")) }
                 }
                 vm.difference?.let { d ->
                     Spacer(Modifier.height(8.dp))
@@ -133,7 +134,7 @@ private fun SurfacePicker(label: String, names: List<String>, selected: String?,
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.width(200.dp), style = MaterialTheme.typography.bodyMedium)
         Box {
-            OutlinedButton(onClick = { open = true }) { Text(selected ?: tr("Escolher"), maxLines = 1) }
+            OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(selected ?: tr("Escolher"), maxLines = 1) }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { onSelect(n); open = false }) }
             }

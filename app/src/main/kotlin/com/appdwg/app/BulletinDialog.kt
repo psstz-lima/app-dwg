@@ -1,6 +1,8 @@
 package com.appdwg.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -86,14 +88,14 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.96f)),
         title = { Text(stringResource(R.string.bm_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     OutlinedTextField(v.bulletinNumber, { v.bulletinNumber = it }, label = { Text(stringResource(R.string.bm_number)) }, singleLine = true,
-                        modifier = Modifier.width(140.dp))
+                        modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth())
                     OutlinedTextField(v.bulletinPeriod, { v.bulletinPeriod = it }, label = { Text(stringResource(R.string.bm_period)) }, singleLine = true,
-                        modifier = Modifier.width(260.dp))
+                        modifier = Modifier.widthIn(max = 260.dp).fillMaxWidth())
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(enabled = vm.road != null, onClick = {
@@ -102,7 +104,7 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                         v.bulletinItems = bulletinFromRoad(ctx, vm, v.roadParams.swell).map { n ->
                             old[n.description]?.copy(contracted = n.contracted) ?: n
                         } + items.filter { o -> o.description !in bulletinFromRoad(ctx, vm, v.roadParams.swell).map { it.description } }
-                    }) { Text(stringResource(R.string.bm_from_road)) }
+                    }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_from_road)) }
                     OutlinedButton(onClick = {
                         val p = vm.stageProgress?.periods?.lastOrNull()
                         if (p == null) note = stagesNone else {
@@ -119,12 +121,12 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                                 }
                             }
                         }
-                    }) { Text(stringResource(R.string.bm_from_stages)) }
-                    OutlinedButton(onClick = { v.bulletinItems = items + BulletinItem("", StationFormat.volumeUnit) }) { Text(stringResource(R.string.bm_add)) }
+                    }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_from_stages)) }
+                    OutlinedButton(onClick = { v.bulletinItems = items + BulletinItem("", StationFormat.volumeUnit) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_add)) }
                     OutlinedButton(enabled = items.any { it.period != 0.0 }, onClick = {
                         v.bulletinItems = items.map { it.copy(previous = it.accumulated, period = 0.0) }
                         v.bulletinNumber = ((v.bulletinNumber.trim().toIntOrNull() ?: 0) + 1).toString()
-                    }) { Text(stringResource(R.string.bm_close_period)) }
+                    }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_close_period)) }
                 }
                 note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (items.isEmpty()) Text(stringResource(R.string.bm_empty), style = MaterialTheme.typography.bodySmall)
@@ -135,8 +137,8 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                                 OutlinedTextField(it.description, { d -> set(i, it.copy(description = d)) }, label = { Text(stringResource(R.string.bm_desc)) },
                                     singleLine = true, modifier = Modifier.weight(1f), textStyle = MaterialTheme.typography.bodySmall)
                                 OutlinedTextField(it.unit, { u -> set(i, it.copy(unit = u)) }, label = { Text(stringResource(R.string.bm_unit)) },
-                                    singleLine = true, modifier = Modifier.width(80.dp), textStyle = MaterialTheme.typography.bodySmall)
-                                OutlinedButton(onClick = { v.bulletinItems = items.filterIndexed { j, _ -> j != i } }) { Text(stringResource(R.string.bm_remove)) }
+                                    singleLine = true, modifier = Modifier.widthIn(max = 80.dp).fillMaxWidth(), textStyle = MaterialTheme.typography.bodySmall)
+                                OutlinedButton(onClick = { v.bulletinItems = items.filterIndexed { j, _ -> j != i } }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_remove)) }
                             }
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 NumField(it.contracted, stringResource(R.string.bm_contracted), 150.dp) { x -> set(i, it.copy(contracted = x)) }
@@ -156,9 +158,9 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                     val acc = items.sumOf { it.accumulatedValue }; val con = items.sumOf { it.contractedValue }
                     Text(stringResource(R.string.bm_totals, money(items.sumOf { it.periodValue }), money(acc), money(con),
                         StationFormat.decimal(if (con > 0) acc / con * 100 else 0.0, 1)), fontWeight = FontWeight.SemiBold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = onPdf) { Text(stringResource(R.string.bm_pdf)) }
-                        OutlinedButton(onClick = onCsv) { Text(stringResource(R.string.bm_csv)) }
+                    FitRow() {
+                        OutlinedButton(onClick = onPdf, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_pdf)) }
+                        OutlinedButton(onClick = onCsv, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_csv)) }
                     }
                     vm.exportMessage?.let { m -> Text(m, style = MaterialTheme.typography.bodySmall) }
                 }

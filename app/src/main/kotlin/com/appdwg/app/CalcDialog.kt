@@ -3,6 +3,8 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -69,7 +71,7 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
     @Composable
     fun pointField(v: String, set: (String) -> Unit, label: String) {
         val r = resolve(v, project, pts)
-        OutlinedTextField(v, set, label = { Text(label) }, singleLine = true, modifier = Modifier.width(240.dp), isError = v.isNotBlank() && r == null,
+        OutlinedTextField(v, set, label = { Text(label) }, singleLine = true, modifier = Modifier.widthIn(max = 240.dp).fillMaxWidth(), isError = v.isNotBlank() && r == null,
             supportingText = { Text(r?.let { "E ${f3(it.first.x)} N ${f3(it.first.y)}" } ?: tr("nº do ponto ou \"E N\"")) })
     }
     @Composable
@@ -78,13 +80,13 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
     @Composable
     fun results(points: List<Point2>) {
         points.forEachIndexed { i, p ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FitRow() {
                 Text(tr("Ponto{0}: E {1} · N {2}", if (points.size > 1) " ${i + 1}" else "", f3(p.x), f3(p.y)), style = MaterialTheme.typography.bodyLarge)
                 OutlinedButton(onClick = {
                     val n = PointFile.nextNumber(vm.userPoints)
                     vm.savePoint(null, CogoPoint(n, "CALC", p.x, p.y, project.surfaces.firstNotNullOfOrNull { it.elevationAt(p) } ?: Double.NaN))
                     created = tr("Ponto {0} criado na camada _POINTS.", n)
-                }) { Text(tr("Criar ponto _POINTS")) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Criar ponto _POINTS")) }
             }
         }
         if (points.isEmpty()) Text(tr("Sem solução com esses valores."), style = MaterialTheme.typography.bodySmall)
@@ -93,16 +95,16 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.9f)),
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Cálculos de campo")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    CalcTab.entries.forEach { t -> FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) }) }
+                    CalcTab.entries.forEach { t -> FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 when (tab) {
                     CalcTab.INVERSE -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { pointField(pa, { pa = it }, tr("De (A)")); pointField(pb, { pb = it }, tr("Para (B)")) }
+                        FitRow() { pointField(pa, { pa = it }, tr("De (A)")); pointField(pb, { pb = it }, tr("Para (B)")) }
                         val a = resolve(pa, project, pts); val b = resolve(pb, project, pts)
                         if (a != null && b != null) {
                             val za = a.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(a.first) }
@@ -114,7 +116,7 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                         }
                     }
                     CalcTab.RADIATE -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FitRow() {
                             pointField(pa, { pa = it }, tr("Estação")); field(az, { az = it }, tr("Azimute (°)")); field(dist, { dist = it }, tr("Distância ({0})", StationFormat.lengthUnit))
                         }
                         val a = resolve(pa, project, pts); val z = num(az); val d = len(dist)
@@ -123,14 +125,14 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                     CalcTab.INTERSECT -> {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(tr("Azimute × azimute"), tr("Distância × distância"), tr("Azimute × distância")).forEachIndexed { i, l ->
-                                FilterChip(selected = mode == i, onClick = { mode = i }, label = { Text(l) })
+                                FilterChip(selected = mode == i, onClick = { mode = i }, label = { Text(l) }, modifier = Modifier.heightIn(min = 48.dp))
                             }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FitRow() {
                             pointField(pa, { pa = it }, tr("Ponto A"))
                             if (mode == 1) field(dist, { dist = it }, tr("Distância de A")) else field(az, { az = it }, tr("Azimute de A (°)"))
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FitRow() {
                             pointField(pb, { pb = it }, tr("Ponto B"))
                             if (mode == 0) field(az2, { az2 = it }, tr("Azimute de B (°)")) else field(dist2, { dist2 = it }, tr("Distância de B"))
                         }

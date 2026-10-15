@@ -3,6 +3,8 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -137,27 +139,27 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
         onDismissRequest = { v.basinParams = params(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
-        confirmButton = { OutlinedButton(onClick = { v.basinParams = params(); onDismiss() }) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = { v.basinParams = params(); onDismiss() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         dismissButton = {
-            if (vm.basin != null || vm.outlets.isNotEmpty()) OutlinedButton(onClick = { vm.clearBasin() }) { Text(tr("Limpar")) }
+            if (vm.basin != null || vm.outlets.isNotEmpty()) OutlinedButton(onClick = { vm.clearBasin() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Limpar")) }
         },
         title = { Text(tr("Bacia de contribuição")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(tr("Superfície"), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    names.forEach { n -> FilterChip(n == current, { vm.analysisSurface = n }, { Text(n.substringAfterLast('|')) }) }
+                    names.forEach { n -> FilterChip(n == current, { vm.analysisSurface = n }, { Text(n.substringAfterLast('|')) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(enabled = surface != null, onClick = { v.basinParams = params(); onPick() }) { Text(tr("Tocar no ponto de lançamento")) }
-                    OutlinedButton(enabled = surface != null && vm.tasks.isEmpty(), onClick = { surface?.let { vm.suggestOutlets(it, project, v.basinParams.minArea) } }) {
+                    OutlinedButton(enabled = surface != null, onClick = { v.basinParams = params(); onPick() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Tocar no ponto de lançamento")) }
+                    OutlinedButton(enabled = surface != null && vm.tasks.isEmpty(), onClick = { surface?.let { vm.suggestOutlets(it, project, v.basinParams.minArea) } }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(tr("Sugerir pontos de lançamento"))
                     }
                 }
                 Text(tr("Talvegue mínimo para as sugestões"), style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(10_000.0, 50_000.0, 200_000.0, 1_000_000.0).forEach { a ->
-                        FilterChip(v.basinParams.minArea == a, { v.basinParams = v.basinParams.copy(minArea = a) }, { Text(StationFormat.landArea(a, 1)) })
+                        FilterChip(v.basinParams.minArea == a, { v.basinParams = v.basinParams.copy(minArea = a) }, { Text(StationFormat.landArea(a, 1)) }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                 }
                 TaskProgress(vm)
@@ -168,7 +170,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                     vm.outlets.forEachIndexed { i, s ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${i + 1}. " + kindText(s.kind) + " · " + StationFormat.landArea(s.area, 2), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                            OutlinedButton(enabled = surface != null && vm.tasks.isEmpty(), onClick = { surface?.let { vm.basinAt(it, s) } }) { Text(tr("Delimitar")) }
+                            OutlinedButton(enabled = surface != null && vm.tasks.isEmpty(), onClick = { surface?.let { vm.basinAt(it, s) } }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Delimitar")) }
                         }
                     }
                 }
@@ -180,7 +182,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("C" to tr("Coef. de escoamento C"), "T" to tr("Tempo de retorno (anos)")).forEach { (k, label) ->
                             OutlinedTextField(fields[k]!!, { fields = fields + (k to it) }, label = { Text(label) }, singleLine = true,
-                                modifier = Modifier.width(190.dp), isError = num(fields[k]!!) == null)
+                                modifier = Modifier.widthIn(max = 190.dp).fillMaxWidth(), isError = num(fields[k]!!) == null)
                         }
                     }
                     Text(tr("Chuva local (IDF): i = K·Tᵃ / (t + b)ᶜ, em mm/h com t em minutos"), style = MaterialTheme.typography.labelMedium)
@@ -191,7 +193,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                         found.take(8).forEach { e ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(e.label + if (e.author.isNotEmpty()) " · " + e.author else "", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                                OutlinedButton(onClick = { pick(e) }) { Text(tr("Usar")) }
+                                OutlinedButton(onClick = { pick(e) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Usar")) }
                             }
                         }
                         if (found.isEmpty()) Text(tr("Nenhuma equação para essa busca; digite K, a, b e c."), style = MaterialTheme.typography.bodySmall)
@@ -202,7 +204,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("K", "a", "b", "c").forEach { k ->
                             OutlinedTextField(fields[k]!!, { fields = fields + (k to it); place = "" }, label = { Text(k) }, singleLine = true,
-                                modifier = Modifier.width(110.dp), isError = fields[k]!!.isNotBlank() && num(fields[k]!!) == null)
+                                modifier = Modifier.widthIn(max = 110.dp).fillMaxWidth(), isError = fields[k]!!.isNotBlank() && num(fields[k]!!) == null)
                         }
                     }
                     val p = params()

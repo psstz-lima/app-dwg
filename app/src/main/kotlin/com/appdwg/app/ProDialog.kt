@@ -65,7 +65,7 @@ fun ProDialog(pro: ProStore, onDismiss: () -> Unit) {
                 if (!pro.isPro) {
                     if (pro.plans.isEmpty() && pro.message == null) Text(tr("Buscando os preços no Google Play…"), style = MaterialTheme.typography.bodySmall)
                     for (plan in pro.plans) Card(Modifier.fillMaxWidth()) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        FitRow(Modifier.padding(12.dp), spacedBy = 12.dp) {
                             Column(Modifier.weight(1f)) {
                                 Text(if (plan.productId == ProStore.YEARLY) tr("Anual") else tr("Mensal"), fontWeight = FontWeight.Bold)
                                 Text(plan.price + " " + periodText(plan.period))
@@ -76,7 +76,7 @@ fun ProDialog(pro: ProStore, onDismiss: () -> Unit) {
                     }
                 }
                 pro.message?.let { Text(it, color = LocalG.current.accent) }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     GButton(if (pro.busy) tr("Verificando…") else tr("Restaurar compra"), { if (!pro.busy) pro.refresh(userAsked = true) }, outlined = true)
                     GButton(tr("Gerenciar assinatura"), {
                         val url = "https://play.google.com/store/account/subscriptions?package=" + context.packageName
@@ -90,12 +90,9 @@ fun ProDialog(pro: ProStore, onDismiss: () -> Unit) {
                     HorizontalDivider()
                     Text(tr("Teste (só na versão de desenvolvimento)"), fontWeight = FontWeight.Bold)
                     for ((s, label) in listOf(ProStore.Simulation.REAL to tr("Real (Google Play)"), ProStore.Simulation.FREE to tr("Simular Grátis"), ProStore.Simulation.PRO to tr("Simular Pro"))) {
-                        Row(
-                            Modifier.fillMaxWidth().selectable(pro.simulation == s, role = Role.RadioButton) { pro.simulate(s) }.padding(vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
+                        FitRow(Modifier.fillMaxWidth().selectable(pro.simulation == s, role = Role.RadioButton) { pro.simulate(s) }.padding(vertical = 2.dp), spacedBy = 12.dp) {
                             RadioButton(pro.simulation == s, onClick = null)
-                            Text(label)
+                            Text(label, Modifier.weight(1f))
                         }
                     }
                 }

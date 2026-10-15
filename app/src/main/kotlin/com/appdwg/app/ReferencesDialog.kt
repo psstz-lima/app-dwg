@@ -5,6 +5,7 @@ import com.appdwg.core.tr
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -55,9 +56,9 @@ fun ReferencesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
     AlertDialog(
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         dismissButton = {
-            OutlinedButton(enabled = vm.pathEdits.isNotEmpty(), onClick = { saver.launch("referencias-editadas.dxf") }) {
+            OutlinedButton(enabled = vm.pathEdits.isNotEmpty(), onClick = { saver.launch("referencias-editadas.dxf") }, modifier = Modifier.heightIn(min = 48.dp)) {
                 Text(tr("Salvar cópia do DXF"))
             }
         },
@@ -147,11 +148,11 @@ private fun ReferenceCard(
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (detached) {
-                    OutlinedButton(onClick = { onDetach(false) }) { Text(tr("Anexar de novo")) }
+                    OutlinedButton(onClick = { onDetach(false) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Anexar de novo")) }
                 } else {
-                    OutlinedButton(onClick = onChoose) { Text(tr("Escolher arquivo")) }
-                    OutlinedButton(onClick = { onUnload(!unloaded) }) { Text(if (unloaded) tr("Recarregar") else tr("Descarregar")) }
-                    OutlinedButton(onClick = { onDetach(true) }) { Text(tr("Desanexar")) }
+                    OutlinedButton(onClick = onChoose, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Escolher arquivo")) }
+                    OutlinedButton(onClick = { onUnload(!unloaded) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (unloaded) tr("Recarregar") else tr("Descarregar")) }
+                    OutlinedButton(onClick = { onDetach(true) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desanexar")) }
                 }
             }
         }

@@ -1,6 +1,9 @@
 package com.appdwg.app
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -62,44 +65,44 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
         modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.se_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-        dismissButton = if (vm.canUndoSurface) ({ OutlinedButton(onClick = { vm.undoSurfaceEdit() }) { Text(stringResource(R.string.se_undo)) } }) else null,
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
+        dismissButton = if (vm.canUndoSurface) ({ OutlinedButton(onClick = { vm.undoSurfaceEdit() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.se_undo)) } }) else null,
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.se_surface), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    names.forEach { n -> FilterChip(n == name, { st.surface = n }, { Text(n) }) }
+                    names.forEach { n -> FilterChip(n == name, { st.surface = n }, { Text(n) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 if (name != null) Text(stringResource(R.string.se_result, vm.editedName(name)), style = MaterialTheme.typography.bodySmall)
                 vm.surfaceEditMessage?.let { Text(it, fontWeight = FontWeight.SemiBold) }
 
                 HorizontalDivider()
                 Text(stringResource(R.string.se_area_ops), style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     Text(if (poly != null) pluralStringResource(R.plurals.se_polygon, poly.size, poly.size) else stringResource(R.string.se_no_polygon),
                         style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = onDraw) { Text(stringResource(R.string.se_draw)) }
+                    OutlinedButton(onClick = onDraw, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.se_draw)) }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OutlinedButton(enabled = poly != null && source != null, onClick = { edit { s, n -> SurfaceEdit.clip(s, poly!!, true, n) } }) {
+                    OutlinedButton(enabled = poly != null && source != null, onClick = { edit { s, n -> SurfaceEdit.clip(s, poly!!, true, n) } }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(stringResource(R.string.se_keep_inside))
                     }
-                    OutlinedButton(enabled = poly != null && source != null, onClick = { edit { s, n -> SurfaceEdit.clip(s, poly!!, false, n) } }) {
+                    OutlinedButton(enabled = poly != null && source != null, onClick = { edit { s, n -> SurfaceEdit.clip(s, poly!!, false, n) } }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(stringResource(R.string.se_remove_inside))
                     }
-                    OutlinedButton(enabled = poly != null && source != null, onClick = { edit { s, n -> SurfaceEdit.deletePoints(s, poly!!, n) } }) {
+                    OutlinedButton(enabled = poly != null && source != null, onClick = { edit { s, n -> SurfaceEdit.deletePoints(s, poly!!, n) } }, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(stringResource(R.string.se_delete_points))
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(st.dz, { st.dz = it }, label = { Text(stringResource(R.string.se_dz, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(130.dp),
+                FitRow() {
+                    OutlinedTextField(st.dz, { st.dz = it }, label = { Text(stringResource(R.string.se_dz, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 130.dp).fillMaxWidth(),
                         isError = dbl(st.dz) == null, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
                     OutlinedButton(enabled = poly != null && source != null && dbl(st.dz) != null,
-                        onClick = { val d = dbl(st.dz)!!; edit { s, n -> SurfaceEdit.raise(s, poly!!, d, null, n) } }) { Text(stringResource(R.string.se_raise)) }
-                    OutlinedTextField(st.z, { st.z = it }, label = { Text(stringResource(R.string.se_z, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(130.dp),
+                        onClick = { val d = dbl(st.dz)!!; edit { s, n -> SurfaceEdit.raise(s, poly!!, d, null, n) } }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.se_raise)) }
+                    OutlinedTextField(st.z, { st.z = it }, label = { Text(stringResource(R.string.se_z, StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.widthIn(max = 130.dp).fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     OutlinedButton(enabled = poly != null && source != null && dbl(st.z) != null,
-                        onClick = { val z = dbl(st.z)!!; edit { s, n -> SurfaceEdit.raise(s, poly!!, 0.0, z, n) } }) { Text(stringResource(R.string.se_flatten)) }
+                        onClick = { val z = dbl(st.z)!!; edit { s, n -> SurfaceEdit.raise(s, poly!!, 0.0, z, n) } }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.se_flatten)) }
                 }
 
                 HorizontalDivider()
@@ -108,15 +111,15 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
                 else {
                     Text(stringResource(R.string.se_tapped, StationFormat.lengthValue(tapped.x), StationFormat.lengthValue(tapped.y)), style = MaterialTheme.typography.bodySmall)
                     val here = source?.elevationAt(tapped)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FitRow() {
                         OutlinedTextField(st.pointZ, { st.pointZ = it }, label = { Text(stringResource(R.string.se_z, StationFormat.lengthUnit)) }, singleLine = true,
-                            placeholder = { here?.let { Text(StationFormat.lengthValue(it)) } }, modifier = Modifier.width(150.dp),
+                            placeholder = { here?.let { Text(StationFormat.lengthValue(it)) } }, modifier = Modifier.widthIn(max = 150.dp).fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                         OutlinedButton(enabled = source != null && (dbl(st.pointZ) != null || here != null), onClick = {
                             val z = dbl(st.pointZ) ?: here ?: return@OutlinedButton
                             edit { s, n -> SurfaceEdit.addPoint(s, Point3(tapped.x, tapped.y, z), n) }
-                        }) { Text(stringResource(R.string.se_add_point)) }
-                        OutlinedButton(enabled = source != null, onClick = { edit { s, n -> SurfaceEdit.flipEdge(s, tapped, n) } }) { Text(stringResource(R.string.se_flip)) }
+                        }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.se_add_point)) }
+                        OutlinedButton(enabled = source != null, onClick = { edit { s, n -> SurfaceEdit.flipEdge(s, tapped, n) } }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.se_flip)) }
                     }
                 }
             }

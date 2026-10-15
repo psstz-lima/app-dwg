@@ -4,6 +4,8 @@ import com.appdwg.core.tr
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -57,7 +59,7 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.9f)),
         title = { Text(stringResource(R.string.crs_title)) },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.close)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.crs_current, current.name + (current.epsg?.let { " · EPSG $it" } ?: "")), fontWeight = FontWeight.SemiBold)
@@ -68,27 +70,27 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
                     Text(stringResource(R.string.crs_mine), style = MaterialTheme.typography.labelLarge)
                     for (c in CrsCatalog.search(query, vm.customCrs).filter { it.custom }) Row(verticalAlignment = Alignment.CenterVertically) {
                         CrsRow(c, c.id == current.id, Modifier.weight(1f)) { use(c) }
-                        OutlinedButton(onClick = { editing = c }) { Text(stringResource(R.string.crs_edit)) }
-                        OutlinedButton(onClick = { vm.deleteCustomCrs(c) }) { Text(stringResource(R.string.crs_delete)) }
+                        OutlinedButton(onClick = { editing = c }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_edit)) }
+                        OutlinedButton(onClick = { vm.deleteCustomCrs(c) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_delete)) }
                     }
                 }
                 OutlinedButton(onClick = {
                     editing = current.copy(id = "custom_" + System.currentTimeMillis(), name = current.name + tr(" (cópia)"), epsg = null, custom = true, local = false)
-                }) { Text(stringResource(R.string.crs_new)) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_new)) }
 
                 HorizontalDivider()
                 Text(stringResource(R.string.crs_special), style = MaterialTheme.typography.labelLarge)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(mc, { mc = it }, label = { Text(stringResource(R.string.crs_mc)) }, singleLine = true, modifier = Modifier.width(170.dp),
+                FitRow() {
+                    OutlinedTextField(mc, { mc = it }, label = { Text(stringResource(R.string.crs_mc)) }, singleLine = true, modifier = Modifier.widthIn(max = 170.dp).fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), isError = StationFormat.number(mc) == null)
-                    OutlinedButton(enabled = StationFormat.number(mc) != null, onClick = { use(CrsCatalog.ltm(StationFormat.number(mc)!!)) }) { Text(stringResource(R.string.crs_ltm)) }
-                    OutlinedButton(enabled = StationFormat.number(mc) != null, onClick = { use(CrsCatalog.rtm(StationFormat.number(mc)!!)) }) { Text(stringResource(R.string.crs_rtm)) }
+                    OutlinedButton(enabled = StationFormat.number(mc) != null, onClick = { use(CrsCatalog.ltm(StationFormat.number(mc)!!)) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_ltm)) }
+                    OutlinedButton(enabled = StationFormat.number(mc) != null, onClick = { use(CrsCatalog.rtm(StationFormat.number(mc)!!)) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_rtm)) }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     val z = localZone.trim().dropLast(1).toIntOrNull()?.takeIf { it in 1..60 }
                     OutlinedTextField(localZone, { localZone = it.uppercase() }, label = { Text(stringResource(R.string.crs_zone)) }, singleLine = true,
-                        modifier = Modifier.width(170.dp), isError = z == null)
-                    OutlinedButton(enabled = z != null, onClick = { use(CrsCatalog.local(z!!, !localZone.trim().endsWith("N"))) }) { Text(stringResource(R.string.crs_local)) }
+                        modifier = Modifier.widthIn(max = 170.dp).fillMaxWidth(), isError = z == null)
+                    OutlinedButton(enabled = z != null, onClick = { use(CrsCatalog.local(z!!, !localZone.trim().endsWith("N"))) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_local)) }
                 }
                 Text(stringResource(R.string.crs_local_hint), style = MaterialTheme.typography.bodySmall)
 
@@ -120,11 +122,11 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
                 HorizontalDivider()
                 Text(stringResource(R.string.crs_online), style = MaterialTheme.typography.labelLarge)
                 Text(stringResource(R.string.crs_online_hint), style = MaterialTheme.typography.bodySmall)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FitRow() {
                     var code by remember { mutableStateOf("") }
                     OutlinedTextField(code, { code = it.filter { ch -> ch.isDigit() } }, label = { Text(stringResource(R.string.crs_online_code)) }, singleLine = true,
-                        modifier = Modifier.width(180.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                    OutlinedButton(enabled = code.length in 4..6, onClick = { vm.fetchCrs(code) }) { Text(stringResource(R.string.crs_online_go)) }
+                        modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                    OutlinedButton(enabled = code.length in 4..6, onClick = { vm.fetchCrs(code) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_online_go)) }
                 }
                 vm.crsOnlineMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
@@ -134,9 +136,8 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
 
 @Composable
 private fun CrsRow(c: Crs, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Row(modifier.clickable(onClick = onClick).padding(vertical = 6.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(if (selected) "✓" else " ", fontWeight = FontWeight.Bold, modifier = Modifier.width(16.dp))
+    FitRow(modifier.clickable(onClick = onClick).padding(vertical = 6.dp, horizontal = 4.dp), spacedBy = 10.dp) {
+        Text(if (selected) "✓" else " ", fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(max = 16.dp).fillMaxWidth())
         Text(c.name, Modifier.weight(1f), fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
         c.epsg?.let { Text("EPSG $it", style = MaterialTheme.typography.bodySmall) }
     }
@@ -182,25 +183,25 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.9f)),
         title = { Text(stringResource(R.string.crs_new)) },
-        dismissButton = { OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.crs_cancel)) } },
-        confirmButton = { OutlinedButton(enabled = ok, onClick = { onSave(start.copy(name = name.trim(), datum = datum!!, projection = projection!!, custom = true, local = false, epsg = null)) }) {
+        dismissButton = { OutlinedButton(onClick = onCancel, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.crs_cancel)) } },
+        confirmButton = { OutlinedButton(enabled = ok, onClick = { onSave(start.copy(name = name.trim(), datum = datum!!, projection = projection!!, custom = true, local = false, epsg = null)) }, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.crs_save)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text(stringResource(R.string.crs_name)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Text(stringResource(R.string.crs_datum), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Datum.all.forEach { d -> FilterChip(datumId == d.id, { datumId = d.id }, { Text(d.name) }) }
-                    FilterChip(datumId == null, { datumId = null }, { Text(stringResource(R.string.crs_datum_custom)) })
+                    Datum.all.forEach { d -> FilterChip(datumId == d.id, { datumId = d.id }, { Text(d.name) }, modifier = Modifier.heightIn(min = 48.dp)) }
+                    FilterChip(datumId == null, { datumId = null }, { Text(stringResource(R.string.crs_datum_custom)) }, modifier = Modifier.heightIn(min = 48.dp))
                 }
                 if (datumId == null) {
                     Text(stringResource(R.string.crs_ellipsoid), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Ellipsoid.all.forEach { e -> FilterChip(ell == e, { ell = e; a = f(e.a, 3); invF = f(e.invF, 9) }, { Text(e.name) }) }
+                        Ellipsoid.all.forEach { e -> FilterChip(ell == e, { ell = e; a = f(e.a, 3); invF = f(e.invF, 9) }, { Text(e.name) }, modifier = Modifier.heightIn(min = 48.dp)) }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(a, { a = it }, label = { Text(stringResource(R.string.crs_a)) }, singleLine = true, modifier = Modifier.width(200.dp), isError = n(a) == null)
-                        OutlinedTextField(invF, { invF = it }, label = { Text(stringResource(R.string.crs_invf)) }, singleLine = true, modifier = Modifier.width(200.dp), isError = n(invF) == null)
+                        OutlinedTextField(a, { a = it }, label = { Text(stringResource(R.string.crs_a)) }, singleLine = true, modifier = Modifier.widthIn(max = 200.dp).fillMaxWidth(), isError = n(a) == null)
+                        OutlinedTextField(invF, { invF = it }, label = { Text(stringResource(R.string.crs_invf)) }, singleLine = true, modifier = Modifier.widthIn(max = 200.dp).fillMaxWidth(), isError = n(invF) == null)
                     }
                     Text(stringResource(R.string.crs_helmert), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -208,26 +209,26 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
                             stringResource(R.string.crs_r, "rX"), stringResource(R.string.crs_r, "rY"), stringResource(R.string.crs_r, "rZ"), stringResource(R.string.crs_ds))
                         labels.forEachIndexed { i, l ->
                             OutlinedTextField(hp.value[i], { v -> hp.value = hp.value.toMutableList().also { it[i] = v } }, label = { Text(l) }, singleLine = true,
-                                modifier = Modifier.width(140.dp), isError = n(hp.value[i]) == null)
+                                modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth(), isError = n(hp.value[i]) == null)
                         }
                     }
                 }
                 Text(stringResource(R.string.crs_projection), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(kind == 0, { kind = 0 }, { Text(stringResource(R.string.crs_geographic)) })
-                    FilterChip(kind == 1, { kind = 1 }, { Text(stringResource(R.string.crs_tm)) })
-                    FilterChip(kind == 2, { kind = 2 }, { Text(stringResource(R.string.crs_lcc)) })
+                    FilterChip(kind == 0, { kind = 0 }, { Text(stringResource(R.string.crs_geographic)) }, modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(kind == 1, { kind = 1 }, { Text(stringResource(R.string.crs_tm)) }, modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(kind == 2, { kind = 2 }, { Text(stringResource(R.string.crs_lcc)) }, modifier = Modifier.heightIn(min = 48.dp))
                 }
                 if (kind == 2) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(R.string.crs_lat0, R.string.crs_lon0, R.string.crs_lat1, R.string.crs_lat2, R.string.crs_k0, R.string.crs_fe, R.string.crs_fn).forEachIndexed { i, lab ->
                         OutlinedTextField(lp.value[i], { v -> lp.value = lp.value.toMutableList().also { it[i] = v } }, label = { Text(stringResource(lab)) },
-                            singleLine = true, modifier = Modifier.width(180.dp), isError = i != 3 && n(lp.value[i]) == null)
+                            singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth(), isError = i != 3 && n(lp.value[i]) == null)
                     }
                 }
                 if (kind == 1) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(R.string.crs_lat0, R.string.crs_lon0, R.string.crs_k0, R.string.crs_fe, R.string.crs_fn).forEachIndexed { i, l ->
                         OutlinedTextField(tp.value[i], { v -> tp.value = tp.value.toMutableList().also { it[i] = v } }, label = { Text(stringResource(l)) },
-                            singleLine = true, modifier = Modifier.width(180.dp), isError = n(tp.value[i]) == null)
+                            singleLine = true, modifier = Modifier.widthIn(max = 180.dp).fillMaxWidth(), isError = n(tp.value[i]) == null)
                     }
                 }
             }

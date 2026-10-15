@@ -4,6 +4,8 @@ import com.appdwg.core.tr
 
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -188,31 +190,31 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                     e.picked = emptyList()
                 }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    FilterChip(selected = e.drawZ == 0, onClick = { e.drawZ = 0 }, label = { Text(tr("Linha 2D")) })
-                    FilterChip(selected = e.drawZ == 1, onClick = { e.drawZ = 1 }, label = { Text(tr("3D sobre a superfície")) }, enabled = names.isNotEmpty())
-                    FilterChip(selected = e.drawZ == 2, onClick = { e.drawZ = 2 }, label = { Text(tr("3D numa cota")) })
+                    FilterChip(selected = e.drawZ == 0, onClick = { e.drawZ = 0 }, label = { Text(tr("Linha 2D")) }, modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(selected = e.drawZ == 1, onClick = { e.drawZ = 1 }, label = { Text(tr("3D sobre a superfície")) }, enabled = names.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp))
+                    FilterChip(selected = e.drawZ == 2, onClick = { e.drawZ = 2 }, label = { Text(tr("3D numa cota")) }, modifier = Modifier.heightIn(min = 48.dp))
                     if (e.drawZ == 1) {
                         var open by remember { mutableStateOf(false) }
                         Box {
-                            OutlinedButton(onClick = { open = true }) { Text((e.surface ?: names.firstOrNull())?.substringAfterLast('|') ?: tr("sem superfície")) }
+                            OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text((e.surface ?: names.firstOrNull())?.substringAfterLast('|') ?: tr("sem superfície")) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n.substringAfterLast('|')) }, onClick = { e.surface = n; open = false }) }
                             }
                         }
                         OutlinedTextField(e.step, { e.step = it }, label = { Text(tr("Densificar a cada ({0})", StationFormat.lengthUnit)) }, singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(170.dp))
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.widthIn(max = 170.dp).fillMaxWidth())
                     }
                     if (e.drawZ == 2) OutlinedTextField(e.z, { e.z = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(140.dp))
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.widthIn(max = 140.dp).fillMaxWidth())
                 }
                 e.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = { e.picked = e.picked.dropLast(1) }, enabled = e.picked.isNotEmpty()) { Text(tr("Desfazer ponto")) }
-                    OutlinedButton(onClick = { create(false) }, enabled = e.picked.size >= 2) { Text(tr("Criar linha")) }
-                    OutlinedButton(onClick = { create(true) }, enabled = e.picked.size >= 3) { Text(tr("Criar polígono")) }
-                    OutlinedButton(onClick = { vm.undoLines() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
-                    OutlinedButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT }) { Text(tr("Selecionar linhas")) }
-                    OutlinedButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT; onDone() }) { Text(tr("Concluir")) }
+                    OutlinedButton(onClick = { e.picked = e.picked.dropLast(1) }, enabled = e.picked.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desfazer ponto")) }
+                    OutlinedButton(onClick = { create(false) }, enabled = e.picked.size >= 2, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Criar linha")) }
+                    OutlinedButton(onClick = { create(true) }, enabled = e.picked.size >= 3, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Criar polígono")) }
+                    OutlinedButton(onClick = { vm.undoLines() }, enabled = vm.canUndo, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desfazer")) }
+                    OutlinedButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Selecionar linhas")) }
+                    OutlinedButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT; onDone() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Concluir")) }
                 }
                 return@Column
             }
@@ -225,13 +227,13 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                     style = MaterialTheme.typography.bodySmall)
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { e.pick = EditPick.DRAW; e.picked = emptyList(); e.selected = emptyList() }) { Text(tr("Nova linha")) }
-                OutlinedButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }) { Text(tr("Janela")) }
-                OutlinedButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty()) { Text(tr("Limpar seleção")) }
-                OutlinedButton(onClick = onOperation, enabled = e.selected.isNotEmpty()) { Text(tr("Operação…")) }
-                OutlinedButton(onClick = { vm.undoLines(); e.selected = emptyList() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
-                OutlinedButton(onClick = { vm.redoLines(); e.selected = emptyList() }, enabled = vm.canRedo) { Text(tr("Refazer")) }
-                OutlinedButton(onClick = onDone) { Text(tr("Concluir")) }
+                OutlinedButton(onClick = { e.pick = EditPick.DRAW; e.picked = emptyList(); e.selected = emptyList() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Nova linha")) }
+                OutlinedButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Janela")) }
+                OutlinedButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Limpar seleção")) }
+                OutlinedButton(onClick = onOperation, enabled = e.selected.isNotEmpty(), modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Operação…")) }
+                OutlinedButton(onClick = { vm.undoLines(); e.selected = emptyList() }, enabled = vm.canUndo, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desfazer")) }
+                OutlinedButton(onClick = { vm.redoLines(); e.selected = emptyList() }, enabled = vm.canRedo, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Refazer")) }
+                OutlinedButton(onClick = onDone, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Concluir")) }
             }
         }
     }
@@ -253,34 +255,34 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                 OutlinedButton(onClick = {
                     val (res, _, why) = runLineOp(e, vm, project)
                     e.preview = res.orEmpty(); e.message = why ?: tr("{0} linha(s) resultante(s) em ciano na planta.", res!!.size)
-                }) { Text(tr("Pré-visualizar")) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Pré-visualizar")) }
                 OutlinedButton(onClick = {
                     val (res, replace, why) = runLineOp(e, vm, project)
                     if (res == null) { e.message = why; return@OutlinedButton }
                     vm.editLines(e.selected, res, replace)
                     e.selected = emptyList(); e.preview = emptyList(); e.picked = emptyList(); e.message = null
                     onDismiss()
-                }) { Text(tr("Aplicar")) }
+                }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Aplicar")) }
             }
         },
-        dismissButton = { OutlinedButton(onClick = { e.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
+        dismissButton = { OutlinedButton(onClick = { e.preview = emptyList(); onDismiss() }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
         title = { Text(tr("Editar {0} linha(s)", e.selected.size)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 // All operations visible at once, wrapping onto more lines.
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LineOp.entries.forEach { o -> FilterChip(selected = e.op == o, onClick = { e.op = o; e.preview = emptyList(); e.message = null }, label = { Text(o.label) }) }
+                    LineOp.entries.forEach { o -> FilterChip(selected = e.op == o, onClick = { e.op = o; e.preview = emptyList(); e.message = null }, label = { Text(o.label) }, modifier = Modifier.heightIn(min = 48.dp)) }
                 }
                 when (e.op) {
                     LineOp.MOVE, LineOp.COPY -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            MoveBy.entries.forEach { m -> FilterChip(selected = e.moveBy == m, onClick = { e.moveBy = m }, label = { Text(m.label) }) }
+                        FitRow(spacedBy = 6.dp) {
+                            MoveBy.entries.forEach { m -> FilterChip(selected = e.moveBy == m, onClick = { e.moveBy = m }, label = { Text(m.label) }, modifier = Modifier.heightIn(min = 48.dp)) }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FitRow() {
                             when (e.moveBy) {
                                 MoveBy.DELTA -> { field(e.dx, { e.dx = it }, "ΔX (${StationFormat.lengthUnit})"); field(e.dy, { e.dy = it }, "ΔY (${StationFormat.lengthUnit})") }
                                 MoveBy.POLAR -> { field(e.distance, { e.distance = it }, tr("Distância ({0})", StationFormat.lengthUnit)); field(e.azimuth, { e.azimuth = it }, tr("Azimute (°)")) }
-                                MoveBy.POINTS -> OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.FROM_TO) }) {
+                                MoveBy.POINTS -> OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.FROM_TO) }, modifier = Modifier.heightIn(min = 48.dp)) {
                                     Text(if (e.picked.size >= 2) tr("Pontos escolhidos (trocar)") else tr("Tocar origem e destino"))
                                 }
                             }
@@ -289,11 +291,11 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                         }
                     }
                     LineOp.OFFSET -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FitRow() {
                             field(e.offsets, { e.offsets = it }, tr("Distâncias ({0}; ex.: {1}; 7)", StationFormat.lengthUnit, StationFormat.decimal(3.5, 1)), 220)
-                            listOf(1 to tr("Direita"), -1 to tr("Esquerda"), 0 to tr("Ambos")).forEach { (v, l) -> FilterChip(selected = e.side == v, onClick = { e.side = v }, label = { Text(l) }) }
+                            listOf(1 to tr("Direita"), -1 to tr("Esquerda"), 0 to tr("Ambos")).forEach { (v, l) -> FilterChip(selected = e.side == v, onClick = { e.side = v }, label = { Text(l) }, modifier = Modifier.heightIn(min = 48.dp)) }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FitRow() {
                             field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
                             field(e.grade, { e.grade = it }, if (e.gradeAsRatio) tr("Talude H:V (desce)") else tr("Rampa % (− desce)"), 190)
                             Checkbox(checked = e.gradeAsRatio, onCheckedChange = { e.gradeAsRatio = it })
@@ -303,41 +305,41 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                         Text(tr("Offset com rampa gera crista ou pé de talude: a cota muda pela distância × rampa, mais o ΔZ."), style = MaterialTheme.typography.bodySmall)
                     }
                     LineOp.DZ -> field(e.dz, { e.dz = it }, "ΔZ (${StationFormat.lengthUnit})")
-                    LineOp.DRAPE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    LineOp.DRAPE -> FitRow() {
                         field(e.step, { e.step = it }, tr("Densificar a cada ({0})", StationFormat.lengthUnit), 190)
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
-                            OutlinedButton(onClick = { open = true }) { Text(e.surface ?: names.firstOrNull() ?: tr("sem superfície")) }
+                            OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(e.surface ?: names.firstOrNull() ?: tr("sem superfície")) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { e.surface = n; open = false }) }
                             }
                         }
                     }
                     LineOp.FLATTEN -> field(e.z, { e.z = it }, tr("Cota ({0})", StationFormat.lengthUnit))
-                    LineOp.ROTATE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    LineOp.ROTATE -> FitRow() {
                         field(e.angle, { e.angle = it }, tr("Ângulo (°, anti-horário)"), 200)
-                        OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.CENTER) }) {
+                        OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.CENTER) }, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(if (e.picked.isNotEmpty()) tr("Centro escolhido (trocar)") else tr("Tocar centro (padrão: centro da linha)"))
                         }
                     }
-                    LineOp.MIRROR -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.AXIS) }) {
+                    LineOp.MIRROR -> FitRow() {
+                        OutlinedButton(onClick = { e.picked = emptyList(); onPick(EditPick.AXIS) }, modifier = Modifier.heightIn(min = 48.dp)) {
                             Text(if (e.picked.size >= 2) tr("Eixo escolhido (trocar)") else tr("Tocar dois pontos do eixo"))
                         }
                         Checkbox(checked = e.keepOriginal, onCheckedChange = { e.keepOriginal = it })
                         Text(tr("Manter original"), style = MaterialTheme.typography.bodySmall)
                         if (e.keepOriginal) field(e.layer, { e.layer = it }, tr("Camada nova"), 170)
                     }
-                    LineOp.DIVIDE -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LineOp.DIVIDE -> FitRow() {
                         field(e.divideParts, { e.divideParts = it }, tr("Em N partes"), 140)
                         field(e.divideEvery, { e.divideEvery = it }, tr("Ou a cada ({0})", StationFormat.lengthUnit), 140)
                     }
-                    LineOp.LAYER -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    LineOp.LAYER -> FitRow() {
                         field(e.layer, { e.layer = it }, tr("Camada"), 200)
                         listOf(null to tr("Da camada"), 1 to tr("Vermelho"), 2 to tr("Amarelo"), 3 to tr("Verde"), 4 to tr("Ciano"), 5 to tr("Azul"), 6 to tr("Magenta")).forEach { (aci, l) ->
                             val argb = aci?.let { com.appdwg.core.DxfReader.aciColor(it) }
-                            FilterChip(selected = e.color == argb, onClick = { e.color = argb }, label = { Text(l) })
+                            FilterChip(selected = e.color == argb, onClick = { e.color = argb }, label = { Text(l) }, modifier = Modifier.heightIn(min = 48.dp))
                         }
                     }
                     LineOp.REVERSE, LineOp.JOIN, LineOp.EXPLODE, LineOp.DELETE -> Text(when (e.op) {

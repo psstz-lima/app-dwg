@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -19,10 +20,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -66,7 +70,7 @@ import androidx.compose.ui.unit.sp
  * paths as ic_launcher_foreground, cropped to 24,26–84,86 and coloured by the theme.
  */
 @Composable
-fun AppMark(modifier: Modifier = Modifier) {
+fun AppMark(modifier: Modifier = Modifier, description: String = "Gromatic") {
     val applied = if (modifier == Modifier) Modifier.size(34.dp) else modifier
     val g = LocalG.current
     val v = remember(g.markContour, g.markTriangle, g.markAxis) {
@@ -88,15 +92,15 @@ fun AppMark(modifier: Modifier = Modifier) {
     }
     if (g.choice == ThemeChoice.EARTH) {
         Box(applied.clip(RoundedCornerShape(12.dp)).background(Color(0xFF26291C)), contentAlignment = Alignment.Center) {
-            Icon(v, null, tint = Color.Unspecified, modifier = Modifier.fillMaxSize().padding(3.dp))
+            Icon(v, description, tint = Color.Unspecified, modifier = Modifier.fillMaxSize().padding(3.dp))
         }
-    } else Icon(v, null, tint = Color.Unspecified, modifier = applied)
+    } else Icon(v, description, tint = Color.Unspecified, modifier = applied)
 }
 
 /** Button in the theme's style: filled with the accent, or outlined/tonal. */
 /** [outlined] keeps a border in every theme (Terra draws its buttons without one otherwise). */
 @Composable
-fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null) {
+fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null, description: String? = null) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val bg = when {
@@ -116,9 +120,11 @@ fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, pr
         else -> BorderStroke(maxOf(g.borderWidth, 1.dp), g.border)
     }
     Box(
-        modifier.height(maxOf(g.target - 4.dp, 40.dp)).clip(shape).background(bg.copy(alpha = if (enabled) bg.alpha else bg.alpha * 0.4f))
+        modifier.heightIn(min = 48.dp).defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .clip(shape).background(bg.copy(alpha = if (enabled) bg.alpha else bg.alpha * 0.4f))
             .then(if (border != null) Modifier.border(border, shape) else Modifier)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 16.dp),
+            .then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,9 +132,40 @@ fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, pr
                 val v = remember(icon, g.iconStroke) { icon.vector(g.iconStroke) }
                 Icon(v, contentDescription = null, tint = fg.copy(alpha = if (enabled) 1f else 0.4f), modifier = Modifier.size(20.dp))
             }
-            Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (text.isNotEmpty()) Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
+                fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
+    }
+}
+
+/**
+ * Buttons that do not fit the width wrap onto the next line instead of being clipped.
+ * Each child still gets the row's maximum width, so a long label ellipsizes rather than
+ * drawing past the screen.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun FitRow(
+    modifier: Modifier = Modifier,
+    spacedBy: Dp = 8.dp,
+    verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
+    content: @Composable RowScope.() -> Unit,
+) {
+    FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(spacedBy),
+        verticalArrangement = Arrangement.spacedBy(spacedBy),
+        itemVerticalAlignment = verticalAlignment,
+    ) { content(this) }
+}
+
+/** Icon button for a crowded bar. The icon does not grow with the font scale; the description does the talking. */
+@Composable
+fun BarIcon(icon: GIcon, description: String, tint: Color, onClick: () -> Unit) {
+    val g = LocalG.current
+    val vec = remember(icon, g.iconStroke) { icon.vector(g.iconStroke) }
+    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+        Icon(vec, description, tint = tint, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -145,7 +182,7 @@ fun RecentButton(name: String, modifier: Modifier = Modifier, cloud: Boolean = f
         else -> name.substringAfterLast('.', "").uppercase().take(7)
     }
     Row(
-        modifier.height(maxOf(g.target, 48.dp)).clip(shape).background(g.card)
+        modifier.heightIn(min = maxOf(g.target, 48.dp)).clip(shape).background(g.card)
             .border(BorderStroke(maxOf(g.borderWidth, 1.dp), g.border), shape)
             .clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -164,28 +201,48 @@ fun RecentButton(name: String, modifier: Modifier = Modifier, cloud: Boolean = f
 @Composable
 fun GTopBar(fileName: String?, compact: Boolean = false, actions: @Composable RowScope.() -> Unit) {
     val g = LocalG.current
-    Row(
-        Modifier.fillMaxWidth().height(64.dp).background(g.topBar)
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).background(g.topBar)
             .then(if (!g.floating && g.choice != ThemeChoice.SUN) Modifier.drawBottomBorder(g.border, g.borderWidth) else Modifier)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = if (compact) 4.dp else 12.dp, vertical = 4.dp),
     ) {
-        AppMark(Modifier.size(if (g.choice == ThemeChoice.EARTH) 42.dp else 38.dp))
-        Text("Gromatic", color = g.onTopBar, fontSize = 22.sp, fontWeight = if (g.choice == ThemeChoice.EARTH) FontWeight.ExtraBold else FontWeight.Bold)
-        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) { if (fileName != null && !compact) {
-            if (g.choice == ThemeChoice.EARTH) {
-                Box(Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(g.chip).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                    Text(fileName, color = g.muted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Leave a slice for the file name. Whatever does not fit in the rest scrolls.
+        val actionsMax = if (compact) (maxWidth - 88.dp).coerceAtLeast(48.dp) else (maxWidth - 220.dp).coerceAtLeast(160.dp)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!compact) AppMark(Modifier.size(if (g.choice == ThemeChoice.EARTH) 42.dp else 36.dp))
+                if (!compact) Text(
+                    "Gromatic", color = g.onTopBar, fontSize = 22.sp, maxLines = 1, softWrap = false,
+                    fontWeight = if (g.choice == ThemeChoice.EARTH) FontWeight.ExtraBold else FontWeight.Bold,
+                )
+                val title = if (compact) (fileName ?: "Gromatic") else fileName
+                if (title != null) {
+                    val titleColor = when {
+                        compact -> g.onTopBar
+                        g.choice == ThemeChoice.SUN -> Color(0xFFE0E0E0)
+                        else -> g.muted
+                    }
+                    Text(
+                        title, color = titleColor, fontSize = if (compact) 16.sp else 14.sp,
+                        fontWeight = if (compact || g.choice == ThemeChoice.EARTH) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    )
                 }
-            } else Text(fileName, color = if (g.choice == ThemeChoice.SUN) Color(0xFFE0E0E0) else g.muted, fontSize = 14.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        } }
-        // On the black bar of the high-contrast theme the outlined buttons are white on black.
-        if (g.choice == ThemeChoice.SUN) {
-            val onBar = g.copy(text = Color.White, border = Color.White)
-            androidx.compose.runtime.CompositionLocalProvider(LocalG provides onBar) { Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = actions) }
-        } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+            }
+            val bar: @Composable () -> Unit = {
+                Row(
+                    Modifier.widthIn(max = actionsMax).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions,
+                )
+            }
+            // On the black bar of the high-contrast theme the outlined buttons are white on black.
+            if (g.choice == ThemeChoice.SUN) {
+                val onBar = g.copy(text = Color.White, border = Color.White)
+                androidx.compose.runtime.CompositionLocalProvider(LocalG provides onBar) { bar() }
+            } else bar()
+        }
     }
 }
 
@@ -266,7 +323,8 @@ private fun RailButton(t: RailTool) {
     val icon = remember(t.icon, g.iconStroke) { t.icon.vector(g.iconStroke) }
     val fg = if (t.active) g.onRailActive else g.onRail
     Column(
-        Modifier.width(if (g.choice == ThemeChoice.SUN) 80.dp else 70.dp).height(if (g.choice == ThemeChoice.SUN) 62.dp else 58.dp).clip(shape)
+        Modifier.widthIn(min = 48.dp, max = if (g.choice == ThemeChoice.SUN) 84.dp else 76.dp).heightIn(min = 48.dp)
+            .padding(horizontal = 2.dp, vertical = 4.dp).clip(shape)
             .background(if (t.active) g.railActive else Color.Transparent)
             .then(if (t.active && g.choice == ThemeChoice.SUN) Modifier.border(2.dp, Color.Black, shape) else Modifier)
             .clickable(role = Role.Button, onClick = t.onClick),
@@ -274,29 +332,30 @@ private fun RailButton(t: RailTool) {
         verticalArrangement = Arrangement.Center,
     ) {
         Box {
-            Icon(icon, contentDescription = null, tint = if (t.locked) fg.copy(alpha = 0.55f) else fg, modifier = Modifier.size(if (g.choice == ThemeChoice.SUN) 24.dp else 22.dp))
+            Icon(icon, contentDescription = null, tint = if (t.locked) fg.copy(alpha = 0.55f) else fg, modifier = Modifier.size(24.dp))
             if (t.locked) {
                 val lock = remember(g.iconStroke) { GIcon.LOCK.vector(maxOf(g.iconStroke, 2f)) }
                 Icon(lock, contentDescription = "Pro", tint = g.accent,
                     modifier = Modifier.align(Alignment.TopEnd).offset(x = 9.dp, y = (-5).dp).size(13.dp).clip(CircleShape).background(g.rail))
             }
         }
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(2.dp))
         Text(t.label, color = fg, fontSize = if (g.choice == ThemeChoice.EARTH) 11.sp else 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             fontWeight = if (t.active || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium)
     }
 }
 
-/** Segmented switch over the plan: Planta / 3D / Seção / Perfil. */
+/** Segmented switch over the plan: Planta / 3D / Seção / Perfil. Scrolls when the labels do not fit. */
 @Composable
 fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modifier: Modifier = Modifier, locked: (Int) -> Boolean = { false }) {
     val g = LocalG.current
     val earth = g.choice == ThemeChoice.EARTH
     val outer = RoundedCornerShape(if (earth) 24.dp else if (g.choice == ThemeChoice.SUN) 8.dp else 10.dp)
     Row(
-        modifier.clip(outer).background(if (earth) g.rail else g.panel)
+        modifier.horizontalScroll(rememberScrollState()).heightIn(min = 48.dp).clip(outer).background(if (earth) g.rail else g.panel)
             .then(if (!earth) Modifier.border(maxOf(g.borderWidth, 1.dp), g.border, outer) else Modifier).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         options.forEachIndexed { i, (label, on) ->
             val inner = RoundedCornerShape(if (earth) 19.dp else if (g.choice == ThemeChoice.SUN) 5.dp else 7.dp)
@@ -316,13 +375,17 @@ fun ViewSwitch(options: List<Pair<String, Boolean>>, onPick: (Int) -> Unit, modi
                 else -> g.text
             }
             Box(
-                Modifier.height(if (g.choice == ThemeChoice.SUN) 44.dp else 38.dp).clip(inner).background(bg)
+                Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(inner).background(bg)
                     .then(if (on && g.underlineTabs) Modifier.drawBottomBorder(g.accent, 2.dp) else Modifier)
-                    .selectable(on, role = Role.Tab) { onPick(i) }.padding(horizontal = 16.dp),
+                    .selectable(on, role = Role.Tab) { onPick(i) }.padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(label, color = fg, fontSize = 14.sp, fontWeight = if (on || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium)
+                    Text(
+                        label, color = fg, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 160.dp),
+                        fontWeight = if (on || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
+                    )
                     if (locked(i)) {
                         val lock = remember(g.iconStroke) { GIcon.LOCK.vector(maxOf(g.iconStroke, 2f)) }
                         Icon(lock, contentDescription = "Pro", tint = g.accent, modifier = Modifier.size(14.dp))
@@ -393,7 +456,7 @@ fun PanelTab(open: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier)
     val g = LocalG.current
     val label = if (open) tr("Recolher painel") else tr("Mostrar painel")
     Box(
-        modifier.width(28.dp).fillMaxHeight().then(if (g.floating) Modifier.padding(bottom = 12.dp) else Modifier)
+        modifier.width(48.dp).fillMaxHeight().then(if (g.floating) Modifier.padding(bottom = 12.dp) else Modifier)
             .clickable(role = Role.Button, onClickLabel = label, onClick = onToggle)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
@@ -421,7 +484,7 @@ class FooterItem(val text: String, val dot: Color? = null, val menu: (@Composabl
 fun StatusFooter(items: List<FooterItem>, right: List<FooterItem>) {
     val g = LocalG.current
     Row(
-        Modifier.fillMaxWidth().height(if (g.choice == ThemeChoice.SUN) 46.dp else 42.dp).background(g.footer)
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).background(g.footer)
             .then(if (!g.floating && g.choice != ThemeChoice.SUN) Modifier.drawTopBorder(g.border, g.borderWidth) else Modifier)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -444,13 +507,14 @@ private fun FooterChip(item: FooterItem) {
     val fg = if (g.choice == ThemeChoice.SUN) Color.White else g.onFooter
     Box {
         Row(
-            Modifier.height(32.dp).clip(RoundedCornerShape(6.dp))
+            Modifier.heightIn(min = 48.dp).defaultMinSize(minWidth = 48.dp, minHeight = 48.dp).clip(RoundedCornerShape(6.dp))
                 .then(if (item.menu != null) Modifier.clickable(role = Role.Button) { open = true } else Modifier)
                 .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             item.dot?.let { Box(Modifier.size(10.dp).clip(CircleShape).background(it)) }
             Text(item.text, color = fg, fontFamily = g.mono, fontSize = if (g.choice == ThemeChoice.SUN) 14.sp else 13.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 280.dp),
                 fontWeight = if (g.choice == ThemeChoice.SUN) FontWeight.Medium else FontWeight.Normal)
             if (item.menu != null) Text("▾", color = g.muted, fontSize = 11.sp)
         }
@@ -464,7 +528,7 @@ private fun FooterChip(item: FooterItem) {
 @Composable
 fun MenuLine(text: String, checked: Boolean? = null, enabled: Boolean = true, onClick: () -> Unit) {
     androidx.compose.material3.DropdownMenuItem(
-        text = { Text(text) },
+        text = { Text(text, maxLines = 2, overflow = TextOverflow.Ellipsis) },
         leadingIcon = if (checked != null) ({ Text(if (checked) "✓" else "", fontWeight = FontWeight.Bold, modifier = Modifier.width(16.dp)) }) else null,
         onClick = onClick, enabled = enabled,
     )
@@ -496,17 +560,17 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (onPro != null) {
                     Text("Gromatic Pro", fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FitRow {
                         Text(if (pro) tr("Assinatura ativa: todas as ferramentas liberadas.") else tr("Versão grátis: abrir e ver a planta."), Modifier.weight(1f))
-                        androidx.compose.material3.OutlinedButton(onClick = onPro) { Text(if (pro) tr("Detalhes") else tr("Conhecer o Pro")) }
+                        androidx.compose.material3.OutlinedButton(onClick = onPro, modifier = Modifier.heightIn(min = 48.dp)) { Text(if (pro) tr("Detalhes") else tr("Conhecer o Pro"), maxLines = 2, overflow = TextOverflow.Ellipsis) }
                     }
                     androidx.compose.material3.HorizontalDivider()
                 }
                 if (onCrs != null) {
                     Text(tr("Projeto"), fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(tr("Sistema de coordenadas: {0}", crsName ?: ""), Modifier.weight(1f))
-                        androidx.compose.material3.OutlinedButton(onClick = onCrs) { Text(tr("Trocar…")) }
+                    FitRow {
+                        Text(tr("Sistema de coordenadas: {0}", crsName ?: ""), Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        androidx.compose.material3.OutlinedButton(onClick = onCrs, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Trocar…"), maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     }
                     androidx.compose.material3.HorizontalDivider()
                 }
@@ -519,7 +583,8 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         RadioButton(l == language, onClick = null, enabled = ready)
-                        Text(l.label, fontWeight = FontWeight.Bold, color = if (ready) androidx.compose.ui.graphics.Color.Unspecified else LocalG.current.muted)
+                        Text(l.label, Modifier.weight(1f), fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            color = if (ready) androidx.compose.ui.graphics.Color.Unspecified else LocalG.current.muted)
                     }
                 }
                 if (languageMissing) Text(
@@ -559,10 +624,10 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         }
                     }
                 }
-                OutlinedButton(onClick = onAbout) { Text(tr("Sobre o Gromatic")) }
+                OutlinedButton(onClick = onAbout, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Sobre o Gromatic")) }
             }
         },
-        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) } },
     )
 }
 
