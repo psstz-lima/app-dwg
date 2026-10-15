@@ -18,13 +18,14 @@
     </queries>
 
     <application
+        android:name=".GromaticApp"
         android:allowBackup="true"
         android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:localeConfig="@xml/locales_config"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/Theme.Gromatic">
 
         <activity
             android:name=".MainActivity"
@@ -47,7 +48,43 @@
                 <data android:mimeType="application/dxf" />
                 <data android:mimeType="application/x-dxf" />
             </intent-filter>
+            <!-- .gmt project files from a file manager, e-mail or the share sheet. No extra permission. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.gmt" />
+                <data android:pathPattern=".*\\..*\\.gmt" />
+                <data android:pathPattern=".*\\..*\\..*\\.gmt" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.gmt" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.gromatic.project" />
+                <data android:mimeType="application/gromatic" />
+            </intent-filter>
+            <!-- Drive's Open with sends a .gmt as application/octet-stream. View only, and only for a content URI. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" />
+            </intent-filter>
         </activity>
+        <!-- Lets AppCompat remember the per-app language on its own (API 21–32). -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.notes"

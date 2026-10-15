@@ -609,7 +609,10 @@ Aterro 	Fill
 Corte 	Cut 
 não é um projeto do Gromatic	not a Gromatic project
 Aguardando o Google Drive…	Waiting for Google Drive…
+Aguardando o arquivo…	Waiting for the file…
 Baixando do Google Drive · 	Downloading from Google Drive · 
+Baixando · 	Downloading · 
+Não foi possível baixar o arquivo: {0}	Could not download the file: {0}
 Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência.	Choose the image too (TIFF, JPG or PNG), not just the world file.
 Imagem {0}	Image {0}
 formato de imagem não reconhecido	image format not recognised
@@ -1283,3 +1286,30 @@ PIs	PIs
 Toque numa célula para destacar a linha e a célula.	Tap a cell to highlight its row and cell.
 Imagem: carregando {0}…	Picture: loading {0}…
 Detalhe da imagem em 3D	Picture detail in 3D
+Padrão do sistema	System default
+Português	Português
+PROJETO	PROJECT
+PONTOS	POINTS
+rampa {0} %	grade {0} %
+corte	cut
+aterro	fill
+corte {0} · aterro {1} · movimentado {2}	cut {0} · fill {1} · hauled {2}
+C {0} · A {1}	C {0} · F {1}
+Ir	Go
+{0} de {1}	{0} of {1}
+A: X modelo	A: model X
+A: Y modelo	A: model Y
+B: X modelo	B: model X
+B: Y modelo	B: model Y
+cota {0}	elevation {0}
+calibrado	calibrated
+antena {0}	antenna {0}
+CREA {0}	Licence {0}
+Nº	No.
+{0} arquivo(s) não entrou(aram) no .gmt (não foi possível lê-los).	{0} file(s) could not be copied into the .gmt.
+Este projeto foi salvo por uma versão mais nova do Gromatic ({0}). Atualize o app para abri-lo.	This project was saved by a newer Gromatic ({0}). Update the app to open it.
+O arquivo .gmt está corrompido ou incompleto.	The .gmt file is corrupt or incomplete.
+Este arquivo não é um projeto .gmt do Gromatic.	This file is not a Gromatic .gmt project.
+O arquivo .gmt contém um caminho inválido e foi recusado.	The .gmt file contains an invalid path and was refused.
+O arquivo .gmt é grande demais para abrir neste aparelho.	The .gmt file is too large to open on this device.
+Não foi possível ler o projeto .gmt ({0}).	Could not read the .gmt project ({0}).

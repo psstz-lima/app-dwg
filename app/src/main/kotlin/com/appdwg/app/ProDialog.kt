@@ -3,7 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -80,7 +80,7 @@ fun ProDialog(pro: ProStore, onDismiss: () -> Unit) {
                     GButton(if (pro.busy) tr("Verificando…") else tr("Restaurar compra"), { if (!pro.busy) pro.refresh(userAsked = true) }, outlined = true)
                     GButton(tr("Gerenciar assinatura"), {
                         val url = "https://play.google.com/store/account/subscriptions?package=" + context.packageName
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
                     }, outlined = true)
                 }
                 Text(tr("Cobrada pela sua conta do Google Play, com renovação automática; cancele quando quiser no Google Play. ") +

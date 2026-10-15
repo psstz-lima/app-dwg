@@ -66,7 +66,8 @@ import androidx.compose.ui.unit.sp
  * paths as ic_launcher_foreground, cropped to 24,26–84,86 and coloured by the theme.
  */
 @Composable
-fun AppMark(modifier: Modifier = Modifier.size(34.dp)) {
+fun AppMark(modifier: Modifier = Modifier) {
+    val applied = if (modifier == Modifier) Modifier.size(34.dp) else modifier
     val g = LocalG.current
     val v = remember(g.markContour, g.markTriangle, g.markAxis) {
         androidx.compose.ui.graphics.vector.ImageVector.Builder("mark", 60.dp, 60.dp, 60f, 60f)
@@ -86,16 +87,16 @@ fun AppMark(modifier: Modifier = Modifier.size(34.dp)) {
             .clearGroup().build()
     }
     if (g.choice == ThemeChoice.EARTH) {
-        Box(modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF26291C)), contentAlignment = Alignment.Center) {
+        Box(applied.clip(RoundedCornerShape(12.dp)).background(Color(0xFF26291C)), contentAlignment = Alignment.Center) {
             Icon(v, null, tint = Color.Unspecified, modifier = Modifier.fillMaxSize().padding(3.dp))
         }
-    } else Icon(v, null, tint = Color.Unspecified, modifier = modifier)
+    } else Icon(v, null, tint = Color.Unspecified, modifier = applied)
 }
 
 /** Button in the theme's style: filled with the accent, or outlined/tonal. */
 /** [outlined] keeps a border in every theme (Terra draws its buttons without one otherwise). */
 @Composable
-fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifier: Modifier = Modifier, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null) {
+fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val bg = when {
@@ -126,7 +127,7 @@ fun GButton(text: String, onClick: () -> Unit, primary: Boolean = false, modifie
                 Icon(v, contentDescription = null, tint = fg.copy(alpha = if (enabled) 1f else 0.4f), modifier = Modifier.size(20.dp))
             }
             Text(text, color = fg.copy(alpha = if (enabled) 1f else 0.4f), fontWeight = if (primary || g.choice == ThemeChoice.SUN) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 15.sp, maxLines = 1)
+                fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -137,9 +138,9 @@ fun RecentButton(name: String, modifier: Modifier = Modifier, cloud: Boolean = f
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val type = when {
-        name.endsWith(".gromatic", true) || name.endsWith(".appdwg", true) -> "PROJETO"
+        name.endsWith(".gmt", true) || name.endsWith(".gromatic", true) || name.endsWith(".appdwg", true) -> tr("PROJETO")
         name.endsWith(".dxf", true) -> "DXF"
-        name.contains(".aecc.pnt", true) -> "PONTOS"
+        name.contains(".aecc.pnt", true) -> tr("PONTOS")
         name.endsWith(".xml", true) -> "LANDXML"
         else -> name.substringAfterLast('.', "").uppercase().take(7)
     }
@@ -196,7 +197,14 @@ private fun Modifier.drawBehindLine(c: Color, w: Dp, top: Boolean) = drawBehind 
 }
 
 /** One tool of the rail: icon over its name; [active] while the tool is on; [locked] needs Gromatic Pro. */
-data class RailTool(val icon: GIcon, val label: String, val active: Boolean = false, val locked: Boolean = false, val onClick: () -> Unit)
+data class RailTool(
+    val icon: GIcon,
+    val label: String,
+    val active: Boolean = false,
+    val locked: Boolean = false,
+    val feature: ProFeature? = null,
+    val onClick: () -> Unit,
+)
 
 /** Tool bar along the bottom on phones: the rail's buttons in a scrolling row. */
 @Composable

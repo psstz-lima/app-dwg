@@ -214,7 +214,7 @@ fun RoadDialog(
                                     label = { Text(tr("Estaca")) }, singleLine = true, modifier = Modifier.width(150.dp))
                                 numField(p.elevation, tr("Cota ({0})", StationFormat.lengthUnit)) { z -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(elevation = z) }) }
                                 numField(p.curveLength, tr("Curva vertical ({0})", StationFormat.lengthUnit)) { c -> rp = rp.copy(pvis = rp.pvis.toMutableList().also { l -> l[i] = p.copy(curveLength = c) }) }
-                                if (i > 0) Text("rampa " + f((p.elevation - rp.pvis[i - 1].elevation) / (p.station - rp.pvis[i - 1].station) * 100) + " %",
+                                if (i > 0) Text(tr("rampa {0} %", f((p.elevation - rp.pvis[i - 1].elevation) / (p.station - rp.pvis[i - 1].station) * 100)),
                                     style = MaterialTheme.typography.bodySmall)
                                 OutlinedButton(onClick = { rp = rp.copy(pvis = rp.pvis.filterIndexed { j, _ -> j != i }) }) { Text(tr("Remover")) }
                             }

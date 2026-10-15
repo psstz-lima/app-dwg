@@ -97,8 +97,8 @@ fun ProfilePanel(
                 }) { Text(tr("PVI no cursor")) }
                 selected?.let { i ->
                     if (i in editPvis.indices) {
-                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
-                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
+                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+" + StationFormat.decimal(0.1, 2)) }
+                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−" + StationFormat.decimal(0.1, 2)) }
                         OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text(tr("Remover PVI")) }
                         Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
                             style = MaterialTheme.typography.labelMedium)

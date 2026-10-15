@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.activity.result.contract.ActivityResultContracts
 
 /**
@@ -15,7 +17,7 @@ object CloudDocs {
     const val DRIVE = "com.google.android.apps.docs.storage"
     private const val DRIVE_APP = "com.google.android.apps.docs"
 
-    fun isDrive(uri: String?) = uri != null && Uri.parse(uri).authority?.startsWith(DRIVE) == true
+    fun isDrive(uri: String?) = uri != null && uri.toUri().authority?.startsWith(DRIVE) == true
 
     fun driveInstalled(context: Context) = runCatching { context.packageManager.getPackageInfo(DRIVE_APP, 0); true }.getOrDefault(false)
 
@@ -28,7 +30,7 @@ object CloudDocs {
 
     /** Remembers the last Drive file used (kept for a later "recent folder" shortcut). */
     fun noteUsed(context: Context, uri: Uri) {
-        if (isDrive(uri.toString())) context.getSharedPreferences("cloud", Context.MODE_PRIVATE).edit().putString("lastDrive", uri.toString()).apply()
+        if (isDrive(uri.toString())) context.getSharedPreferences("cloud", Context.MODE_PRIVATE).edit { putString("lastDrive", uri.toString()) }
     }
 }
 

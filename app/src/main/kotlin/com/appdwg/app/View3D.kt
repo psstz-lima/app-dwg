@@ -1,6 +1,7 @@
 package com.appdwg.app
 
 import android.graphics.Bitmap
+import androidx.core.graphics.scale
 import android.opengl.GLES30
 import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
@@ -303,7 +304,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val maxSize = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0].coerceAtLeast(2048)
         if (bitmap.width > maxSize || bitmap.height > maxSize) {
             val f = maxSize.toFloat() / max(bitmap.width, bitmap.height)
-            bitmap = Bitmap.createScaledBitmap(bitmap, (bitmap.width * f).toInt().coerceAtLeast(1), (bitmap.height * f).toInt().coerceAtLeast(1), true)
+            bitmap = bitmap.scale((bitmap.width * f).toInt().coerceAtLeast(1), (bitmap.height * f).toInt().coerceAtLeast(1), true)
         }
         try {
             val ids = IntArray(1)

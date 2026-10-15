@@ -4,6 +4,10 @@ import kotlinx.coroutines.flow.first
 import com.appdwg.core.tr
 
 import android.graphics.Paint
+import androidx.core.graphics.withClip
+import androidx.core.graphics.withMatrix
+import androidx.core.graphics.withSave
+import androidx.core.graphics.withTranslation
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -123,12 +127,12 @@ fun PlanView(
     layerColor: (String) -> Int?,
     /** Pictures loaded for the drawing's images, by file path. */
     rasters: Map<String, ImageBitmap>,
+    modifier: Modifier = Modifier,
     /** Very large pictures of the drawing's images, drawn tile by tile, by file path. */
     tiledRasters: Map<String, TiledPicture> = emptyMap(),
     /** Picture laid over the surfaces, or null. */
     drape: Drape?,
     onTap: (Point2) -> Unit,
-    modifier: Modifier = Modifier,
     /** Points of the measurement being taken, drawn as a line and, from 3 points on, an area. */
     measure: List<Point2> = emptyList(),
     /** False for an open path (a road axis, a line being drawn): no closing edge nor area fill. */
@@ -723,12 +727,12 @@ private fun DrawScope.drawBasemap(tiles: List<BasemapTile>, opacity: Float, toSc
         basemapMatrix.setPolyToPoly(src, 0, dst, 0, 4)
         val cropped = r.left != 0 || r.top != 0 || r.right != t.bitmap.width || r.bottom != t.bitmap.height
         if (!cropped) { canvas.drawBitmap(t.bitmap, basemapMatrix, basemapPaint); continue }
-        canvas.save()
-        // Clip to the tile so a cropped coarser tile does not spill over its neighbours.
-        val clip = android.graphics.Path().apply { moveTo(dst[0], dst[1]); lineTo(dst[2], dst[3]); lineTo(dst[4], dst[5]); lineTo(dst[6], dst[7]); close() }
-        canvas.clipPath(clip)
-        canvas.drawBitmap(t.bitmap, basemapMatrix, basemapPaint)
-        canvas.restore()
+        canvas.withSave {
+            // Clip to the tile so a cropped coarser tile does not spill over its neighbours.
+            val clip = android.graphics.Path().apply { moveTo(dst[0], dst[1]); lineTo(dst[2], dst[3]); lineTo(dst[4], dst[5]); lineTo(dst[6], dst[7]); close() }
+            clipPath(clip)
+            drawBitmap(t.bitmap, basemapMatrix, basemapPaint)
+        }
     }
     canvas.restore()
 }
@@ -754,16 +758,14 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, tiles: Ti
         val matrix = android.graphics.Matrix()
         val bw = bitmap.width.toFloat(); val bh = bitmap.height.toFloat()
         matrix.setPolyToPoly(floatArrayOf(0f, 0f, bw, 0f, 0f, bh), 0, floatArrayOf(tl.x, tl.y, tr.x, tr.y, bl.x, bl.y), 0, 3)
-        canvas.save()
-        canvas.clipPath(outline)
-        canvas.drawBitmap(bitmap.asAndroidBitmap(), matrix, Paint(Paint.FILTER_BITMAP_FLAG))
-        if (tiles != null) drawRasterTiles(img, tiles, canvas, toScreen)
-        canvas.restore()
+        canvas.withClip(outline) {
+            drawBitmap(bitmap.asAndroidBitmap(), matrix, Paint(Paint.FILTER_BITMAP_FLAG))
+            if (tiles != null) drawRasterTiles(img, tiles, this, toScreen)
+        }
     } else if (tiles != null) {
-        canvas.save()
-        canvas.clipPath(outline)
-        drawRasterTiles(img, tiles, canvas, toScreen)
-        canvas.restore()
+        canvas.withClip(outline) {
+            drawRasterTiles(img, tiles, this, toScreen)
+        }
     } else {
         val paint = Paint().apply {
             isAntiAlias = true
@@ -808,11 +810,10 @@ private fun DrawScope.drawRasterTiles(img: PlanImage, tiles: TiledPicture, canva
         val s = p.src
         matrix.setPolyToPoly(floatArrayOf(s.left.toFloat(), s.top.toFloat(), s.right.toFloat(), s.top.toFloat(), s.left.toFloat(), s.bottom.toFloat()), 0,
             floatArrayOf(tl.x, tl.y, tr.x, tr.y, bl.x, bl.y), 0, 3)
-        canvas.save()
-        canvas.concat(matrix)
-        canvas.clipRect(s)
-        canvas.drawBitmap(p.image.asAndroidBitmap(), 0f, 0f, paint)
-        canvas.restore()
+        canvas.withMatrix(matrix) {
+            clipRect(s)
+            drawBitmap(p.image.asAndroidBitmap(), 0f, 0f, paint)
+        }
     }
 }
 
@@ -1034,15 +1035,14 @@ private fun DrawScope.drawTexts(
             PlanText.BOTTOM -> -block
             else -> -block
         }
-        canvas.save()
-        canvas.translate(p.x, p.y)
-        canvas.rotate(-Math.toDegrees(t.rotation).toFloat())
-        lines.forEachIndexed { i, line ->
-            val w = paint.measureText(line)
-            val x = when (t.hAlign) { 1 -> -w / 2; 2 -> -w; else -> 0f }
-            canvas.drawText(line, x, firstBaseline + i * lineHeight, paint)
+        canvas.withTranslation(p.x, p.y) {
+            rotate(-Math.toDegrees(t.rotation).toFloat())
+            lines.forEachIndexed { i, line ->
+                val w = paint.measureText(line)
+                val x = when (t.hAlign) { 1 -> -w / 2; 2 -> -w; else -> 0f }
+                drawText(line, x, firstBaseline + i * lineHeight, paint)
+            }
         }
-        canvas.restore()
     }
 }
 

@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // Kotlin itself comes from AGP 9 (built-in). The Compose compiler plugin stays explicit.
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -14,8 +14,9 @@ android {
         applicationId = "app.gromatic"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Native debug symbols travel inside the AAB (Play Console "native code without debug symbols").
         ndk {
             debugSymbolLevel = "FULL"
@@ -41,6 +42,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -53,7 +55,7 @@ kotlin {
 dependencies {
     implementation("com.appdwg:core")
 
-    // Newest Compose BOM that still builds with AGP 8.9 and compileSdk 36.
+    // Compose BOM that builds with AGP 9.0 and compileSdk 36.
     // 2026.08+ (Compose 1.12) requires AGP 9.1 and compileSdk 37.
     implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.ui:ui")
@@ -73,4 +75,17 @@ dependencies {
     }
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.android.billingclient:billing:9.1.0")
+    // Per-app locales on API 26+ (AppCompatDelegate.setApplicationLocales / LocaleManager).
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    // Map tiles: downsample, memory cache and disk cache. Replaces BitmapFactory on the network path.
+    // 3.3.0 is the newest Coil 3 built with Kotlin 2.2. Coil 3.4+ ships Kotlin 2.3/2.4 metadata,
+    // which AGP 9's built-in Kotlin 2.2.10 cannot read.
+    implementation("io.coil-kt.coil3:coil:3.3.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
+
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // Unit tests (Pro catalog and purchase JSON). 4.13.2 is the JUnit 4 line the Android test task runs.
+    testImplementation("junit:junit:4.13.2")
 }

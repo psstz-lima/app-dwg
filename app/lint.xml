@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Portuguese "momento" (moment / at the moment). Lint's English dictionary suggests "memento". -->
+    <issue id="Typos">
+        <ignore path="src/main/res/values/strings.xml" regexp="&quot;momento&quot; is a common misspelling" />
+    </issue>
+
+    <!-- localeConfig is API 33+. minSdk is 26; AppCompat applies the same locales on 26–32. The attribute is already what API 33+ reads. -->
+    <issue id="UnusedAttribute">
+        <ignore path="src/main/AndroidManifest.xml" regexp="Attribute `localeConfig` is only used in API level 33" />
+    </issue>
+
+    <!-- AGP 9.0.1 is the release toolchain (built-in Kotlin 2.2.10, compileSdk 36). These coordinates are the newest that still build on it. -->
+    <issue id="GradleDependency">
+        <!-- Compose BOM 2026.08+ (Compose 1.12) requires AGP 9.1 and compileSdk 37. -->
+        <ignore path="build.gradle.kts" regexp="androidx\.compose:compose-bom than 2026\.06\.01" />
+        <!-- core-ktx 1.19, lifecycle 2.11 and appcompat 1.8 track the newer AGP/SDK line. 1.18.0 / 2.10.0 / 1.7.1 are the versions verified with AGP 9.0.1. -->
+        <ignore path="build.gradle.kts" regexp="androidx\.core:core-ktx than 1\.18\.0" />
+        <ignore path="build.gradle.kts" regexp="androidx\.lifecycle:lifecycle-viewmodel-ktx than 2\.10\.0" />
+        <ignore path="build.gradle.kts" regexp="androidx\.lifecycle:lifecycle-viewmodel-compose than 2\.10\.0" />
+        <ignore path="build.gradle.kts" regexp="androidx\.appcompat:appcompat than 1\.7\.1" />
+    </issue>
+
+    <issue id="NewerVersionAvailable">
+        <!-- Coroutines 1.11 is outside the Kotlin 2.2.10 set verified with AGP 9.0.1. -->
+        <ignore path="build.gradle.kts" regexp="org\.jetbrains\.kotlinx:kotlinx-coroutines-android than 1\.10\.2" />
+        <!-- Coil 3.4+ publishes Kotlin 2.3/2.4 metadata. AGP 9.0.1's compiler 2.2.10 cannot read it. 3.3.0 is the newest Coil 3 on Kotlin 2.2. -->
+        <ignore path="build.gradle.kts" regexp="io\.coil-kt\.coil3:coil than 3\.3\.0" />
+        <ignore path="build.gradle.kts" regexp="io\.coil-kt\.coil3:coil-network-okhttp than 3\.3\.0" />
+    </issue>
+
+    <!-- AGP 9.0.1's Gradle line is 9.1.0. 9.8.1 is a newer wrapper, not the version this AGP is built for.
+         The path is relative to this file, which lives in the app module. -->
+    <issue id="AndroidGradlePluginVersion">
+        <ignore path="../gradle/wrapper/gradle-wrapper.properties" regexp="A newer version of Gradle than 9\.1\.0" />
+    </issue>
+</lint>

@@ -44,7 +44,10 @@
     <string name="vol_surface">Superfície medida</string>
     <string name="vol_area">Área</string>
     <string name="vol_area_all">Superfície inteira</string>
-    <string name="vol_area_polygon">Polígono da medição (%1$d vértices)</string>
+    <plurals name="vol_area_polygon">
+        <item quantity="one">Polígono da medição (%1$d vértice)</item>
+        <item quantity="other">Polígono da medição (%1$d vértices)</item>
+    </plurals>
     <string name="vol_draw">Desenhar polígono</string>
     <string name="vol_draw_hint">Use Medir para marcar o contorno da pilha ou da área (3 vértices ou mais) e volte aqui.</string>
     <string name="vol_base">Base</string>
@@ -123,7 +126,6 @@
     <string name="ta_flow_hint">Setas: sentido da água em cada trecho (maior descida). Linhas azuis: talvegues, onde a água de pelo menos essa área se junta.</string>
     <string name="ta_slope_hint">Classes de relevo da Embrapa, pela declividade em %.</string>
     <string name="ta_legend">Declividade (%)</string>
-    <string name="ta_class_row">%1$s · %2$s ha</string>
     <string name="ta_running">Analisando o terreno</string>
     <string name="ta_cell">Malha de %1$s</string>
 
@@ -132,7 +134,10 @@
     <string name="se_title">Edição de superfície</string>
     <string name="se_surface">Superfície</string>
     <string name="se_result">O resultado vira a superfície "%1$s"; a original fica como está.</string>
-    <string name="se_polygon">Polígono da medição: %1$d vértices</string>
+    <plurals name="se_polygon">
+        <item quantity="one">Polígono da medição: %1$d vértice</item>
+        <item quantity="other">Polígono da medição: %1$d vértices</item>
+    </plurals>
     <string name="se_no_polygon">Sem polígono: use Medir para marcar a área (3 vértices ou mais).</string>
     <string name="se_draw">Desenhar polígono</string>
     <string name="se_area_ops">Na área do polígono</string>
@@ -149,7 +154,15 @@
     <string name="se_add_point">Adicionar ponto</string>
     <string name="se_flip">Trocar aresta mais próxima</string>
     <string name="se_undo">Desfazer</string>
-    <string name="se_done">%1$s: %2$d pontos, %3$d triângulos.</string>
+    <string name="se_done">%1$s: %2$s, %3$s.</string>
+    <plurals name="se_done_points">
+        <item quantity="one">%1$d ponto</item>
+        <item quantity="other">%1$d pontos</item>
+    </plurals>
+    <plurals name="se_done_triangles">
+        <item quantity="one">%1$d triângulo</item>
+        <item quantity="other">%1$d triângulos</item>
+    </plurals>
     <string name="se_failed">Nada mudou: o local está fora da superfície ou a aresta não pode ser trocada.</string>
 
     <!-- Cross-section sheets -->
@@ -187,7 +200,6 @@
     <string name="crs_local">Local / sem projeção</string>
     <string name="crs_local_hint">Coordenadas locais da obra: o GPS é projetado em UTM da zona escolhida e levado ao sistema local pela calibração (Calibrar).</string>
     <string name="crs_zone">Zona UTM (ex.: 23S)</string>
-    <string name="crs_use">Usar</string>
     <string name="crs_new">Novo sistema personalizado</string>
     <string name="crs_edit">Editar</string>
     <string name="crs_delete">Excluir</string>
@@ -242,7 +254,23 @@
     <string name="asbuilt_clear">Limpar</string>
     <string name="asbuilt_no_points">Não há pontos com cota. Importe o levantamento em Pontos ou aqui.</string>
     <string name="asbuilt_no_surface">O projeto não tem superfície para comparar.</string>
-    <string name="asbuilt_summary">%1$d pontos conferidos · %2$s%% dentro da tolerância · %3$d acima · %4$d abaixo · %5$d fora do projeto</string>
+    <string name="asbuilt_summary">%1$s · %2$s%% dentro da tolerância · %3$s · %4$s · %5$s</string>
+    <plurals name="asbuilt_checked">
+        <item quantity="one">%1$d ponto conferido</item>
+        <item quantity="other">%1$d pontos conferidos</item>
+    </plurals>
+    <plurals name="asbuilt_above">
+        <item quantity="one">%1$d acima</item>
+        <item quantity="other">%1$d acima</item>
+    </plurals>
+    <plurals name="asbuilt_below">
+        <item quantity="one">%1$d abaixo</item>
+        <item quantity="other">%1$d abaixo</item>
+    </plurals>
+    <plurals name="asbuilt_outside">
+        <item quantity="one">%1$d fora do projeto</item>
+        <item quantity="other">%1$d fora do projeto</item>
+    </plurals>
     <string name="asbuilt_stats">Diferença média %1$s · RMS %2$s · desvio padrão %3$s · mín. %4$s · máx. %5$s</string>
     <string name="asbuilt_sign">Diferença = levantado − projeto (positivo: acima do projeto).</string>
     <string name="asbuilt_csv">Relatório (CSV)</string>

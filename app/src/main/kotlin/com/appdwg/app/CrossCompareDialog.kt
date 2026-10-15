@@ -85,7 +85,7 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                     Text(tr("Etapas"), style = MaterialTheme.typography.labelLarge)
                     p.periods.forEachIndexed { k, period ->
                         Text(tr("Período {0}: {1} → {2}", k + 1, short(period.from), short(period.to)), style = MaterialTheme.typography.bodyMedium)
-                        Text("   corte ${m3(period.cut)} · aterro ${m3(period.fill)} · movimentado ${m3(period.cut + period.fill)}",
+                        Text(tr("corte {0} · aterro {1} · movimentado {2}", m3(period.cut), m3(period.fill), m3(period.cut + period.fill)),
                             style = MaterialTheme.typography.bodySmall)
                     }
                     Text(tr("Executado até {0}: ", short(marked.getOrNull(marked.size - 2) ?: "")) +
@@ -124,7 +124,7 @@ private fun Matrix(vm: ProjectViewModel, names: List<String>, onShown: () -> Uni
                                 Text((if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(abs(d.netVolume), 0),
                                     color = Color(0xFF000000 or (if (d.netVolume >= 0) DifferenceImage.FILL else DifferenceImage.CUT).toLong()),
                                     style = MaterialTheme.typography.bodyMedium)
-                                Text("C ${StationFormat.volume(d.cutVolume, 0)} · A ${StationFormat.volume(d.fillVolume, 0)}",
+                                Text(tr("C {0} · A {1}", StationFormat.volume(d.cutVolume, 0), StationFormat.volume(d.fillVolume, 0)),
                                     style = MaterialTheme.typography.labelSmall)
                             }
                         }

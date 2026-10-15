@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -171,13 +172,13 @@ class ThemeStore(context: Context) {
     var choice by mutableStateOf(ThemeChoice.entries.firstOrNull { it.name == prefs.getString("theme", null) } ?: ThemeChoice.FIELD_DARK)
         private set
 
-    fun choose(c: ThemeChoice) { choice = c; prefs.edit().putString("theme", c.name).apply() }
+    fun choose(c: ThemeChoice) { choice = c; prefs.edit { putString("theme", c.name) } }
 
     /** Whether the properties panel (right side; the bottom card on phones) is open; kept between sessions. */
     var panelOpen by mutableStateOf(prefs.getBoolean("panelOpen", true))
         private set
 
-    fun togglePanel() { panelOpen = !panelOpen; prefs.edit().putBoolean("panelOpen", panelOpen).apply() }
+    fun togglePanel() { panelOpen = !panelOpen; prefs.edit { putBoolean("panelOpen", panelOpen) } }
 }
 
 private fun scheme(g: GTheme): ColorScheme {
@@ -251,7 +252,7 @@ class UnitStore(context: Context) {
     var choice by mutableStateOf(UnitChoice.entries.firstOrNull { it.name == prefs.getString("units", null) } ?: UnitChoice.AUTO)
         private set
 
-    fun choose(c: UnitChoice) { choice = c; prefs.edit().putString("units", c.name).apply() }
+    fun choose(c: UnitChoice) { choice = c; prefs.edit { putString("units", c.name) } }
 
     /** Sets the shown units and number format for [locale]; returns the system in use. */
     fun apply(locale: java.util.Locale): com.appdwg.core.UnitSystem {
@@ -266,19 +267,19 @@ class UnitStore(context: Context) {
     }
 }
 
-/** Language picked in Aparência; [AUTO] follows the device. */
+/** Language picked in Aparência. [AUTO] follows the device. */
 enum class LanguageChoice(private val labelPt: String, val tag: String?) {
-    AUTO("Automático (do sistema)", null),
-    PORTUGUESE("Português (Brasil)", "pt-BR"),
+    AUTO("Padrão do sistema", null),
+    PORTUGUESE("Português", "pt-BR"),
     ENGLISH("English", "en-US");
 
     val label: String get() = tr(labelPt)
 }
 
 /**
- * The app's language. On Android 13+ it is Android's per-app language (also in Configurações >
- * Apps > Gromatic > Idioma), which recreates the screen in it; before that it is kept here and only
- * sets the number format and the automatic units.
+ * The app's language, stored with AppCompat per-app locales (and Android's LocaleManager on
+ * API 33+). The same choice is in Configurações > Apps > Gromatic > Idioma. Applying it
+ * recreates the screen; the preference is kept for the next launch.
  */
 class LanguageStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("appearance", Context.MODE_PRIVATE)
@@ -286,9 +287,8 @@ class LanguageStore(private val context: Context) {
         private set
 
     private fun read(): LanguageChoice {
-        val tag = if (android.os.Build.VERSION.SDK_INT >= 33) {
-            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales.takeIf { !it.isEmpty }?.get(0)?.toLanguageTag()
-        } else prefs.getString("language", null)
+        val applied = androidx.appcompat.app.AppCompatDelegate.getApplicationLocales()
+        val tag = if (!applied.isEmpty) applied[0]?.toLanguageTag() else prefs.getString("language", null)
         return LanguageChoice.entries.firstOrNull { c -> c.tag != null && tag != null && java.util.Locale.forLanguageTag(c.tag).language == java.util.Locale.forLanguageTag(tag).language }
             ?: LanguageChoice.AUTO
     }
@@ -296,15 +296,33 @@ class LanguageStore(private val context: Context) {
     /** Reads the choice again (it can change in Android's settings while the app is away). */
     fun refresh() { choice = read() }
 
+    /** Applies a language saved before AppCompat was asked, once, at process start. */
+    fun applyStored() {
+        val saved = prefs.getString("language", null) ?: return
+        if (!androidx.appcompat.app.AppCompatDelegate.getApplicationLocales().isEmpty) return
+        androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+            androidx.core.os.LocaleListCompat.forLanguageTags(saved),
+        )
+        choice = read()
+    }
+
     fun choose(c: LanguageChoice) {
         choice = c
-        prefs.edit().putString("language", c.tag).apply()
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            context.getSystemService(android.app.LocaleManager::class.java).applicationLocales =
-                if (c.tag == null) android.os.LocaleList.getEmptyLocaleList() else android.os.LocaleList.forLanguageTags(c.tag)
-        }
+        prefs.edit { putString("language", c.tag) }
+        androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+            if (c.tag == null) androidx.core.os.LocaleListCompat.getEmptyLocaleList()
+            else androidx.core.os.LocaleListCompat.forLanguageTags(c.tag),
+        )
     }
 
     /** Locale for numbers and automatic units: the chosen one, else [system]. */
     fun locale(system: java.util.Locale): java.util.Locale = choice.tag?.let { java.util.Locale.forLanguageTag(it) } ?: system
+}
+
+/** Applies the saved language before the first screen. */
+class GromaticApp : android.app.Application() {
+    override fun onCreate() {
+        super.onCreate()
+        LanguageStore(this).applyStored()
+    }
 }

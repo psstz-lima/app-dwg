@@ -20,6 +20,11 @@
 -keep class com.appdwg.app.ProStore { *; }
 -keep class com.appdwg.app.ProPlan { *; }
 -keep class com.appdwg.app.ProStore$Simulation { *; }
+-keep class com.appdwg.app.ProFeature { *; }
+-keep class com.appdwg.app.ProAccess { *; }
+-keep class com.appdwg.app.ProEntitlement { *; }
+-keep class com.appdwg.app.SubscriptionPurchase { *; }
+-keep class com.appdwg.app.EntitlementSession { *; }
 
 # File parsers and the binary project cache. They are called directly, but R8 full mode
 # must not drop a format branch or the cache layout that reopens a project.
