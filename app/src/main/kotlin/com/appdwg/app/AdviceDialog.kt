@@ -11,7 +11,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,7 +23,7 @@ import com.appdwg.core.Advice
 fun AdviceDialog(advice: List<Advice>, onDo: (Advice) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Sugestões para este projeto")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -35,7 +35,7 @@ fun AdviceDialog(advice: List<Advice>, onDo: (Advice) -> Unit, onDismiss: () -> 
                             Text(a.title, style = MaterialTheme.typography.bodyMedium)
                             Text(a.reason, style = MaterialTheme.typography.bodySmall)
                         }
-                        TextButton(onClick = { onDo(a) }) { Text(tr("Fazer")) }
+                        OutlinedButton(onClick = { onDo(a) }) { Text(tr("Fazer")) }
                     }
                 }
             }

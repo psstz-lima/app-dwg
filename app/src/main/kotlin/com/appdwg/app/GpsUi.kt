@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,8 +79,8 @@ fun GpsDialog(
         onDismissRequest = { save(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
-        confirmButton = { TextButton(onClick = { save(); onDismiss() }) { Text(tr("Fechar")) } },
-        dismissButton = { if (gnss.connected) TextButton(onClick = { gnss.disconnect() }) { Text(tr("Desconectar")) } },
+        confirmButton = { OutlinedButton(onClick = { save(); onDismiss() }) { Text(tr("Fechar")) } },
+        dismissButton = { if (gnss.connected) OutlinedButton(onClick = { gnss.disconnect() }) { Text(tr("Desconectar")) } },
         title = { Text("GPS / GNSS") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -124,7 +123,7 @@ fun GpsDialog(
                     OutlinedButton(enabled = host.isNotBlank() && mount.isNotBlank() && p != null, onClick = {
                         save(); gnss.startNtrip(NtripSettings(host.trim(), p!!, mount.trim(), user, pass))
                     }) { Text(tr("Iniciar NTRIP")) }
-                    if (gnss.ntripStatus != null) TextButton(onClick = { gnss.stopNtrip() }) { Text(tr("Parar")) }
+                    if (gnss.ntripStatus != null) OutlinedButton(onClick = { gnss.stopNtrip() }) { Text(tr("Parar")) }
                     gnss.ntripStatus?.let { Text("$it · ${gnss.rtcmBytes / 1024} kB", style = MaterialTheme.typography.bodySmall) }
                 }
                 Text(tr("As correções vão para a antena pelo Bluetooth; a posição (GGA) volta ao caster a cada 10 s."), style = MaterialTheme.typography.bodySmall)

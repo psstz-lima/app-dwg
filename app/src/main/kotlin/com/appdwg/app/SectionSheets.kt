@@ -108,7 +108,9 @@ object SectionSheets {
         val boxes = stations.mapNotNull { st ->
             val sec = CrossSection.at(axis, st, surfaces, p.halfWidth) ?: return@mapNotNull null
             val rs = road?.minByOrNull { abs(it.station - st) }?.takeIf { abs(it.station - st) < 0.01 }
-            val raw = sec.lines.map { it.elevations }
+            // Measurement: one profile per state, in order, even where a state misses this section (all gaps then).
+            val raw = if (measurement) surfaces.map { sf -> sec.lines.firstOrNull { it.surface == sf.name }?.elevations ?: DoubleArray(sec.offsets.size) { Double.NaN } }
+                else sec.lines.map { it.elevations }
             val done = if (measurement && p.complete) SurveySections.complete(raw) else null
             val elev = done?.elevations ?: raw
             val areas = if (measurement) (1 until elev.size).map { k -> SurveySections.areas(sec.offsets, elev[k - 1], elev[k]) } else emptyList()

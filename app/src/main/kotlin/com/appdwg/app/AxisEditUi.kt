@@ -14,7 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,9 +40,9 @@ fun PiEditor(rp: RoadParams, i: Int, onChange: (RoadParams) -> Unit, onSelect: (
     val end = i == 0 || i == rp.pis.size - 1
     Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        TextButton(onClick = { onSelect(i - 1) }, enabled = i > 0) { Text("◀") }
+        OutlinedButton(onClick = { onSelect(i - 1) }, enabled = i > 0) { Text("◀") }
         Text(tr("PI {0}", i + 1) + if (end) " · " + tr("início/fim, sem curva") else "", style = MaterialTheme.typography.labelLarge)
-        TextButton(onClick = { onSelect(i + 1) }, enabled = i < rp.pis.size - 1) { Text("▶") }
+        OutlinedButton(onClick = { onSelect(i + 1) }, enabled = i < rp.pis.size - 1) { Text("▶") }
         if (!end) {
             var r by remember(i, rp.radiusList()[i]) { mutableStateOf(StationFormat.lengthValue(rp.radiusList()[i], 1)) }
             var ls by remember(i, rp.spiralList()[i]) { mutableStateOf(StationFormat.lengthValue(rp.spiralList()[i], 1)) }
@@ -57,7 +57,7 @@ fun PiEditor(rp: RoadParams, i: Int, onChange: (RoadParams) -> Unit, onSelect: (
             }, label = { Text(tr("Transição Ls ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(150.dp),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
         }
-        if (i < rp.pis.size - 1) TextButton(onClick = {
+        if (i < rp.pis.size - 1) OutlinedButton(onClick = {
             val a = rp.pis[i]; val b = rp.pis[i + 1]
             val mid = Point2((a.x + b.x) / 2, (a.y + b.y) / 2)
             onChange(rp.copy(pis = rp.pis.toMutableList().apply { add(i + 1, mid) },
@@ -65,7 +65,7 @@ fun PiEditor(rp: RoadParams, i: Int, onChange: (RoadParams) -> Unit, onSelect: (
                 spirals = rp.spiralList().toMutableList().apply { add(i + 1, rp.spiral) }))
             onSelect(i + 1)
         }) { Text(tr("Inserir PI depois")) }
-        TextButton(onClick = {
+        OutlinedButton(onClick = {
             onChange(rp.copy(pis = rp.pis.filterIndexed { k, _ -> k != i }, radii = rp.radiusList().filterIndexed { k, _ -> k != i },
                 spirals = rp.spiralList().filterIndexed { k, _ -> k != i }))
             onSelect(null)
@@ -89,7 +89,7 @@ fun AlignmentElementsDialog(alignments: List<com.appdwg.core.Alignment>, onDismi
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.95f),
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Elementos do eixo")) },
         text = {
             androidx.compose.foundation.layout.Column(Modifier.verticalScroll(rememberScrollState())) {

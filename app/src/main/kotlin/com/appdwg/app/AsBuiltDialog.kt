@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,8 +91,8 @@ fun AsBuiltDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.asbuilt_title)) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-        dismissButton = if (report != null) ({ TextButton(onClick = { vm.clearAsBuilt() }) { Text(stringResource(R.string.asbuilt_clear)) } }) else null,
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        dismissButton = if (report != null) ({ OutlinedButton(onClick = { vm.clearAsBuilt() }) { Text(stringResource(R.string.asbuilt_clear)) } }) else null,
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.asbuilt_intro), style = MaterialTheme.typography.bodySmall)

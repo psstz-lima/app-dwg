@@ -21,7 +21,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,11 +85,11 @@ fun ProfilePanel(
                         FilterChip(selected = r == range, onClick = { onRange(r) }, label = { Text(if (r == 0.0) tr("Inteiro") else "±" + StationFormat.length(r, 0)) })
                     }
                 }
-                TextButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
             }
             if (editPvis != null) Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(tr("Greide: arraste um PVI (bolinha vermelha) para mudar estaca e cota; toque para escolher."), style = MaterialTheme.typography.labelMedium)
-                TextButton(onClick = {
+                OutlinedButton(onClick = {
                     // New PVI at the cursor, on the current grade.
                     val z = profile.design?.let { profile.interpolate(it, cursor) }?.takeIf { !it.isNaN() }
                         ?: profile.lines.firstOrNull()?.let { profile.interpolate(it.elevations, cursor) }?.takeIf { !it.isNaN() } ?: 0.0
@@ -98,8 +97,8 @@ fun ProfilePanel(
                 }) { Text(tr("PVI no cursor")) }
                 selected?.let { i ->
                     if (i in editPvis.indices) {
-                        TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
-                        TextButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
+                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }) { Text("+0,10") }
+                        OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }) { Text("−0,10") }
                         OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2) { Text(tr("Remover PVI")) }
                         Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
                             style = MaterialTheme.typography.labelMedium)
@@ -115,7 +114,7 @@ fun ProfilePanel(
                         }
                     }
                 }
-                TextButton(onClick = onRecalc) { Text(tr("Recalcular estrada")) }
+                OutlinedButton(onClick = onRecalc) { Text(tr("Recalcular estrada")) }
             }
             ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected) { selected = it }
         }

@@ -19,7 +19,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,16 +50,16 @@ fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -
                 Text(s.name + (if (s.date.isNotBlank()) " · ${s.date}" else ""), maxLines = 1)
                 Text(if (s.image.isEmpty()) tr("Sem imagem") else tr("Imagem: {0}", s.imageName.ifEmpty { "✓" }), style = MaterialTheme.typography.bodySmall, maxLines = 1)
             }
-            TextButton(onClick = { editing = i }) { Text(tr("Editar")) }
-            if (s.file.isNotEmpty()) TextButton(onClick = { vm.removeState(i) }) { Text(tr("Remover")) }
+            OutlinedButton(onClick = { editing = i }) { Text(tr("Editar")) }
+            if (s.file.isNotEmpty()) OutlinedButton(onClick = { vm.removeState(i) }) { Text(tr("Remover")) }
         }
     }
     Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = onAddState, enabled = vm.tasks.isEmpty()) { Text(tr("Adicionar medição")) }
         if (vm.states.size > 1) {
-            TextButton(onClick = onTimeline) { Text(tr("Linha do tempo")) }
-            if (vm.activeState != null) TextButton(onClick = { vm.showAllStates() }) { Text(tr("Mostrar todos")) }
-            TextButton(onClick = { vm.computeStatePeriods() }, enabled = vm.tasks.isEmpty()) { Text(tr("Volumes entre estados")) }
+            OutlinedButton(onClick = onTimeline) { Text(tr("Linha do tempo")) }
+            if (vm.activeState != null) OutlinedButton(onClick = { vm.showAllStates() }) { Text(tr("Mostrar todos")) }
+            OutlinedButton(onClick = { vm.computeStatePeriods() }, enabled = vm.tasks.isEmpty()) { Text(tr("Volumes entre estados")) }
         }
     }
     if (vm.activeState != null) Text(tr("Para trocar a imagem do estado marcado, use Imagem > Trocar."), style = MaterialTheme.typography.bodySmall)
@@ -68,14 +67,14 @@ fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("{0} → {1}: corte {2} · aterro {3}", d.baseName, d.otherName, StationFormat.volume(d.cutVolume), StationFormat.volume(d.fillVolume)),
                 Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { vm.showStateDifference(d); onMapShown() }) { Text(tr("Ver mapa")) }
+            OutlinedButton(onClick = { vm.showStateDifference(d); onMapShown() }) { Text(tr("Ver mapa")) }
         }
     }
     vm.stateTotal?.takeIf { vm.statePeriods.size > 1 }?.let { d ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("Acumulado {0} → {1}: corte {2} · aterro {3}", d.baseName, d.otherName, StationFormat.volume(d.cutVolume), StationFormat.volume(d.fillVolume)),
                 Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            TextButton(onClick = { vm.showStateDifference(d); onMapShown() }) { Text(tr("Ver mapa")) }
+            OutlinedButton(onClick = { vm.showStateDifference(d); onMapShown() }) { Text(tr("Ver mapa")) }
         }
     }
     editing?.let { i ->
@@ -84,8 +83,8 @@ fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -
         var date by remember(i) { mutableStateOf(s.date) }
         AlertDialog(
             onDismissRequest = { editing = null },
-            confirmButton = { TextButton(onClick = { vm.editState(i, name, date); editing = null }) { Text(tr("OK")) } },
-            dismissButton = { TextButton(onClick = { editing = null }) { Text(tr("Cancelar")) } },
+            confirmButton = { OutlinedButton(onClick = { vm.editState(i, name, date); editing = null }) { Text(tr("OK")) } },
+            dismissButton = { OutlinedButton(onClick = { editing = null }) { Text(tr("Cancelar")) } },
             title = { Text(tr("Estado")) },
             text = {
                 Column {
@@ -116,17 +115,17 @@ fun TimelineBar(vm: ProjectViewModel, modifier: Modifier) {
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             val a = vm.activeState
-            TextButton(onClick = { vm.showState(((a ?: n) - 1).coerceAtLeast(0)) }, enabled = (a ?: n) > 0) { Text("◀") }
+            OutlinedButton(onClick = { vm.showState(((a ?: n) - 1).coerceAtLeast(0)) }, enabled = (a ?: n) > 0) { Text("◀") }
             Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 vm.states.forEachIndexed { i, s ->
                     FilterChip(selected = a == i, onClick = { playing = false; vm.showState(i) },
                         label = { Text(if (s.date.isBlank()) s.name else "${s.name} · ${s.date}", maxLines = 1) })
                 }
             }
-            TextButton(onClick = { vm.showState(((a ?: -1) + 1).coerceAtMost(n - 1)) }, enabled = (a ?: -1) < n - 1) { Text("▶") }
-            TextButton(onClick = { playing = !playing }) { Text(if (playing) tr("Pausar") else tr("Reproduzir")) }
-            TextButton(onClick = { playing = false; vm.showAllStates() }, enabled = a != null) { Text(tr("Todos")) }
-            TextButton(onClick = { playing = false; vm.timelineShown = false }) { Text(tr("Fechar")) }
+            OutlinedButton(onClick = { vm.showState(((a ?: -1) + 1).coerceAtMost(n - 1)) }, enabled = (a ?: -1) < n - 1) { Text("▶") }
+            OutlinedButton(onClick = { playing = !playing }) { Text(if (playing) tr("Pausar") else tr("Reproduzir")) }
+            OutlinedButton(onClick = { playing = false; vm.showAllStates() }, enabled = a != null) { Text(tr("Todos")) }
+            OutlinedButton(onClick = { playing = false; vm.timelineShown = false }) { Text(tr("Fechar")) }
         }
     }
 }

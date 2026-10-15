@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,19 +62,19 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = {
+            OutlinedButton(onClick = {
                 vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
                 onDismiss()
             }) { Text(tr("Salvar")) }
         },
         dismissButton = {
             Row {
-                if (isNew && onSaveAndNew != null) TextButton(onClick = {
+                if (isNew && onSaveAndNew != null) OutlinedButton(onClick = {
                     vm.saveNote(initial.copy(text = text.trim(), z = StationFormat.parseLength(z) ?: Double.NaN, photo = photo))
                     onSaveAndNew()
                 }) { Text(tr("Salvar e nova")) }
-                if (!isNew) TextButton(onClick = { vm.deleteNote(initial); onDismiss() }) { Text(tr("Apagar")) }
-                TextButton(onClick = onDismiss) { Text(tr("Cancelar")) }
+                if (!isNew) OutlinedButton(onClick = { vm.deleteNote(initial); onDismiss() }) { Text(tr("Apagar")) }
+                OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) }
             }
         },
         title = { Text(if (isNew) tr("Nova anotação") else tr("Anotação {0}", initial.id)) },
@@ -111,8 +110,8 @@ fun NoteCard(vm: ProjectViewModel, note: FieldNote, onEdit: () -> Unit, onClose:
                 style = MaterialTheme.typography.bodySmall)
             thumb?.let { Image(it, contentDescription = "foto", modifier = Modifier.heightIn(max = 220.dp)) }
             Row {
-                TextButton(onClick = onEdit) { Text(tr("Editar")) }
-                TextButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onEdit) { Text(tr("Editar")) }
+                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
             }
         }
     }

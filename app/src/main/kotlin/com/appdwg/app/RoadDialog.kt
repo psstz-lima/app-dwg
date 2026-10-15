@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,12 +93,12 @@ fun RoadDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.95f),
         confirmButton = {
-            TextButton(enabled = vm.tasks.isEmpty(), onClick = { v.roadParams = rp; vm.designRoad(); tab = RoadTab.RESULT }) { Text(tr("Calcular")) }
+            OutlinedButton(enabled = vm.tasks.isEmpty(), onClick = { v.roadParams = rp; vm.designRoad(); tab = RoadTab.RESULT }) { Text(tr("Calcular")) }
         },
         dismissButton = {
             Row {
                 if (vm.road != null) OutlinedButton(onClick = { vm.removeRoad() }) { Text(tr("Remover estrada")) }
-                TextButton(onClick = { v.roadParams = rp; onDismiss() }) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = { v.roadParams = rp; onDismiss() }) { Text(tr("Fechar")) }
             }
         },
         title = { Text(tr("Projeto de estrada (corredor)")) },
@@ -119,7 +118,7 @@ fun RoadDialog(
                                 style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 OutlinedButton(onClick = { v.roadParams = rp; onDrawAxis() }) { Text(if (rp.pis.isEmpty()) tr("Desenhar PIs na planta") else tr("Editar eixo na planta")) }
-                                TextButton(onClick = { v.roadParams = rp; onElements() }) { Text(tr("Elementos")) }
+                                OutlinedButton(onClick = { v.roadParams = rp; onElements() }) { Text(tr("Elementos")) }
                                 OutlinedButton(enabled = vm.userPoints.size >= 2, onClick = {
                                     rp = rp.copy(pis = vm.userPoints.map { com.appdwg.core.Point2(it.x, it.y) }, radii = emptyList(), spirals = emptyList())
                                 }) { Text(tr("Usar pontos _POINTS")) }
@@ -151,7 +150,7 @@ fun RoadDialog(
                                             f(r.grade?.maxGrade ?: 0.0, 2), StationFormat.volume(r.grade?.cut ?: 0.0), StationFormat.volume(r.grade?.fill ?: 0.0)),
                                             style = MaterialTheme.typography.bodySmall)
                                     }
-                                    TextButton(onClick = {
+                                    OutlinedButton(onClick = {
                                         rp = rp.copy(alignmentIndex = -1, pis = r.pis.map { it.position }, radii = r.pis.map { it.radius }, spirals = r.pis.map { it.spiral },
                                             pvis = r.grade?.pvis.orEmpty())
                                         vm.clearRouteSuggestions()
@@ -164,7 +163,7 @@ fun RoadDialog(
                             Text(tr("Terreno"))
                             var open by remember { mutableStateOf(false) }
                             Box {
-                                TextButton(onClick = { open = true }) { Text((rp.terrain ?: names.firstOrNull())?.substringAfterLast('|') ?: "—", maxLines = 1) }
+                                OutlinedButton(onClick = { open = true }) { Text((rp.terrain ?: names.firstOrNull())?.substringAfterLast('|') ?: "—", maxLines = 1) }
                                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                     names.forEach { n -> DropdownMenuItem(text = { Text(n.substringAfterLast('|')) }, onClick = { rp = rp.copy(terrain = n); open = false }) }
                                 }
@@ -201,7 +200,7 @@ fun RoadDialog(
                                     Text(tr("{0} PVIs · rampa máx. {1} % · corte ≈ {2} · aterro ≈ {3}", g.pvis.size, f(g.maxGrade, 2),
                                         StationFormat.volume(g.cut), StationFormat.volume(g.fill)), style = MaterialTheme.typography.bodySmall)
                                 }
-                                TextButton(onClick = { rp = rp.copy(pvis = g.pvis) }) { Text(tr("Usar")) }
+                                OutlinedButton(onClick = { rp = rp.copy(pvis = g.pvis) }) { Text(tr("Usar")) }
                             }
                         }
                         rp.pvis.forEachIndexed { i, p ->
@@ -218,11 +217,11 @@ fun RoadDialog(
                             }
                         }
                         Row {
-                            TextButton(onClick = {
+                            OutlinedButton(onClick = {
                                 val last = rp.pvis.lastOrNull()
                                 rp = rp.copy(pvis = rp.pvis + Profile.Pvi((last?.station ?: 0.0) + 100, last?.elevation ?: 0.0))
                             }) { Text(tr("Adicionar PVI")) }
-                            if (rp.pvis.isNotEmpty()) TextButton(onClick = { rp = rp.copy(pvis = emptyList()) }) { Text(tr("Limpar")) }
+                            if (rp.pvis.isNotEmpty()) OutlinedButton(onClick = { rp = rp.copy(pvis = emptyList()) }) { Text(tr("Limpar")) }
                         }
                     }
                     RoadTab.SECTION -> {
@@ -267,10 +266,10 @@ fun RoadDialog(
                             }
                         }
                         Row {
-                            TextButton(onClick = { rp = rp.copy(superelevation = rp.superelevation + Superelevation((rp.superelevation.lastOrNull()?.station ?: 0.0) + 20, -2.0, -2.0)) }) {
+                            OutlinedButton(onClick = { rp = rp.copy(superelevation = rp.superelevation + Superelevation((rp.superelevation.lastOrNull()?.station ?: 0.0) + 20, -2.0, -2.0)) }) {
                                 Text(tr("Adicionar estaca"))
                             }
-                            if (rp.superelevation.isNotEmpty()) TextButton(onClick = { rp = rp.copy(superelevation = emptyList()) }) { Text(tr("Limpar")) }
+                            if (rp.superelevation.isNotEmpty()) OutlinedButton(onClick = { rp = rp.copy(superelevation = emptyList()) }) { Text(tr("Limpar")) }
                         }
                     }
                     RoadTab.REGIONS -> {
@@ -285,7 +284,7 @@ fun RoadDialog(
                                 numField(r.transition, tr("Transição ({0})", StationFormat.lengthUnit)) { t -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(transition = t) }) }
                                 OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, -1) }) { Text(if (r.leftTarget != null) tr("Alvo E ✓ (trocar)") else tr("Alvo bordo E")) }
                                 OutlinedButton(onClick = { v.roadParams = rp; onPickTarget(i, 1) }) { Text(if (r.rightTarget != null) tr("Alvo D ✓ (trocar)") else tr("Alvo bordo D")) }
-                                if (r.leftTarget != null || r.rightTarget != null) TextButton(onClick = {
+                                if (r.leftTarget != null || r.rightTarget != null) OutlinedButton(onClick = {
                                     rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(leftTarget = null, rightTarget = null) })
                                 }) { Text(tr("Sem alvos")) }
                                 OutlinedButton(onClick = { rp = rp.copy(regions = rp.regions.filterIndexed { j, _ -> j != i }) }) { Text(tr("Remover")) }
@@ -293,7 +292,7 @@ fun RoadDialog(
                             SideEditor(tr("Esquerda"), r.left) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(left = sd) }) }
                             SideEditor(tr("Direita"), r.right) { sd -> rp = rp.copy(regions = rp.regions.toMutableList().also { l -> l[i] = r.copy(right = sd) }) }
                         }
-                        TextButton(onClick = {
+                        OutlinedButton(onClick = {
                             val last = rp.regions.lastOrNull()
                             rp = rp.copy(regions = rp.regions + RoadRegion((last?.from ?: 0.0) + 100, last?.left ?: rp.left, last?.right ?: rp.right))
                         }) { Text(tr("Adicionar região")) }

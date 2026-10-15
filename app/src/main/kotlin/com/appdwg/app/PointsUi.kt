@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +47,7 @@ fun PointsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Pontos (camada _POINTS)")) },
         text = {
             Column {
@@ -71,13 +70,13 @@ fun PointsDialog(
                 var showCodes by remember { mutableStateOf(false) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { vm.autoDraw() }) { Text(tr("Desenho automático")) }
-                    TextButton(onClick = { showCodes = true }) { Text(tr("Códigos de campo…")) }
+                    OutlinedButton(onClick = { showCodes = true }) { Text(tr("Códigos de campo…")) }
                 }
                 Text(tr("Liga os pontos de mesma descrição (pé, crista, bordo…) em 3D polys editáveis; a superfície gerada depois as usa como obrigatórias."),
                     style = MaterialTheme.typography.bodySmall)
                 if (showCodes) CodesDialog(vm, onDismiss = { showCodes = false })
                 if (vm.lastGenerated.isNotEmpty()) {
-                    TextButton(onClick = { vm.undoGenerated() }) { Text(tr("Desfazer última geração ({0} pontos)", vm.lastGenerated.size)) }
+                    OutlinedButton(onClick = { vm.undoGenerated() }) { Text(tr("Desfazer última geração ({0} pontos)", vm.lastGenerated.size)) }
                 }
                 vm.pointsMessage?.let {
                     Spacer(Modifier.height(8.dp))
@@ -107,14 +106,14 @@ fun PointEditDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(enabled = valid, onClick = {
+            OutlinedButton(enabled = valid, onClick = {
                 onSave(CogoPoint(number.trim(), description.trim(), num(e)!!, num(n)!!, num(z) ?: Double.NaN))
             }) { Text(tr("Salvar")) }
         },
         dismissButton = {
             Row {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text(tr("Apagar")) }
-                TextButton(onClick = onDismiss) { Text(tr("Cancelar")) }
+                if (onDelete != null) OutlinedButton(onClick = onDelete) { Text(tr("Apagar")) }
+                OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) }
             }
         },
         title = { Text(if (old == null) tr("Novo ponto") else tr("Ponto {0}", old.number)) },
@@ -160,8 +159,8 @@ fun PointCard(
                 PointLine(a.name, StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onEdit) { Text(tr("Editar")) }
-                TextButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onEdit) { Text(tr("Editar")) }
+                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
             }
         }
     }

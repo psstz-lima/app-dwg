@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,9 +63,9 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
         title = { Text(stringResource(R.string.sh_title)) },
-        dismissButton = { TextButton(onClick = { v.sheetParams = keep(); onDismiss() }) { Text(stringResource(R.string.close)) } },
+        dismissButton = { OutlinedButton(onClick = { v.sheetParams = keep(); onDismiss() }) { Text(stringResource(R.string.close)) } },
         confirmButton = {
-            TextButton(enabled = axis != null, onClick = {
+            OutlinedButton(enabled = axis != null, onClick = {
                 val q = keep().copy(alignment = axisName, from = StationFormat.parse(fromText), to = StationFormat.parse(toText))
                 v.sheetParams = q; onMake(q)
             }) { Text(stringResource(R.string.sh_make)) }
@@ -125,7 +124,7 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(if (v.sheetParams.logo != null) tr("Logo escolhido") else tr("Sem logo"), Modifier.padding(top = 12.dp))
                     OutlinedButton(onClick = onPickLogo) { Text(tr("Escolher logo")) }
-                    if (v.sheetParams.logo != null) TextButton(onClick = { vm.setSheetLogo(null) }) { Text(tr("Remover")) }
+                    if (v.sheetParams.logo != null) OutlinedButton(onClick = { vm.setSheetLogo(null) }) { Text(tr("Remover")) }
                 }
                 TaskProgress(vm)
                 vm.exportMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

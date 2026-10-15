@@ -324,7 +324,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 drapeMessage = tr("Imagem grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                drapeMessage = tr("Não foi possível usar a imagem: {0}", e.message ?: e.javaClass.simpleName)
+                drapeMessage = tr("Não foi possível usar a imagem: {0}", errorText(e))
             }
         }
     }
@@ -412,7 +412,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 compareMessage = tr("Arquivo grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                compareMessage = tr("Não foi possível ler {0}: {1}", name, e.message ?: e.javaClass.simpleName)
+                compareMessage = tr("Não foi possível ler {0}: {1}", name, errorText(e))
             }
         }
     }
@@ -727,7 +727,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     tr(" {0} linha(s) ignorada(s) por não estarem no formato número, descrição, E, N, cota: ", skipped.size) +
                         skipped.take(8).joinToString(", ") { "linha ${it.first}" } + if (skipped.size > 8) "…" else ""
             } catch (e: Exception) {
-                pointsMessage = tr("Não foi possível ler {0}: {1}", name, e.message ?: e.javaClass.simpleName)
+                pointsMessage = tr("Não foi possível ler {0}: {1}", name, errorText(e))
             }
         }
     }
@@ -744,7 +744,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 "${points.size} ponto(s) exportado(s) para ${displayName(target)}."
             } catch (e: Exception) {
-                tr("Não foi possível exportar: {0}", e.message ?: e.javaClass.simpleName)
+                tr("Não foi possível exportar: {0}", errorText(e))
             }
         }
     }
@@ -856,7 +856,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 pointsMessage = tr("Superfície \"{0}\" gerada com {1} pontos ({2} triângulos).", label, pts.size, surface.triangleCount)
                 if (breaks.isNotEmpty()) pointsMessage = pointsMessage.orEmpty() + " " + tr("{0} linha(s) obrigatória(s) respeitada(s).", breaks.size)
             } catch (e: Exception) {
-                pointsMessage = tr("Não foi possível gerar a superfície: {0}", e.message ?: e.javaClass.simpleName)
+                pointsMessage = tr("Não foi possível gerar a superfície: {0}", errorText(e))
             }
         }
     }
@@ -927,7 +927,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 referenceMessage = tr("Desenho grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                referenceMessage = tr("Não foi possível ler {0}: {1}", displayName(uri), e.message ?: e.javaClass.simpleName)
+                referenceMessage = tr("Não foi possível ler {0}: {1}", displayName(uri), errorText(e))
             }
         }
     }
@@ -947,7 +947,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 tr("Cópia salva em {0} com {1} caminho(s) alterado(s).", displayName(target), pathEdits.size)
             } catch (e: Exception) {
-                tr("Não foi possível salvar: {0}", e.message ?: e.javaClass.simpleName)
+                tr("Não foi possível salvar: {0}", errorText(e))
             }
         }
     }
@@ -1103,7 +1103,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 rasterError = tr("Imagem grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                rasterError = tr("Não foi possível ler a imagem: {0}", e.message ?: e.javaClass.simpleName)
+                rasterError = tr("Não foi possível ler a imagem: {0}", errorText(e))
             }
         }
     }
@@ -1361,7 +1361,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                                     overpass(com.appdwg.core.Overpass.query(b[0], b[1], b[2], b[3], osm)) { !job.isActive }
                                 }
                             } catch (e: java.io.IOException) {
-                                notes += tr("OpenStreetMap não baixado: {0}", e.message ?: e.javaClass.simpleName); return@withContext
+                                notes += tr("OpenStreetMap não baixado: {0}", errorText(e)); return@withContext
                             }
                             val (json, count) = com.appdwg.core.Overpass.toGeoJson(answers)
                             if (count == 0) { notes += tr("OpenStreetMap: nada desses tipos nesta área."); return@withContext }
@@ -1393,11 +1393,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 areaMessage = tr("Download cancelado.")
             } catch (e: java.io.IOException) {
-                areaMessage = tr("Sem conexão com o servidor: {0}. Confira a internet e tente de novo.", e.message ?: e.javaClass.simpleName)
+                areaMessage = tr("Sem conexão com o servidor: {0}. Confira a internet e tente de novo.", errorText(e))
             } catch (e: OutOfMemoryError) {
                 areaMessage = tr("Memória insuficiente: use uma área menor ou uma tolerância maior.")
             } catch (e: Exception) {
-                areaMessage = tr("Não foi possível baixar: {0}", e.message ?: e.javaClass.simpleName)
+                areaMessage = tr("Não foi possível baixar: {0}", errorText(e))
             }
         }
     }
@@ -1425,7 +1425,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 if (found.isNotEmpty()) scenesMessage = null
                 measured
             } catch (e: Exception) {
-                scenesMessage = tr("Não foi possível buscar: {0}", e.message ?: e.javaClass.simpleName); emptyList()
+                scenesMessage = tr("Não foi possível buscar: {0}", errorText(e)); emptyList()
             }
         }
     }
@@ -1653,7 +1653,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: OutOfMemoryError) {
             if (!quiet) geo.gridMessage = app.getString(R.string.calib_grid_memory); false
         } catch (e: Exception) {
-            if (!quiet) geo.gridMessage = app.getString(R.string.calib_grid_error, e.message ?: e.javaClass.simpleName); false
+            if (!quiet) geo.gridMessage = app.getString(R.string.calib_grid_error, errorText(e)); false
         }
     }
     val basemap = BasemapStore(app)
@@ -1731,7 +1731,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 app.getString(R.string.crs_online_unsupported, e.message ?: "")
             } catch (e: Throwable) {
                 android.util.Log.w("Gromatic", "epsg.io", e)
-                app.getString(R.string.crs_online_failed, e.message ?: e.javaClass.simpleName)
+                app.getString(R.string.crs_online_failed, errorText(e))
             }
         }
     }
@@ -1837,7 +1837,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: OutOfMemoryError) {
             roadMessage = tr("Memória insuficiente para projetar.")
         } catch (e: Exception) {
-            roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+            roadMessage = tr("Não foi possível projetar: {0}", errorText(e))
         }
     }
 
@@ -1868,7 +1868,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (routeSuggestions.isEmpty()) roadMessage = tr("Nenhum caminho pelo terreno entre a saída e a chegada.")
             } catch (e: Exception) {
-                roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+                roadMessage = tr("Não foi possível projetar: {0}", errorText(e))
             }
         }
     }
@@ -1897,7 +1897,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (gradeSuggestions.isEmpty()) roadMessage = tr("O eixo está fora do terreno.")
             } catch (e: Exception) {
-                roadMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+                roadMessage = tr("Não foi possível projetar: {0}", errorText(e))
             }
         }
     }
@@ -2462,7 +2462,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 modelMessage = tr("Modelo grande demais para a memória deste aparelho.")
             } catch (e: Exception) {
-                modelMessage = tr("Não foi possível ler {0}: {1}", main.second, e.message ?: e.javaClass.simpleName)
+                modelMessage = tr("Não foi possível ler {0}: {1}", main.second, errorText(e))
             }
         }
     }
@@ -2563,7 +2563,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: OutOfMemoryError) {
             platformMessage = tr("Memória insuficiente para projetar.")
         } catch (e: Exception) {
-            platformMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+            platformMessage = tr("Não foi possível projetar: {0}", errorText(e))
         }
     }
 
@@ -2599,7 +2599,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 platformMessage = if (platformOptions.isEmpty()) tr("A plataforma está fora do terreno.") else null
             } catch (e: Exception) {
-                platformMessage = tr("Não foi possível projetar: {0}", e.message ?: e.javaClass.simpleName)
+                platformMessage = tr("Não foi possível projetar: {0}", errorText(e))
             }
         }
     }
@@ -2675,7 +2675,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 tr("Memória insuficiente para exportar {0}.", what)
             } catch (e: Exception) {
-                tr("Não foi possível exportar {0}: {1}", what, e.message ?: e.javaClass.simpleName)
+                tr("Não foi possível exportar {0}: {1}", what, errorText(e))
             }
         }
     }
@@ -2906,7 +2906,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 if (CloudDocs.isDrive(target.toString())) tr("Projeto salvo no Google Drive ({0}); o app Drive termina o envio em segundo plano.", displayName(target))
                 else tr("Projeto salvo em {0}.", displayName(target))
             } catch (e: Exception) {
-                tr("Não foi possível salvar o projeto: {0}", e.message ?: e.javaClass.simpleName)
+                tr("Não foi possível salvar o projeto: {0}", errorText(e))
             }
         }
     }
@@ -2965,7 +2965,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     projectMessage = tr("Download cancelado.")
                     return@launch
                 } catch (e: Exception) {
-                    state = ProjectState.Failed(name, tr("Não foi possível baixar do Google Drive: {0}", e.message ?: e.javaClass.simpleName))
+                    state = ProjectState.Failed(name, tr("Não foi possível baixar do Google Drive: {0}", errorText(e)))
                     return@launch
                 }
             }
@@ -3000,7 +3000,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 ProjectDoc.fromJson(JSONObject(text))
             }
         } catch (e: Exception) {
-            state = ProjectState.Failed(name, tr("Não foi possível ler o projeto: {0}", e.message ?: e.javaClass.simpleName))
+            state = ProjectState.Failed(name, tr("Não foi possível ler o projeto: {0}", errorText(e)))
             return
         }
         openProjectDoc(uri, doc, doc.main)
@@ -3185,7 +3185,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: OutOfMemoryError) {
                 ProjectState.Failed(name, tr("Arquivo grande demais para a memória deste aparelho."))
             } catch (e: Exception) {
-                ProjectState.Failed(name, tr("Não foi possível ler o arquivo: {0}", e.message ?: e.javaClass.simpleName))
+                ProjectState.Failed(name, tr("Não foi possível ler o arquivo: {0}", errorText(e)))
             }
         }
         return state is ProjectState.Loaded

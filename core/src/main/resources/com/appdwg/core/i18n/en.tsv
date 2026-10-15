@@ -1264,3 +1264,7 @@ Rampa depois	Grade after
 Tangente	Tangent
 Curva circular	Circular curve
 Espiral	Spiral
+arquivo não encontrado ou sem permissão de acesso	file not found or access denied
+erro de leitura ou gravação do arquivo	file read or write error
+os dados não permitiram concluir a operação ({0})	the data did not allow the operation to finish ({0})
+número inválido no arquivo	invalid number in the file

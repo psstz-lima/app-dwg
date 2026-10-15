@@ -21,7 +21,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,11 +41,11 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
     val codes = vm.pointCodes
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = { vm.savePointCodes(codes + PointCode("NOVO", tr("Novo código"), listOf("NOVO"), "TOPO-NOVO", 0xFF607D8B.toInt())); editing = codes.size }) { Text(tr("Adicionar")) }
-                TextButton(onClick = { vm.savePointCodes(PointCodes.defaults) }) { Text(tr("Restaurar padrão")) }
+                OutlinedButton(onClick = { vm.savePointCodes(codes + PointCode("NOVO", tr("Novo código"), listOf("NOVO"), "TOPO-NOVO", 0xFF607D8B.toInt())); editing = codes.size }) { Text(tr("Adicionar")) }
+                OutlinedButton(onClick = { vm.savePointCodes(PointCodes.defaults) }) { Text(tr("Restaurar padrão")) }
             }
         },
         title = { Text(tr("Códigos de campo")) },
@@ -83,7 +83,7 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
         AlertDialog(
             onDismissRequest = { editing = null },
             confirmButton = {
-                TextButton(enabled = code.isNotBlank() && argb != null, onClick = {
+                OutlinedButton(enabled = code.isNotBlank() && argb != null, onClick = {
                     val edited = PointCode(code.trim().uppercase(), name.trim(), aliases.split(',').map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf(code.trim()) },
                         layer.trim().ifEmpty { "TOPO-" + code.trim().uppercase() }, argb!!, connect, closed, breakline, symbol)
                     vm.savePointCodes(codes.toMutableList().apply { set(i, edited) }); editing = null
@@ -91,8 +91,8 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { vm.savePointCodes(codes.filterIndexed { k, _ -> k != i }); editing = null }) { Text(tr("Apagar")) }
-                    TextButton(onClick = { editing = null }) { Text(tr("Cancelar")) }
+                    OutlinedButton(onClick = { vm.savePointCodes(codes.filterIndexed { k, _ -> k != i }); editing = null }) { Text(tr("Apagar")) }
+                    OutlinedButton(onClick = { editing = null }) { Text(tr("Cancelar")) }
                 }
             },
             title = { Text(tr("Código {0}", c.code)) },

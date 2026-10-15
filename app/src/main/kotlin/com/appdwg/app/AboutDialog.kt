@@ -9,7 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -68,6 +68,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 Text(tr("Sistemas de coordenadas: catálogo por região (UTM, LTM, RTM, Lambert e geográficas), Transversa de Mercator pelas séries de Krüger; transformações de SAD69, SAD69(96) e Córrego Alegre para SIRGAS 2000 com os parâmetros do IBGE."), style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
     )
 }

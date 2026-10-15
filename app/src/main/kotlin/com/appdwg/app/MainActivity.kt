@@ -44,7 +44,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.clip
@@ -369,8 +368,8 @@ fun CoordinatesDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -> Unit)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(tr("Digitar coordenadas")) },
-        confirmButton = { TextButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Ir para o ponto")) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancelar")) } },
+        confirmButton = { OutlinedButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Ir para o ponto")) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) } },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.OutlinedTextField(text, { text = it }, label = { Text(tr("Latitude, longitude do centro")) },
@@ -810,7 +809,7 @@ private fun ProjectScreen(
             }
             // The properties card folds into a small button, so the plan stays clear on a phone.
             if (vm.themes.panelOpen) Column(Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth()) {
-                TextButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
+                OutlinedButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
                 InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
             } else GButton(tr("Propriedades") + " ▴", { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
@@ -1054,8 +1053,8 @@ private fun ProjectScreen(
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque na planta onde fica a anotação."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text(tr("Na posição do GPS")) }
-                            TextButton(onClick = { addingNote = false }) { Text(tr("Cancelar")) }
+                            if (gpsPoint != null) OutlinedButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text(tr("Na posição do GPS")) }
+                            OutlinedButton(onClick = { addingNote = false }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (openNote != null && !wide) {
@@ -1065,7 +1064,7 @@ private fun ProjectScreen(
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque na linha que o bordo da pista deve seguir."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { roadTargetPick = null; showRoad = true }) { Text(tr("Cancelar")) }
+                            OutlinedButton(onClick = { roadTargetPick = null; showRoad = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingRoad) {
@@ -1076,10 +1075,10 @@ private fun ProjectScreen(
                         }
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque os PIs do eixo, do início ao fim ({0}). Arraste um PI para movê-lo; toque nele para raio e transição.", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
-                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
-                            TextButton(onClick = { showElements = true }) { Text(tr("Elementos")) }
-                            TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
+                            OutlinedButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
+                            OutlinedButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
+                            OutlinedButton(onClick = { showElements = true }) { Text(tr("Elementos")) }
+                            OutlinedButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (modelPickFor != null) {
@@ -1087,16 +1086,16 @@ private fun ProjectScreen(
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(when (alignPick) { 1 -> tr("Toque onde fica o ponto A do modelo."); 2 -> tr("Toque onde fica o ponto B do modelo.")
                                 else -> tr("Toque o ponto de inserção do modelo.") } + tr(" O toque encaixa em pontos e vértices."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { modelPickFor = null; showModels = true }) { Text(tr("Cancelar")) }
+                            OutlinedButton(onClick = { modelPickFor = null; showModels = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genReview) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("{0} ponto(s) em ciano.", gen.preview.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { genReview = false; showGen = true }) { Text(tr("Ajustar")) }
-                            TextButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text(tr("Criar")) }
-                            TextButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text(tr("Cancelar")) }
+                            OutlinedButton(onClick = { genReview = false; showGen = true }) { Text(tr("Ajustar")) }
+                            OutlinedButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text(tr("Criar")) }
+                            OutlinedButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genPick != null) {
@@ -1109,17 +1108,17 @@ private fun ProjectScreen(
                                 else -> tr("Toque na linha, polilinha 3D ou eixo.")
                             }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             if (genPick == GenPick.AREA_DRAW) {
-                                TextButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Desfazer")) }
-                                TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
+                                OutlinedButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Desfazer")) }
+                                OutlinedButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
                             }
-                            TextButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) tr("Concluir") else tr("Cancelar")) }
+                            OutlinedButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) tr("Concluir") else tr("Cancelar")) }
                         }
                     }
                 } else if (v.pickingOutlet) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque no ponto de lançamento; ele encaixa no talvegue mais próximo."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { v.pickingOutlet = false; showBasin = true }) { Text(tr("Cancelar")) }
+                            OutlinedButton(onClick = { v.pickingOutlet = false; showBasin = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingPlatform) {
@@ -1127,16 +1126,16 @@ private fun ProjectScreen(
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque os vértices da plataforma ({0}). O toque encaixa em pontos e vértices.", platformOutline.size),
                                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text(tr("Desfazer")) }
-                            TextButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text(tr("Limpar")) }
-                            TextButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text(tr("Concluir")) }
+                            OutlinedButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text(tr("Desfazer")) }
+                            OutlinedButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text(tr("Limpar")) }
+                            OutlinedButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (addingPoints) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque na planta para criar um ponto (cota da superfície)."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
-                            TextButton(onClick = { addingPoints = false }) { Text(tr("Concluir")) }
+                            OutlinedButton(onClick = { addingPoints = false }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (showProfile && longProfile != null) {
@@ -1173,8 +1172,8 @@ private fun ProjectScreen(
             else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
                 Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
-                    TextButton(onClick = { showAdvice = true }) { Text(tr("Ver sugestões")) }
-                    TextButton(onClick = { adviceCard = false }) { Text(tr("Fechar")) }
+                    OutlinedButton(onClick = { showAdvice = true }) { Text(tr("Ver sugestões")) }
+                    OutlinedButton(onClick = { adviceCard = false }) { Text(tr("Fechar")) }
                 }
             }
             if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
@@ -1185,7 +1184,7 @@ private fun ProjectScreen(
             enter = androidx.compose.animation.expandHorizontally(androidx.compose.animation.core.tween(180)),
             exit = androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(180))) { SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
-            if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
+            if (project.warnings.isNotEmpty()) OutlinedButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
             if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.fillMaxWidth())
             if (measuring) MeasureCard(measurement, onUndo = { measurePoints = measurePoints.dropLast(1) }, onClear = { measurePoints = emptyList() },
                 onDone = { measuring = false }, modifier = Modifier.fillMaxWidth(),
@@ -1561,8 +1560,8 @@ private fun ProjectScreen(
     if (showContourDialog) {
         AlertDialog(
             onDismissRequest = { showContourDialog = false },
-            confirmButton = { TextButton(onClick = { showContourDialog = false }) { Text(tr("Fechar")) } },
-            dismissButton = { TextButton(onClick = { showContours = false; showContourDialog = false }) { Text(tr("Desligar")) } },
+            confirmButton = { OutlinedButton(onClick = { showContourDialog = false }) { Text(tr("Fechar")) } },
+            dismissButton = { OutlinedButton(onClick = { showContours = false; showContourDialog = false }) { Text(tr("Desligar")) } },
             title = { Text(tr("Curvas de nível")) },
             text = {
                 Column {
@@ -1677,7 +1676,7 @@ private fun ProjectScreen(
     if (showWarnings) {
         AlertDialog(
             onDismissRequest = { showWarnings = false },
-            confirmButton = { TextButton(onClick = { showWarnings = false }) { Text(tr("Fechar")) } },
+            confirmButton = { OutlinedButton(onClick = { showWarnings = false }) { Text(tr("Fechar")) } },
             title = { Text(tr("Avisos da leitura")) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -1694,10 +1693,10 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
     val d = vm.drape
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onPick) { Text(if (d == null) tr("Escolher") else tr("Trocar")) }
+                OutlinedButton(onClick = onPick) { Text(if (d == null) tr("Escolher") else tr("Trocar")) }
                 if (d != null) OutlinedButton(onClick = { vm.removeDrape(); onDismiss() }) { Text(tr("Remover")) }
             }
         },
@@ -1828,12 +1827,12 @@ private fun MeasureCard(
             if (saved > 0) Text(tr("{0} medição(ões) salva(s) na planta (M1, M2…).", saved), style = MaterialTheme.typography.bodySmall)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
                 if (m != null) {
-                    TextButton(onClick = onUndo) { Text(tr("Desfazer")) }
-                    TextButton(onClick = onClear) { Text(tr("Limpar")) }
-                    if (m.legs.isNotEmpty()) TextButton(onClick = onSave) { Text(tr("Salvar e nova")) }
+                    OutlinedButton(onClick = onUndo) { Text(tr("Desfazer")) }
+                    OutlinedButton(onClick = onClear) { Text(tr("Limpar")) }
+                    if (m.legs.isNotEmpty()) OutlinedButton(onClick = onSave) { Text(tr("Salvar e nova")) }
                 }
-                if (saved > 0) TextButton(onClick = onClearSaved) { Text(tr("Apagar salvas")) }
-                TextButton(onClick = onDone) { Text(tr("Concluir")) }
+                if (saved > 0) OutlinedButton(onClick = onClearSaved) { Text(tr("Apagar salvas")) }
+                OutlinedButton(onClick = onDone) { Text(tr("Concluir")) }
             }
         }
     }
@@ -1889,11 +1888,11 @@ private fun LayersDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onAllOn) { Text(tr("Ligar todas")) }
-                TextButton(onClick = onAllOff) { Text(tr("Desligar todas")) }
+                OutlinedButton(onClick = onAllOn) { Text(tr("Ligar todas")) }
+                OutlinedButton(onClick = onAllOff) { Text(tr("Desligar todas")) }
             }
         },
         title = { Text(tr("Camadas")) },
@@ -1936,9 +1935,9 @@ private fun LayersDialog(
     editing?.let { layer ->
         AlertDialog(
             onDismissRequest = { editing = null },
-            confirmButton = { TextButton(onClick = { editing = null }) { Text(tr("Fechar")) } },
+            confirmButton = { OutlinedButton(onClick = { editing = null }) { Text(tr("Fechar")) } },
             dismissButton = {
-                TextButton(onClick = { onColor(layer, null); editing = null }) { Text(tr("Cor original")) }
+                OutlinedButton(onClick = { onColor(layer, null); editing = null }) { Text(tr("Cor original")) }
             },
             title = { Text(tr("Cor de {0}", layer)) },
             text = {

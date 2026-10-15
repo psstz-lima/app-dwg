@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -138,7 +137,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
         onDismissRequest = { v.basinParams = params(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
-        confirmButton = { TextButton(onClick = { v.basinParams = params(); onDismiss() }) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = { v.basinParams = params(); onDismiss() }) { Text(tr("Fechar")) } },
         dismissButton = {
             if (vm.basin != null || vm.outlets.isNotEmpty()) OutlinedButton(onClick = { vm.clearBasin() }) { Text(tr("Limpar")) }
         },
@@ -169,7 +168,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                     vm.outlets.forEachIndexed { i, s ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${i + 1}. " + kindText(s.kind) + " · " + StationFormat.landArea(s.area, 2), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                            TextButton(enabled = surface != null && vm.tasks.isEmpty(), onClick = { surface?.let { vm.basinAt(it, s) } }) { Text(tr("Delimitar")) }
+                            OutlinedButton(enabled = surface != null && vm.tasks.isEmpty(), onClick = { surface?.let { vm.basinAt(it, s) } }) { Text(tr("Delimitar")) }
                         }
                     }
                 }
@@ -192,7 +191,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                         found.take(8).forEach { e ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(e.label + if (e.author.isNotEmpty()) " · " + e.author else "", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-                                TextButton(onClick = { pick(e) }) { Text(tr("Usar")) }
+                                OutlinedButton(onClick = { pick(e) }) { Text(tr("Usar")) }
                             }
                         }
                         if (found.isEmpty()) Text(tr("Nenhuma equação para essa busca; digite K, a, b e c."), style = MaterialTheme.typography.bodySmall)

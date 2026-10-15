@@ -80,7 +80,7 @@ class GnssManager(private val context: Context) {
                     while (running) { val l = r.readLine() ?: break; onLine(l) }
                 }
             } catch (e: Exception) {
-                main.post { status = tr("Falha na antena: {0}", e.message ?: e.javaClass.simpleName) }
+                main.post { status = tr("Falha na antena: {0}", errorText(e)) }
             } finally {
                 main.post { connected = false }
                 antennaOut = null
@@ -100,7 +100,7 @@ class GnssManager(private val context: Context) {
             connected = true
             status = tr("GPS do aparelho")
         } catch (e: Exception) {
-            status = tr("GPS do aparelho indisponível: {0}", e.message ?: e.javaClass.simpleName)
+            status = tr("GPS do aparelho indisponível: {0}", errorText(e))
         }
     }
 
@@ -126,7 +126,7 @@ class GnssManager(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                if (gen == replayGen) main.post { status = tr("Falha na simulação: {0}", e.message ?: e.javaClass.simpleName) }
+                if (gen == replayGen) main.post { status = tr("Falha na simulação: {0}", errorText(e)) }
             } finally {
                 if (gen == replayGen) main.post { connected = false }
             }
@@ -150,7 +150,7 @@ class GnssManager(private val context: Context) {
                 client.run()
                 main.post { if (ntrip === client) ntripStatus = tr("Caster encerrou a conexão") }
             } catch (e: Exception) {
-                main.post { ntripStatus = "NTRIP: ${e.message ?: e.javaClass.simpleName}" }
+                main.post { ntripStatus = "NTRIP: ${errorText(e)}" }
             }
         }
     }

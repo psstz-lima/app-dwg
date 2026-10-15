@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +57,7 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.9f),
         title = { Text(stringResource(R.string.crs_title)) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.crs_current, current.name + (current.epsg?.let { " · EPSG $it" } ?: "")), fontWeight = FontWeight.SemiBold)
@@ -69,7 +68,7 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
                     Text(stringResource(R.string.crs_mine), style = MaterialTheme.typography.labelLarge)
                     for (c in CrsCatalog.search(query, vm.customCrs).filter { it.custom }) Row(verticalAlignment = Alignment.CenterVertically) {
                         CrsRow(c, c.id == current.id, Modifier.weight(1f)) { use(c) }
-                        TextButton(onClick = { editing = c }) { Text(stringResource(R.string.crs_edit)) }
+                        OutlinedButton(onClick = { editing = c }) { Text(stringResource(R.string.crs_edit)) }
                         OutlinedButton(onClick = { vm.deleteCustomCrs(c) }) { Text(stringResource(R.string.crs_delete)) }
                     }
                 }
@@ -183,8 +182,8 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.9f),
         title = { Text(stringResource(R.string.crs_new)) },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.crs_cancel)) } },
-        confirmButton = { TextButton(enabled = ok, onClick = { onSave(start.copy(name = name.trim(), datum = datum!!, projection = projection!!, custom = true, local = false, epsg = null)) }) {
+        dismissButton = { OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.crs_cancel)) } },
+        confirmButton = { OutlinedButton(enabled = ok, onClick = { onSave(start.copy(name = name.trim(), datum = datum!!, projection = projection!!, custom = true, local = false, epsg = null)) }) {
             Text(stringResource(R.string.crs_save)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,7 +48,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
     val hits = remember(project, query) { Search.find(project, query) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Ir para")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -67,7 +66,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
                     Text(tr("Estaca e afastamento"), style = MaterialTheme.typography.labelLarge)
                     if (project.alignments.size > 1) {
                         var open by remember { mutableStateOf(false) }
-                        TextButton(onClick = { open = true }) { Text(project.alignments[alignment].name) }
+                        OutlinedButton(onClick = { open = true }) { Text(project.alignments[alignment].name) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             project.alignments.forEachIndexed { i, a -> DropdownMenuItem(text = { Text(a.name) }, onClick = { alignment = i; open = false }) }
                         }

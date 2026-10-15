@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -151,15 +150,15 @@ fun GeneratePointsDialog(
         modifier = Modifier.fillMaxWidth(0.94f),
         confirmButton = {
             Row {
-                TextButton(onClick = {
+                OutlinedButton(onClick = {
                     val (pts, why) = generatePoints(g, project, existing, viewport)
                     g.preview = pts.orEmpty(); g.message = why
                     if (pts != null) onPreview()
                 }) { Text(tr("Pré-visualizar")) }
-                TextButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }) { Text(tr("Criar {0} pontos", g.preview.size)) }
+                OutlinedButton(enabled = g.preview.isNotEmpty(), onClick = { onConfirm(g.preview); g.preview = emptyList() }) { Text(tr("Criar {0} pontos", g.preview.size)) }
             }
         },
-        dismissButton = { TextButton(onClick = { g.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
+        dismissButton = { OutlinedButton(onClick = { g.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
         title = { Text(tr("Gerar pontos (camada _POINTS)")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -205,7 +204,7 @@ fun GeneratePointsDialog(
                         OutlinedTextField(g.dx, { g.dx = it }, label = { Text(tr("Espaçamento X ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
                         OutlinedTextField(g.dy, { g.dy = it }, label = { Text(tr("Espaçamento Y ({0})", StationFormat.lengthUnit)) }, singleLine = true, modifier = Modifier.width(170.dp), keyboardOptions = text)
                         OutlinedTextField(g.rotation, { g.rotation = it }, label = { Text(tr("Rotação (°)")) }, singleLine = true, modifier = Modifier.width(130.dp), keyboardOptions = text)
-                        TextButton(onClick = { onPick(GenPick.ROTATION) }) { Text(tr("Alinhar a uma linha")) }
+                        OutlinedButton(onClick = { onPick(GenPick.ROTATION) }) { Text(tr("Alinhar a uma linha")) }
                     }
                 }
                 HorizontalDivider()
@@ -219,7 +218,7 @@ fun GeneratePointsDialog(
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
-                            TextButton(onClick = { open = true }) { Text(g.surface ?: names.firstOrNull() ?: tr("sem superfície"), maxLines = 1) }
+                            OutlinedButton(onClick = { open = true }) { Text(g.surface ?: names.firstOrNull() ?: tr("sem superfície"), maxLines = 1) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { g.surface = n; open = false }) }
                             }

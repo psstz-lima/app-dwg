@@ -15,7 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,12 +61,12 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
         onDismissRequest = onDismiss,
         title = { Text(tr("Baixar dados da área")) },
         confirmButton = {
-            TextButton(enabled = area != null && (dem || kinds.value.isNotEmpty() || (image && hasTerrain)) && !busy, onClick = {
+            OutlinedButton(enabled = area != null && (dem || kinds.value.isNotEmpty() || (image && hasTerrain)) && !busy, onClick = {
                 val tol = StationFormat.parseLength(tolerance)?.takeIf { it > 0 } ?: 0.5
                 vm.downloadArea(area!!, dem, tol, keepTiff, kinds.value, image && hasTerrain, vm.scenes.firstOrNull { it.id == sceneId })
             }) { Text(tr("Baixar")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(tr("Área"), fontWeight = FontWeight.Bold)
@@ -74,7 +74,7 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
                 Choice(tr("A planta visível na tela"), pick == 1) { pick = 1 }
                 Choice(if (measure.size >= 2) tr("Retângulo em volta da medição ({0} pontos)", measure.size) else tr("Retângulo em volta da medição (desenhe com Medir)"),
                     pick == 2, enabled = measure.size >= 2) { pick = 2 }
-                TextButton(onClick = onDrawArea) { Text(tr("Marcar a área com Medir…")) }
+                OutlinedButton(onClick = onDrawArea) { Text(tr("Marcar a área com Medir…")) }
                 area?.let { Text(tr("{0} × {1}", StationFormat.length(it.width, 0), StationFormat.length(it.height, 0)), style = MaterialTheme.typography.bodySmall) }
                 HorizontalDivider()
                 Check(tr("Terreno: Copernicus GLO-30 (30 m)"), dem) { dem = it }
@@ -92,7 +92,7 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
                     val chosen = vm.scenes.firstOrNull { it.id == sceneId }
                     Text(chosen?.let { tr("Data: {0}", sceneLabel(it)) }
                         ?: tr("Data: a mais recente com poucas nuvens"), style = MaterialTheme.typography.bodySmall)
-                    TextButton(enabled = area != null, onClick = { area?.let { vm.searchScenes(it) } }) { Text(tr("Escolher a data…")) }
+                    OutlinedButton(enabled = area != null, onClick = { area?.let { vm.searchScenes(it) } }) { Text(tr("Escolher a data…")) }
                     vm.scenesMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     for (sc in vm.scenes.take(12)) {
                         Choice(sceneLabel(sc), sceneId == sc.id) { sceneId = sc.id }

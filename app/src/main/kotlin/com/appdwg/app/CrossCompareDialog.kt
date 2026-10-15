@@ -22,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +44,7 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
         // Wide, so the matrix fits on a tablet.
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Comparação cruzada")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -60,8 +59,8 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                         Text(if (i >= 0) "${i + 1}." else "", Modifier.width(28.dp))
                         Text(s.name, Modifier.weight(1f), maxLines = 1)
                         if (i >= 0) {
-                            TextButton(onClick = { vm.moveCross(s.name, -1) }, enabled = i > 0) { Text("↑") }
-                            TextButton(onClick = { vm.moveCross(s.name, 1) }, enabled = i < marked.size - 1) { Text("↓") }
+                            OutlinedButton(onClick = { vm.moveCross(s.name, -1) }, enabled = i > 0) { Text("↑") }
+                            OutlinedButton(onClick = { vm.moveCross(s.name, 1) }, enabled = i < marked.size - 1) { Text("↓") }
                         }
                     }
                 }

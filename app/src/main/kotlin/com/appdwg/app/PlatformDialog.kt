@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,14 +83,14 @@ fun PlatformDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
         confirmButton = {
-            TextButton(enabled = valid && v.platformOutline.size >= 3 && vm.tasks.isEmpty(), onClick = {
+            OutlinedButton(enabled = valid && v.platformOutline.size >= 3 && vm.tasks.isEmpty(), onClick = {
                 v.platformParams = params(); vm.designPlatform()
             }) { Text(tr("Calcular")) }
         },
         dismissButton = {
             Row {
                 if (vm.platform != null) OutlinedButton(onClick = { vm.removePlatform() }) { Text(tr("Remover projeto")) }
-                TextButton(onClick = { if (valid) v.platformParams = params(); onDismiss() }) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = { if (valid) v.platformParams = params(); onDismiss() }) { Text(tr("Fechar")) }
             }
         },
         title = { Text(tr("Projeto de plataforma")) },
@@ -110,7 +109,7 @@ fun PlatformDialog(
                     Text(tr("Terreno"), Modifier.width(120.dp))
                     var open by remember { mutableStateOf(false) }
                     Box {
-                        TextButton(onClick = { open = true }) { Text((v.platformTerrain ?: names.firstOrNull())?.substringAfterLast('|') ?: "—", maxLines = 1) }
+                        OutlinedButton(onClick = { open = true }) { Text((v.platformTerrain ?: names.firstOrNull())?.substringAfterLast('|') ?: "—", maxLines = 1) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             names.forEach { n -> DropdownMenuItem(text = { Text(n.substringAfterLast('|')) }, onClick = { v.platformTerrain = n; open = false }) }
                         }
@@ -156,7 +155,7 @@ fun PlatformDialog(
                                 StationFormat.lengthValue(o.baseElevation, 2), StationFormat.volume(o.cut), StationFormat.volume(o.fill),
                                 StationFormat.length(o.maxSlopeHeight, 1), StationFormat.area(o.footprint, 0)), style = MaterialTheme.typography.bodySmall)
                         }
-                        TextButton(enabled = vm.tasks.isEmpty(), onClick = {
+                        OutlinedButton(enabled = vm.tasks.isEmpty(), onClick = {
                             useVertex = false
                             elevation = StationFormat.lengthValue(o.baseElevation, 3)
                             grade = StationFormat.decimal(o.gradePercent, 2)

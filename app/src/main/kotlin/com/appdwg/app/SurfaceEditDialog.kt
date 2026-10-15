@@ -16,7 +16,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,8 +60,8 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.se_title)) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-        dismissButton = if (vm.canUndoSurface) ({ TextButton(onClick = { vm.undoSurfaceEdit() }) { Text(stringResource(R.string.se_undo)) } }) else null,
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
+        dismissButton = if (vm.canUndoSurface) ({ OutlinedButton(onClick = { vm.undoSurfaceEdit() }) { Text(stringResource(R.string.se_undo)) } }) else null,
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(stringResource(R.string.se_surface), style = MaterialTheme.typography.labelLarge)
