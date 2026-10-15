@@ -4,6 +4,7 @@ import android.opengl.GLES30
 import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
@@ -37,8 +38,14 @@ import java.nio.FloatBuffer
 import java.nio.IntBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.tan
@@ -77,6 +84,18 @@ fun View3D(
     val renderer = remember(project) { Renderer3D(scene) }
     // Holder for the GL view, so gestures and settings can ask it to redraw.
     val holder = remember(project) { arrayOfNulls<GLSurfaceView>(1) }
+    val context = LocalContext.current
+    val textureBudget = remember(context) {
+        val manager = context.getSystemService(android.app.ActivityManager::class.java)
+        if (manager == null) DrapeLod.budgetBytes(4L shl 30, 192)
+        else {
+            val info = android.app.ActivityManager.MemoryInfo()
+            manager.getMemoryInfo(info)
+            DrapeLod.budgetBytes(info.totalMem, manager.memoryClass)
+        }
+    }
+    renderer.textureBudget = textureBudget
+    renderer.onNeedsFrame = { holder[0]?.requestRender() }
 
     // An edited surface stands in for its original, which would fill its holes.
     val styles = project.surfaces.associate { sf ->
@@ -353,6 +372,39 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private class GpuTile(val id: Int, val rect: FloatArray)
     @Volatile private var gpuTiles: List<GpuTile> = emptyList()
     var onDrapeFailed: (() -> Unit)? = null
+    @Volatile var textureBudget: Long = DrapeLod.budgetBytes(4L shl 30, 192)
+    var onNeedsFrame: (() -> Unit)? = null
+    @Volatile private var streaming = false
+    private var streamingPicture: TiledPicture? = null
+    private var uploadsBlocked = false
+    @Volatile private var streamGeneration = 0
+    @Volatile private var gpuTileSide = DrapeLod.STREAM_TILE
+    @Volatile private var decodeFailedGeneration = -1
+    private val residents = HashMap<String, Resident>()
+    private val held = ArrayList<GpuTile>()
+    private val ready = ConcurrentLinkedQueue<PendingTile>()
+    private val queuedKeys = ConcurrentHashMap.newKeySet<String>()
+    private val decoder = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "drape-decode").apply { isDaemon = true }
+    }
+    private var useStamp = 0L
+    private var steppedQuality = -1
+
+    private class Resident(val node: DrapeLod.Node, val tile: GpuTile, val bytes: Long, var lastUsed: Long)
+
+    private class PendingTile(
+        val generation: Int,
+        val node: DrapeLod.Node,
+        val bitmap: android.graphics.Bitmap,
+        val alignment: Int,
+        val tileX: Int,
+        val tileY: Int,
+        val tileW: Int,
+        val tileH: Int,
+        val fullW: Int,
+        val fullH: Int,
+        val bytes: Long,
+    )
     @Volatile private var pendingLines = FloatArray(0)
     @Volatile private var pendingTris = FloatArray(0)
     @Volatile private var overlayDirty = false
@@ -362,8 +414,34 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private var overlayTriCount = 0
 
     fun setDrape(drape: Drape?) {
+        val previous = this.drape
         this.drape = drape
-        drapeDirty = true
+        val sameTiles = previous?.tiles != null && previous.tiles === drape?.tiles &&
+            previous.quality == drape?.quality && previous.focus == drape?.focus
+        if (!sameTiles) drapeDirty = true
+    }
+
+    private var anisotropy = Float.NaN
+
+    /** Sharper on a tilted surface when the driver has the extension. A missing one is left at 1. */
+    private fun applyAnisotropy() {
+        if (anisotropy.isNaN()) {
+            val count = IntArray(1)
+            GLES30.glGetIntegerv(GLES30.GL_NUM_EXTENSIONS, count, 0)
+            val extensions = if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                emptyList()
+            } else {
+                List(count[0].coerceAtLeast(0)) { i -> GLES30.glGetStringi(GLES30.GL_EXTENSIONS, i) ?: "" }
+            }
+            val maxA = FloatArray(1)
+            GLES30.glGetFloatv(GlTexture.MAX_TEXTURE_MAX_ANISOTROPY_EXT, maxA, 0)
+            val reported = if (GLES30.glGetError() != GLES30.GL_NO_ERROR) 1f else maxA[0]
+            anisotropy = GlTexture.anisotropy(extensions, reported)
+        }
+        if (anisotropy > 1f) {
+            GLES30.glTexParameterf(GLES30.GL_TEXTURE_2D, GlTexture.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy)
+            while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
+        }
     }
 
     private fun deleteTextures(ids: List<Int>) {
@@ -379,12 +457,31 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val snapshot = drape
         while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
         if (snapshot == null) {
+            streaming = false
+            uploadsBlocked = false
+            streamingPicture = null
+            streamGeneration++
+            drainReady()
             val previous = gpuTiles
+            residents.clear()
+            held.clear()
             gpuTiles = emptyList()
             deleteTextures(previous.map { it.id })
             if (drape == null) drapeDirty = false
             return
         }
+        val picture = snapshot.tiles
+        if (picture != null) {
+            armStream()
+            return
+        }
+        streaming = false
+        uploadsBlocked = false
+        streamingPicture = null
+        streamGeneration++
+        drainReady()
+        residents.clear()
+        held.clear()
         val source = snapshot.image.asAndroidBitmap()
         if (source.isRecycled || source.width <= 0 || source.height <= 0) {
             if (drape === snapshot) drapeDirty = false
@@ -423,6 +520,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                         break
                     }
                     GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+                    applyAnisotropy()
                     val placed = GlTexture.placed(
                         snapshot.bounds.minX, snapshot.bounds.maxY, snapshot.bounds.width, snapshot.bounds.height,
                         source.width, source.height, tile,
@@ -460,6 +558,329 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         gpuTiles = built
         deleteTextures(old.map { it.id })
         drapeDirty = false
+    }
+
+    /**
+     * Starts streaming [drape]'s tiles. The picture already on the GPU stays until the new coarse
+     * cover is uploaded. Decoding is not done here.
+     */
+    private fun armStream() {
+        val picture = drape?.tiles
+        streamGeneration++
+        streaming = true
+        uploadsBlocked = false
+        queuedKeys.clear()
+        drainReady()
+        if (streamingPicture !== picture) {
+            if (streamingPicture != null) {
+                // The previous picture stays on screen until its replacement cover is uploaded.
+                held.clear()
+                held.addAll(gpuTiles)
+                residents.clear()
+            }
+            streamingPicture = picture
+        }
+        if (residents.isEmpty() && held.isEmpty()) held.addAll(gpuTiles)
+        val reported = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0]
+        val maxSize = reported.takeIf { it > 0 } ?: 2048
+        gpuTileSide = min(DrapeLod.STREAM_TILE, GlTexture.tileSide(maxSize))
+        steppedQuality = -1
+        drapeDirty = false
+    }
+
+    private fun drainReady() {
+        while (true) {
+            val pending = ready.poll() ?: break
+            if (!pending.bitmap.isRecycled) pending.bitmap.recycle()
+        }
+    }
+
+    /**
+     * Uploads a few tiles that the decoder has finished and asks for the next ones. Runs every
+     * frame, so a large orthophoto does not stall this thread or get the process killed for
+     * uploading the whole file.
+     */
+    private fun streamDrape() {
+        if (!streaming) return
+        val snapshot = drape
+        val picture = snapshot?.tiles ?: return
+        val generation = streamGeneration
+        val plan = cameraPlan(snapshot, picture)
+        if (!plan.nearFits && steppedQuality != snapshot.quality) {
+            steppedQuality = snapshot.quality
+            onDrapeFailed?.invoke()
+        }
+        if (decodeFailedGeneration == generation) {
+            decodeFailedGeneration = -1
+            uploadsBlocked = true
+            if (steppedQuality != snapshot.quality) {
+                steppedQuality = snapshot.quality
+                onDrapeFailed?.invoke()
+            }
+        }
+        var uploaded = 0
+        var failed = false
+        try {
+            while (uploaded < DrapeLod.UPLOADS_PER_FRAME) {
+                val pending = ready.poll() ?: break
+                if (pending.generation != generation) {
+                    if (!pending.bitmap.isRecycled) pending.bitmap.recycle()
+                    continue
+                }
+                val id = uploadPending(pending.bitmap, pending.alignment)
+                if (!pending.bitmap.isRecycled) pending.bitmap.recycle()
+                if (id == null) {
+                    failed = true
+                    break
+                }
+                val placed = GlTexture.placed(
+                    worldLeft(picture, pending.node), worldTop(picture, pending.node),
+                    pending.node.fileW * picture.bounds.width / picture.width.coerceAtLeast(1),
+                    pending.node.fileH * picture.bounds.height / picture.height.coerceAtLeast(1),
+                    pending.fullW, pending.fullH,
+                    GlTexture.Tile(
+                        pending.tileX, pending.tileY, pending.tileW, pending.tileH,
+                        GlTexture.PixelFormat.RGB_565, pending.alignment,
+                    ),
+                )
+                val previous = residents.put(
+                    pending.node.key,
+                    Resident(
+                        pending.node,
+                        GpuTile(
+                            id,
+                            floatArrayOf(
+                                (placed[0] - scene.originX).toFloat(),
+                                (placed[1] - scene.originY).toFloat(),
+                                placed[2].toFloat(),
+                                placed[3].toFloat(),
+                            ),
+                        ),
+                        pending.bytes,
+                        ++useStamp,
+                    ),
+                )
+                if (previous != null) deleteTextures(listOf(previous.tile.id))
+                uploaded++
+            }
+        } finally {
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        }
+        if (failed) {
+            uploadsBlocked = true
+            drainReady()
+            if (steppedQuality != snapshot.quality) {
+                steppedQuality = snapshot.quality
+                onDrapeFailed?.invoke()
+            }
+        }
+        evictResidents(plan, picture.bytesPerPixel)
+        val cover = coverOf(picture, snapshot)
+        val residentKeys = residents.values.map { it.node.key }.toSet()
+        if (held.isNotEmpty() && cover.isNotEmpty() && cover.all { it.key in residentKeys }) {
+            deleteTextures(held.map { it.id })
+            held.clear()
+        }
+        // Finer tiles are drawn first. The depth test keeps them, and the coarser ones fill the gaps.
+        gpuTiles = residents.values.sortedBy { it.node.level }.map { it.tile } + held
+        if (!uploadsBlocked) {
+            val nodes = if (held.isNotEmpty()) cover else plan.tiles
+            enqueueDecodes(picture, nodes, generation, DrapeQuality.pyramidLevel(snapshot.quality))
+        }
+        val wanted = if (held.isNotEmpty()) cover else plan.tiles
+        val missing = wanted.any { it.key !in residents }
+        if (!uploadsBlocked && (missing || ready.isNotEmpty())) onNeedsFrame?.invoke()
+    }
+
+    private fun cameraPlan(snapshot: Drape, picture: TiledPicture): DrapeLod.Selection {
+        val camX = scene.originX + tx + distance * cos(pitch) * cos(yaw)
+        val camY = scene.originY + ty + distance * cos(pitch) * sin(yaw)
+        val camZ = scene.originZ + tz + distance * sin(pitch)
+        val clip = fileClip(picture, snapshot.focus)
+        return DrapeLod.plan(
+            imageWidth = picture.width,
+            imageHeight = picture.height,
+            boundsMinX = picture.bounds.minX,
+            boundsMaxY = picture.bounds.maxY,
+            boundsWidth = picture.bounds.width,
+            boundsHeight = picture.bounds.height,
+            cameraX = camX,
+            cameraY = camY,
+            cameraZ = camZ,
+            groundZ = scene.originZ,
+            targetDistance = distance.toDouble(),
+            worldPerPixel = worldPerPixel(),
+            finestLevel = DrapeQuality.pyramidLevel(snapshot.quality),
+            topLevel = picture.topLevel,
+            tileSide = gpuTileSide,
+            budgetBytes = textureBudget,
+            bytesPerPixel = picture.bytesPerPixel,
+            clipX = clip[0],
+            clipY = clip[1],
+            clipW = clip[2],
+            clipH = clip[3],
+        )
+    }
+
+    private fun fileClip(picture: TiledPicture, focus: com.appdwg.core.Bounds?): IntArray {
+        val w = picture.width
+        val h = picture.height
+        if (focus == null || picture.bounds.width <= 0.0 || picture.bounds.height <= 0.0) return intArrayOf(0, 0, w, h)
+        val px = picture.bounds.width / w
+        val py = picture.bounds.height / h
+        val x0 = floor((focus.minX - picture.bounds.minX) / px).toInt().coerceIn(0, w)
+        val x1 = ceil((focus.maxX - picture.bounds.minX) / px).toInt().coerceIn(0, w)
+        val y0 = floor((picture.bounds.maxY - focus.maxY) / py).toInt().coerceIn(0, h)
+        val y1 = ceil((picture.bounds.maxY - focus.minY) / py).toInt().coerceIn(0, h)
+        if (x1 <= x0 || y1 <= y0) return intArrayOf(0, 0, 0, 0)
+        return intArrayOf(x0, y0, x1 - x0, y1 - y0)
+    }
+
+    private fun worldLeft(picture: TiledPicture, node: DrapeLod.Node): Double {
+        val px = if (picture.width > 0) picture.bounds.width / picture.width else 0.0
+        return picture.bounds.minX + node.fileX * px
+    }
+
+    private fun worldTop(picture: TiledPicture, node: DrapeLod.Node): Double {
+        val py = if (picture.height > 0) picture.bounds.height / picture.height else 0.0
+        return picture.bounds.maxY - node.fileY * py
+    }
+
+    /** GL upload of one bitmap. Null when the driver refuses it. The bitmap is not recycled here. */
+    private fun uploadPending(bitmap: android.graphics.Bitmap, alignment: Int): Int? {
+        if (bitmap.isRecycled || bitmap.width <= 0 || bitmap.height <= 0) return null
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, alignment)
+        while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
+        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
+        if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+            GLES30.glDeleteTextures(1, ids, 0)
+            return null
+        }
+        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+        applyAnisotropy()
+        return ids[0]
+    }
+
+    private fun coverOf(picture: TiledPicture, snapshot: Drape): List<DrapeLod.Node> {
+        val clip = fileClip(picture, snapshot.focus)
+        return DrapeLod.cover(
+            picture.width, picture.height, picture.topLevel, gpuTileSide,
+            clip[0], clip[1], clip[2], clip[3],
+        )
+    }
+
+    private fun evictResidents(plan: DrapeLod.Selection, bytesPerPixel: Int) {
+        val residentNodeKeys = residents.values.map { it.node.key }.toSet()
+        val planKeys = plan.tiles.mapTo(HashSet()) { it.key }
+        val replaced = ArrayList<String>()
+        for ((key, resident) in residents) {
+            if (resident.node.key in planKeys) {
+                resident.lastUsed = ++useStamp
+                continue
+            }
+            if (DrapeLod.dropReason(resident.node, plan.tiles, residentNodeKeys) == DrapeLod.DROP_REPLACED) {
+                replaced += key
+            }
+        }
+        for (key in replaced) {
+            val resident = residents.remove(key) ?: continue
+            deleteTextures(listOf(resident.tile.id))
+        }
+        val pinned = residents.filter { (_, resident) ->
+            resident.node.key in planKeys ||
+                DrapeLod.dropReason(resident.node, plan.tiles, residentNodeKeys) == DrapeLod.KEEP
+        }
+        val missing = plan.tiles.filter { it.key !in residents }.sumOf { nodeBytes(it, bytesPerPixel) }
+        var spare = textureBudget - pinned.values.sumOf { it.bytes } - missing
+        val offscreen = residents.filter { it.key !in pinned }.entries.sortedByDescending { it.value.lastUsed }
+        for ((key, resident) in offscreen) {
+            if (resident.bytes <= spare) spare -= resident.bytes
+            else {
+                residents.remove(key)
+                deleteTextures(listOf(resident.tile.id))
+            }
+        }
+    }
+
+    private fun nodeBytes(node: DrapeLod.Node, bytesPerPixel: Int): Long {
+        val (width, height) = DrapeLod.outputSize(node)
+        return DrapeLod.textureBytes(width, height, bytesPerPixel)
+    }
+
+    /** Asks the decode thread for the nearest missing tiles. File reads stay off this thread. */
+    private fun enqueueDecodes(picture: TiledPicture, nodes: List<DrapeLod.Node>, generation: Int, finest: Int) {
+        val residentNodeKeys = residents.values.map { it.node.key }.toSet()
+        val waiting = ready.map { it.node.key }.toSet()
+        val planKeys = nodes.mapTo(HashSet()) { it.key }
+        val residentPairs = residents.values.map { it.node to it.bytes }
+        for (node in nodes) {
+            if (ready.size + queuedKeys.size >= DrapeLod.UPLOADS_PER_FRAME) return
+            if (node.key in residentNodeKeys || node.key in waiting || node.key in queuedKeys) continue
+            val bytes = nodeBytes(node, picture.bytesPerPixel)
+            val used = residents.values.sumOf { it.bytes }
+            val credit = DrapeLod.replacedBytes(node, residentPairs, planKeys)
+            if (bytes > textureBudget) continue
+            if (!DrapeLod.admits(used, bytes, credit, textureBudget)) break
+            if (!queuedKeys.add(node.key)) continue
+            decoder.execute {
+                if (generation != streamGeneration) return@execute
+                try {
+                    val bitmap = picture.decodeWindow(node.fileX, node.fileY, node.fileW, node.fileH, node.level)
+                    if (bitmap == null || generation != streamGeneration) {
+                        if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
+                        if (generation == streamGeneration) queuedKeys.remove(node.key)
+                        if (bitmap == null && node.level <= finest) decodeFailedGeneration = generation
+                        onNeedsFrame?.invoke()
+                        return@execute
+                    }
+                    // One texture for the node. The plan already keeps it within the GPU tile limit.
+                    val part = GlTexture.plan(
+                        bitmap.width, bitmap.height, bitmap.hasAlpha(), max(bitmap.width, bitmap.height),
+                    )?.singleOrNull()
+                    if (part == null) {
+                        if (!bitmap.isRecycled) bitmap.recycle()
+                        if (generation == streamGeneration) queuedKeys.remove(node.key)
+                        if (node.level <= finest) decodeFailedGeneration = generation
+                        onNeedsFrame?.invoke()
+                        return@execute
+                    }
+                    val piece = GlTexture.tileBitmap(bitmap, part)
+                    if (!bitmap.isRecycled) bitmap.recycle()
+                    if (piece == null || generation != streamGeneration) {
+                        if (piece != null && !piece.isRecycled) piece.recycle()
+                        if (generation == streamGeneration) {
+                            queuedKeys.remove(node.key)
+                            if (piece == null && node.level <= finest) decodeFailedGeneration = generation
+                        }
+                        onNeedsFrame?.invoke()
+                        return@execute
+                    }
+                    ready.add(
+                        PendingTile(
+                            generation, node, piece, part.unpackAlignment,
+                            part.x, part.y, part.width, part.height,
+                            part.width, part.height,
+                            DrapeLod.textureBytes(part.width, part.height, picture.bytesPerPixel),
+                        ),
+                    )
+                    if (generation == streamGeneration) queuedKeys.remove(node.key)
+                    onNeedsFrame?.invoke()
+                } catch (_: Throwable) {
+                    if (generation == streamGeneration) {
+                        queuedKeys.remove(node.key)
+                        if (node.level <= finest) decodeFailedGeneration = generation
+                    }
+                    onNeedsFrame?.invoke()
+                }
+            }
+        }
     }
 
     fun update(hidden: Set<String>, layerColor: (String) -> Int?, background: Int, foreground: Int, zScale: Float, styles: Map<String, SurfaceStyle>) {
@@ -549,6 +970,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         // A new GL context has lost the old textures. They are not deleted: the context is gone.
         gpuTiles = emptyList()
+        residents.clear()
+        held.clear()
+        queuedKeys.clear()
+        streamGeneration++
+        drainReady()
         drapeDirty = true
         overlayLineBuf = 0
         overlayTriBuf = 0
@@ -578,6 +1004,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         Matrix.multiplyMM(mvp, 0, proj, 0, viewM, 0)
 
         if (drapeDirty) uploadDrape()
+        streamDrape()
         if (overlayDirty) uploadOverlay()
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)

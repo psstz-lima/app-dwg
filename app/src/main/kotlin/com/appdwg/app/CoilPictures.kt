@@ -46,10 +46,13 @@ internal object CoilPictures {
         return decode(context, data, maxSide, config)
     }
 
-    fun decode(context: Context, data: Any, maxSide: Int, config: Bitmap.Config): Bitmap? = runBlocking {
+    fun decode(context: Context, data: Any, maxSide: Int, config: Bitmap.Config): Bitmap? =
+        load(context, data, maxSide.coerceAtLeast(1), maxSide.coerceAtLeast(1), config)
+
+    private fun load(context: Context, data: Any, width: Int, height: Int, config: Bitmap.Config): Bitmap? = runBlocking {
         val request = ImageRequest.Builder(context.applicationContext)
             .data(data)
-            .size(maxSide.coerceAtLeast(1))
+            .size(width.coerceAtLeast(1), height.coerceAtLeast(1))
             .precision(Precision.INEXACT)
             .bitmapConfig(config)
             .allowHardware(false)
@@ -75,12 +78,45 @@ internal object CoilPictures {
         return raster(context, bytes, reduce)
     }
 
-    /** One JPEG tile, local or downloaded, decoded through Coil and returned as pixels. */
+    /**
+     * One JPEG tile, decoded through Coil at [reduce] (1, 2, 4…).
+     * The request is the header size divided by [reduce]. A tile smaller than that request used to
+     * come back full size, and the TIFF reader then kept only its top-left corner.
+     */
     fun raster(context: Context, bytes: ByteArray, reduce: Int): Raster? {
-        val side = (8192 / reduce.coerceAtLeast(1)).coerceAtLeast(1)
-        val bitmap = decode(context, bytes, side, Bitmap.Config.RGB_565) ?: return null
-        val px = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(px, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        return Raster(bitmap.width, bitmap.height, px).also { if (!bitmap.isRecycled) bitmap.recycle() }
+        val k = reduce.coerceAtLeast(1)
+        val header = ImageHeader.parse(bytes)
+        val outW = header?.let { (it.width + k - 1) / k }
+        val outH = header?.let { (it.height + k - 1) / k }
+        val bitmap = if (outW != null && outH != null) {
+            load(context, bytes, outW, outH, Bitmap.Config.RGB_565)
+        } else {
+            load(context, bytes, 16384, 16384, Bitmap.Config.RGB_565)
+        } ?: return null
+        if (bitmap.width <= 0 || bitmap.height <= 0) {
+            if (!bitmap.isRecycled) bitmap.recycle()
+            return null
+        }
+        val width = outW ?: (bitmap.width + k - 1) / k
+        val height = outH ?: (bitmap.height + k - 1) / k
+        return sample(bitmap, width.coerceAtLeast(1), height.coerceAtLeast(1))
+            .also { if (!bitmap.isRecycled) bitmap.recycle() }
+    }
+
+    /** Point sample of [bitmap] into [outW] × [outH]. The full image when the sizes already match. */
+    private fun sample(bitmap: Bitmap, outW: Int, outH: Int): Raster {
+        val src = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(src, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        if (bitmap.width == outW && bitmap.height == outH) return Raster(outW, outH, src)
+        val out = IntArray(outW * outH)
+        for (y in 0 until outH) {
+            val sy = (y.toLong() * bitmap.height / outH).toInt().coerceIn(0, bitmap.height - 1)
+            val row = sy * bitmap.width
+            for (x in 0 until outW) {
+                val sx = (x.toLong() * bitmap.width / outW).toInt().coerceIn(0, bitmap.width - 1)
+                out[y * outW + x] = src[row + sx]
+            }
+        }
+        return Raster(outW, outH, out)
     }
 }

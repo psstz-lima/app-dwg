@@ -3,7 +3,9 @@ package com.appdwg.app
 import kotlinx.coroutines.flow.first
 import com.appdwg.core.tr
 
+import android.graphics.Bitmap
 import android.graphics.Paint
+import androidx.core.graphics.createBitmap
 import androidx.core.graphics.withClip
 import androidx.core.graphics.withMatrix
 import androidx.core.graphics.withSave
@@ -33,6 +35,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
@@ -132,6 +135,8 @@ fun PlanView(
     tiledRasters: Map<String, TiledPicture> = emptyMap(),
     /** Picture laid over the surfaces, or null. */
     drape: Drape?,
+    /** 0 normal, 1 high, 2 highest. Máxima keeps the file's own pixels. */
+    imageQuality: Int = 2,
     onTap: (Point2) -> Unit,
     /** Points of the measurement being taken, drawn as a line and, from 3 points on, an area. */
     measure: List<Point2> = emptyList(),
@@ -252,6 +257,14 @@ fun PlanView(
     var camera by rememberSaveable(viewKey, saver = CameraSaver) { mutableStateOf<Camera?>(null) }
     // Bumped on every gesture so the Canvas redraws; the camera itself is mutated in place.
     var frame by remember { mutableStateOf(0) }
+    // A picture that is already one bitmap (no tiles) is scaled here for Alta and Normal.
+    // Máxima, and any tiled picture, keeps the bitmap it was opened with.
+    val drapePicture = remember(drape?.image, drape?.tiles, imageQuality) {
+        val base = drape?.image
+        val src = base?.asAndroidBitmap()
+        if (base == null || drape?.tiles != null || src == null || src.isRecycled) base
+        else scaledForQuality(src, imageQuality)?.asImageBitmap() ?: base
+    }
 
     // Sharper terrain for the visible area once zoomed past the overview image's resolution.
     var detail by remember(project) { mutableStateOf<List<TerrainImage>>(emptyList()) }
@@ -513,7 +526,7 @@ fun PlanView(
         }
 
         for (img in project.images) {
-            if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], tiledRasters[img.file], colors) { toScreen(it, cam) }
+            if (img.layer !in hiddenLayers) drawRaster(img, rasters[img.file], tiledRasters[img.file], colors, imageQuality) { toScreen(it, cam) }
         }
         // The picture laid over the surfaces covers only the terrain: it is drawn in the same layer
         // with SrcAtop, so it shows where the terrain images have pixels and nowhere else.
@@ -523,13 +536,13 @@ fun PlanView(
         for (t in terrain) if (t.name !in hiddenLayers && t.name in painted) drawTerrain(t, colorFilter = filterOf(t.name)) { toScreen(it, cam) }
         for (t in detail) if (t.name !in hiddenLayers && t.name in painted) drawTerrain(t, colorFilter = filterOf(t.name)) { toScreen(it, cam) }
         if (drape != null) {
-            drawTerrain(TerrainImage(drape.name, drape.bounds, drape.image), BlendMode.SrcAtop) { toScreen(it, cam) }
-            // A very large picture: the tiles on screen, sharper than its overview, as they arrive.
+            drawTerrain(TerrainImage(drape.name, drape.bounds, drapePicture ?: drape.image), BlendMode.SrcAtop) { toScreen(it, cam) }
+            // A very large picture: the tiles on screen, at the detail the user picked.
             drape.tiles?.let { tp ->
                 tp.version
                 val halfW = size.width / 2.0 / cam.scale; val halfH = size.height / 2.0 / cam.scale
                 val cx = cam.centerX + origin.x; val cy = cam.centerY + origin.y
-                for (p in tp.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale)) {
+                for (p in tp.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale, imageQuality)) {
                     val tl = toScreen(Point2(p.plan.minX, p.plan.maxY), cam); val br = toScreen(Point2(p.plan.maxX, p.plan.minY), cam)
                     drawImage(p.image, srcOffset = IntOffset(p.src.left, p.src.top), srcSize = IntSize(p.src.width(), p.src.height()),
                         dstOffset = IntOffset(tl.x.roundToInt(), tl.y.roundToInt()),
@@ -737,7 +750,7 @@ private fun DrawScope.drawBasemap(tiles: List<BasemapTile>, opacity: Float, toSc
     canvas.restore()
 }
 
-private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, tiles: TiledPicture?, colors: PlanColors, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, tiles: TiledPicture?, colors: PlanColors, quality: Int, toScreen: (Point2) -> Offset) {
     val outline = android.graphics.Path()
     val b = img.boundary
     for (i in b.xs.indices) {
@@ -760,11 +773,11 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, tiles: Ti
         matrix.setPolyToPoly(floatArrayOf(0f, 0f, bw, 0f, 0f, bh), 0, floatArrayOf(tl.x, tl.y, tr.x, tr.y, bl.x, bl.y), 0, 3)
         canvas.withClip(outline) {
             drawBitmap(bitmap.asAndroidBitmap(), matrix, Paint(Paint.FILTER_BITMAP_FLAG))
-            if (tiles != null) drawRasterTiles(img, tiles, this, toScreen)
+            if (tiles != null) drawRasterTiles(img, tiles, this, toScreen, quality)
         }
     } else if (tiles != null) {
         canvas.withClip(outline) {
-            drawRasterTiles(img, tiles, this, toScreen)
+            drawRasterTiles(img, tiles, this, toScreen, quality)
         }
     } else {
         val paint = Paint().apply {
@@ -781,12 +794,30 @@ private fun DrawScope.drawRaster(img: PlanImage, bitmap: ImageBitmap?, tiles: Ti
     }
 }
 
+/** Alta and Normal for a picture that is already one bitmap. Null on Máxima. */
+private fun scaledForQuality(src: Bitmap, quality: Int): Bitmap? {
+    val reduce = DrapeQuality.reduce(quality)
+    if (reduce <= 1 || src.width <= 0 || src.height <= 0) return null
+    val w = ((src.width + reduce - 1) / reduce).coerceAtLeast(1)
+    val h = ((src.height + reduce - 1) / reduce).coerceAtLeast(1)
+    if (w >= src.width && h >= src.height) return null
+    val config = if (src.hasAlpha()) Bitmap.Config.ARGB_8888 else Bitmap.Config.RGB_565
+    val out = createBitmap(w, h, config)
+    android.graphics.Canvas(out).drawBitmap(
+        src,
+        android.graphics.Rect(0, 0, src.width, src.height),
+        android.graphics.Rect(0, 0, w, h),
+        Paint(Paint.FILTER_BITMAP_FLAG),
+    )
+    return out
+}
+
 /**
- * The tiles of a very large drawing image that are on screen, sharper than its overview. The tiles
+ * The tiles of a very large drawing image that are on screen, at the detail the user picked. The tiles
  * live in the image's own pixels (x right, y up from the lower-left corner); the image may be
  * rotated, so the screen is mapped back into those pixels to find them.
  */
-private fun DrawScope.drawRasterTiles(img: PlanImage, tiles: TiledPicture, canvas: android.graphics.Canvas, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawRasterTiles(img: PlanImage, tiles: TiledPicture, canvas: android.graphics.Canvas, toScreen: (Point2) -> Offset, quality: Int) {
     tiles.version
     // Image pixel (x, y up) to screen: affine, from the corner and one pixel along each side.
     val o = toScreen(Point2(img.originX, img.originY))
@@ -805,7 +836,7 @@ private fun DrawScope.drawRasterTiles(img: PlanImage, tiles: TiledPicture, canva
     fun screen(x: Double, y: Double) = Offset(o.x + u.x * x.toFloat() + v.x * y.toFloat(), o.y + u.y * x.toFloat() + v.y * y.toFloat())
     val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     val matrix = android.graphics.Matrix()
-    for (p in tiles.visible(view, perScreen)) {
+    for (p in tiles.visible(view, perScreen, quality)) {
         val tl = screen(p.plan.minX, p.plan.maxY); val tr = screen(p.plan.maxX, p.plan.maxY); val bl = screen(p.plan.minX, p.plan.minY)
         val s = p.src
         matrix.setPolyToPoly(floatArrayOf(s.left.toFloat(), s.top.toFloat(), s.right.toFloat(), s.top.toFloat(), s.left.toFloat(), s.bottom.toFloat()), 0,

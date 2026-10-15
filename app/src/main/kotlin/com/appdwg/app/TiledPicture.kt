@@ -32,7 +32,6 @@ import java.io.FileInputStream
 import java.nio.ByteBuffer
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 
@@ -54,6 +53,11 @@ class TiledPicture private constructor(
 ) {
     companion object {
         const val TILE = 256
+        /**
+         * Cache folder for the coarse pyramid. The previous folder was built from JPEG tiles that
+         * kept a corner instead of a real downsample, so those copies are left behind.
+         */
+        const val PYRAMID_DIR = "pyramid2"
         /** Levels up to this one are read from the file's blocks; coarser ones come from the pyramid. */
         private const val DIRECT = 3
 
@@ -106,6 +110,8 @@ class TiledPicture private constructor(
     private val loading = HashSet<String>()
     /** JPEG pictures have no transparency: their tiles take half the memory as RGB 565. */
     private val config = if (layout.opaque) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+    val hasAlpha: Boolean get() = !layout.opaque
+    val bytesPerPixel: Int get() = if (hasAlpha) 4 else 2
     private val done = File(dir, "done")
     // The file is read by one tile at a time: a channel serves positional reads from many threads.
 
@@ -121,12 +127,14 @@ class TiledPicture private constructor(
     }
 
     /**
-     * Tiles covering [view] for a screen showing [metersPerPixel]: the level whose pixel is about one
-     * screen pixel, or, while a tile is not ready, the nearest coarser one already in memory.
+     * Tiles covering [view] for a screen showing [metersPerPixel]. [quality] is 0 normal, 1 high,
+     * 2 highest: Máxima uses the level whose pixel is about one screen pixel (and the file itself
+     * once zoomed in); Alta and Normal stay one and two steps coarser. A tile that is not ready
+     * yet is replaced by the nearest coarser one already in memory.
      */
-    fun visible(view: Bounds, metersPerPixel: Double): List<Piece> {
+    fun visible(view: Bounds, metersPerPixel: Double, quality: Int = 2): List<Piece> {
         val px = bounds.width / width
-        val want = floor(ln(max(metersPerPixel / px, 1.0)) / ln(2.0)).toInt().coerceIn(0, topLevel)
+        val want = DrapeQuality.level(if (px > 0.0) metersPerPixel / px else Double.POSITIVE_INFINITY, quality, topLevel)
         val out = ArrayList<Piece>()
         val sizeX = bounds.width / width * TILE; val sizeY = bounds.height / height * TILE
         val x0 = floor((view.minX - bounds.minX) / (sizeX * (1 shl want))).toInt().coerceAtLeast(0)
@@ -291,6 +299,126 @@ class TiledPicture private constructor(
             bounds.minX + ((x0 + wk).toLong() shl k) * px, bounds.maxY - (y0.toLong() shl k) * py,
         )
         return bmp to plan
+    }
+
+    /**
+     * Each GPU tile of the picture over [area] at pyramid level [k] (0 is native), no side longer
+     * than [tileSide]. One bitmap exists at a time; it is recycled after [accept] returns. False
+     * when a bitmap cannot be allocated. Levels 0, 1 and 2 are read from the file, not the pyramid.
+     */
+    fun eachGpuTile(area: Bounds, k: Int, tileSide: Int, accept: (Bitmap, Bounds) -> Unit): Boolean {
+        val level = k.coerceIn(0, topLevel)
+        val side = tileSide.coerceAtLeast(1)
+        val px = bounds.width / width
+        val py = bounds.height / height
+        if (px <= 0.0 || py <= 0.0 || width <= 0 || height <= 0) return true
+        val c0 = floor((area.minX - bounds.minX) / px).toInt().coerceIn(0, width)
+        val c1 = ceil((area.maxX - bounds.minX) / px).toInt().coerceIn(0, width)
+        val r0 = floor((bounds.maxY - area.maxY) / py).toInt().coerceIn(0, height)
+        val r1 = ceil((bounds.maxY - area.minY) / py).toInt().coerceIn(0, height)
+        if (c1 <= c0 || r1 <= r0) return true
+        fun spanW(n: Int) = ((c1 - 1) shr n) - (c0 shr n) + 1
+        fun spanH(n: Int) = ((r1 - 1) shr n) - (r0 shr n) + 1
+        val x0 = c0 shr level
+        val y0 = r0 shr level
+        val wk = spanW(level)
+        val hk = spanH(level)
+        if (wk <= 0 || hk <= 0) return true
+        var oy = 0
+        while (oy < hk) {
+            val row = min(side, hk - oy)
+            var ox = 0
+            while (ox < wk) {
+                val col = min(side, wk - ox)
+                val bmp = try {
+                    createBitmap(col, row, config)
+                } catch (_: OutOfMemoryError) {
+                    return false
+                }
+                try {
+                    val canvas = Canvas(bmp)
+                    val originX = x0 + ox
+                    val originY = y0 + oy
+                    val tx0 = originX / TILE
+                    val tx1 = (originX + col - 1) / TILE
+                    val ty0 = originY / TILE
+                    val ty1 = (originY + row - 1) / TILE
+                    for (ty in ty0..ty1) for (tx in tx0..tx1) {
+                        val t = runCatching {
+                            if (level <= DIRECT) direct(level, tx, ty)
+                            else File(dir, "$level-$tx-$ty.jpg").takeIf { it.exists() }?.let { BitmapDecode.decodeFile(it.path, config) }
+                        }.getOrNull() ?: continue
+                        try {
+                            canvas.drawBitmap(t, (tx * TILE - originX).toFloat(), (ty * TILE - originY).toFloat(), null)
+                        } finally {
+                            if (!t.isRecycled) t.recycle()
+                        }
+                    }
+                    val fileX = originX.toLong() shl level
+                    val fileY = originY.toLong() shl level
+                    val plan = Bounds(
+                        bounds.minX + fileX * px,
+                        bounds.maxY - (fileY + (row.toLong() shl level)) * py,
+                        bounds.minX + (fileX + (col.toLong() shl level)) * px,
+                        bounds.maxY - fileY * py,
+                    )
+                    accept(bmp, plan)
+                } catch (_: OutOfMemoryError) {
+                    return false
+                } finally {
+                    if (!bmp.isRecycled) bmp.recycle()
+                }
+                if (ox + col >= wk) break
+                ox += (col - GlTexture.OVERLAP).coerceAtLeast(1)
+            }
+            if (oy + row >= hk) break
+            oy += (row - GlTexture.OVERLAP).coerceAtLeast(1)
+        }
+        return true
+    }
+
+    /**
+     * One window of the file, [fileW] × [fileH] pixels from ([fileX], [fileY]), reduced by 2^[level].
+     * Safe to call off the GL thread. Null when the window is empty or the bitmap cannot be allocated.
+     */
+    fun decodeWindow(fileX: Int, fileY: Int, fileW: Int, fileH: Int, level: Int): Bitmap? {
+        if (fileW <= 0 || fileH <= 0 || fileX >= width || fileY >= height) return null
+        val k = level.coerceIn(0, 30)
+        val f = 1 shl k
+        val x0 = fileX.coerceIn(0, width)
+        val y0 = fileY.coerceIn(0, height)
+        val x1 = (fileX + fileW).coerceIn(0, width)
+        val y1 = (fileY + fileH).coerceIn(0, height)
+        if (x1 <= x0 || y1 <= y0) return null
+        val outW = (x1 - x0 + f - 1) / f
+        val outH = (y1 - y0 + f - 1) / f
+        val bmp = try {
+            createBitmap(outW, outH, config)
+        } catch (_: OutOfMemoryError) {
+            return null
+        }
+        return try {
+            val canvas = Canvas(bmp)
+            val span = TILE * f
+            val tx0 = x0 / span
+            val tx1 = (x1 - 1) / span
+            val ty0 = y0 / span
+            val ty1 = (y1 - 1) / span
+            for (ty in ty0..ty1) for (tx in tx0..tx1) {
+                val t = runCatching { direct(k, tx, ty) }.getOrNull() ?: continue
+                try {
+                    val destX = (tx.toLong() * span - x0).toFloat() / f
+                    val destY = (ty.toLong() * span - y0).toFloat() / f
+                    canvas.drawBitmap(t, destX, destY, null)
+                } finally {
+                    if (!t.isRecycled) t.recycle()
+                }
+            }
+            bmp
+        } catch (_: OutOfMemoryError) {
+            if (!bmp.isRecycled) bmp.recycle()
+            null
+        }
     }
 
     fun close() {

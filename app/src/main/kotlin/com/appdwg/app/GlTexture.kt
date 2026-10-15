@@ -17,6 +17,19 @@ import kotlin.math.min
 internal object GlTexture {
     const val TILE_CAP = 4096
     const val OVERLAP = 1
+    const val TEXTURE_MAX_ANISOTROPY_EXT = 0x84FE
+    const val MAX_TEXTURE_MAX_ANISOTROPY_EXT = 0x84FF
+    const val ANISOTROPY_EXTENSION = "GL_EXT_texture_filter_anisotropic"
+
+    /**
+     * Anisotropy to set on a texture, or 1 when the extension is absent. Capped at 16 so a
+     * driver that reports a huge maximum does not spend the whole sample budget on one drape.
+     */
+    fun anisotropy(extensions: List<String>, maxAnisotropy: Float): Float {
+        if (ANISOTROPY_EXTENSION !in extensions) return 1f
+        if (!maxAnisotropy.isFinite() || maxAnisotropy <= 1f) return 1f
+        return min(maxAnisotropy, 16f)
+    }
 
     enum class PixelFormat { RGB_565, ARGB_8888 }
 
