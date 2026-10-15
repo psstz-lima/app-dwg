@@ -29,8 +29,9 @@
         <ignore path="build.gradle.kts" regexp="io\.coil-kt\.coil3:coil-network-okhttp than 3\.3\.0" />
     </issue>
 
-    <!-- AGP 9.0.1's Gradle line is 9.1.0. 9.8.1 is a newer wrapper, not the version this AGP is built for. -->
+    <!-- AGP 9.0.1's Gradle line is 9.1.0. 9.8.1 is a newer wrapper, not the version this AGP is built for.
+         The path is relative to this file, which lives in the app module. -->
     <issue id="AndroidGradlePluginVersion">
-        <ignore path="gradle/wrapper/gradle-wrapper.properties" regexp="A newer version of Gradle than 9\.1\.0" />
+        <ignore path="../gradle/wrapper/gradle-wrapper.properties" regexp="A newer version of Gradle than 9\.1\.0" />
     </issue>
 </lint>
