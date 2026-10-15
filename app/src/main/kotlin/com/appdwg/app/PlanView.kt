@@ -1,5 +1,6 @@
 package com.appdwg.app
 
+import kotlinx.coroutines.flow.first
 import com.appdwg.core.tr
 
 import android.graphics.Paint
@@ -321,8 +322,10 @@ fun PlanView(
         frame++
     }
 
-    LaunchedEffect(focus, focusKey, size) {
+    // Only a new focus moves the view: a change of size (a panel opening) must not zoom back in.
+    LaunchedEffect(focus, focusKey) {
         val f = focus ?: return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { size.width > 0 && camera != null }.first { it }
         val cam = camera ?: return@LaunchedEffect
         cam.centerX = f.x - origin.x
         cam.centerY = f.y - origin.y
@@ -426,7 +429,7 @@ fun PlanView(
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     val cam = camera ?: return@awaitEachGesture
                     val hs = handlesNow.value
-                    val reach = SNAP_DP * density
+                    val reach = HANDLE_DP * density
                     val idx = hs.indices.minByOrNull { (toScreen(hs[it], cam) - down.position).getDistance() }
                         ?.takeIf { (toScreen(hs[it], cam) - down.position).getDistance() <= reach } ?: return@awaitEachGesture
                     down.consume()
@@ -1068,6 +1071,8 @@ private fun DrawScope.drawPoints(
 
 /** Snap radius for measuring, in dp. */
 private const val SNAP_DP = 24f
+/** Reach of a finger around a draggable handle (PIs), wider than snapping so a quick drag still catches it. */
+private const val HANDLE_DP = 36f
 
 private val MEASURE_COLOR = Color(0xFF00B8D4)
 private val SECTION_LINE_COLOR = Color(0xFFFFD600)

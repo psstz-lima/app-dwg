@@ -115,7 +115,8 @@ object AlignmentBuilder {
         if (i == 0 || i == pvis.size - 1) p else {
             val g1 = (p.elevation - pvis[i - 1].elevation) / (p.station - pvis[i - 1].station) * 100
             val g2 = (pvis[i + 1].elevation - p.elevation) / (pvis[i + 1].station - p.station) * 100
-            p.copy(curveLength = k * abs(g2 - g1))
+            // Never longer than the shorter tangent, so the curve stays on the axis and clear of its neighbours'.
+            p.copy(curveLength = minOf(k * abs(g2 - g1), p.station - pvis[i - 1].station, pvis[i + 1].station - p.station).coerceAtLeast(0.0))
         }
     }
 }

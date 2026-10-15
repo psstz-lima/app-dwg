@@ -1152,7 +1152,7 @@ private fun ProjectScreen(
                         onClose = { showProfile = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
                         editPvis = roadPvis,
-                        onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list) },
+                        onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list); vm.redesignSoon() },
                         onRecalc = { vm.designRoad() },
                     )
                 } else if (showSection && sectionAxis != null) {
@@ -1367,7 +1367,7 @@ private fun ProjectScreen(
                     MenuLine(tr("Escolher sistema de coordenadas…")) { close(); showCrs = true }
                 })
                 val fix = gnssFix
-                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: tr("GPS desligado"),
+                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: "GPS",
                     dot = if (fix == null) g.muted else if (fix.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(fix.quality)) { close ->
                     MenuLine(if (fix == null) tr("Conectar GPS…") else "GPS…") { close(); showGps = true }
                     MenuLine(tr("Calibração e geoide…")) { close(); showCalibration = true }

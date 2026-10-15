@@ -1748,6 +1748,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Designs the road of the view settings and lays its surfaces and axis over the project. */
     fun designRoad() { viewModelScope.launch { designRoadNow() } }
 
+    private var redesignJob: kotlinx.coroutines.Job? = null
+
+    /** Builds the road again once edits pause (a grade being dragged), when one is already built. */
+    fun redesignSoon() {
+        if (road == null) return
+        redesignJob?.cancel()
+        redesignJob = viewModelScope.launch { kotlinx.coroutines.delay(800); designRoadNow() }
+    }
+
     private var previewKey: RoadParams? = null
     private var previewAlign: Alignment? = null
 

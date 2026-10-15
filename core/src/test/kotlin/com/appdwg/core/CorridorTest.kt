@@ -73,6 +73,8 @@ class CorridorTest {
         assertEquals(101.0 - 3.5 * 0.06, edgeL.z, 1e-9)
         assertEquals(101.0 + 3.5 * 0.06, edgeR.z, 1e-9)
         assertEquals(30.0, AlignmentBuilder.curvesFromK(listOf(Profile.Pvi(0.0, 0.0), Profile.Pvi(100.0, 2.0), Profile.Pvi(200.0, 1.0)), 10.0)[1].curveLength, 1e-9)
+        // A K that asks for more than the tangents hold is cut to the shorter one: the curve stays on the axis.
+        assertEquals(100.0, AlignmentBuilder.curvesFromK(listOf(Profile.Pvi(0.0, 0.0), Profile.Pvi(100.0, 20.0), Profile.Pvi(500.0, 0.0)), 20.0)[1].curveLength, 1e-9)
         assertTrue(hypot(sec.right.x, sec.right.y) > 0.999)
     }
 
