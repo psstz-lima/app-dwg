@@ -6,23 +6,23 @@ Rascunho para o Play Console. Nada disto foi publicado.
 
 Versão 0.1.2
 
-• Projeto num único arquivo .gmt: superfícies, eixos, rasters, pontos, seções, estilos e o que o projeto usa, para salvar, abrir e compartilhar.
-• Interface em inglês, com seletor de idioma (português, inglês ou o idioma do sistema).
-• Mapas de fundo mais leves, com cache em memória e em disco.
-• Aplicativo menor, com a otimização de recursos do Android.
-
-O que já funcionava continua igual: LandXML, DXF, KML, CSV, TIFF, NTRIP e os projetos .gromatic.
+• Pro libera todas as funções na hora, assim que a assinatura é confirmada.
+• Toque na planta mostra estaca, afastamento e cotas do ponto.
+• Imagem escolhida no Drive é adicionada ao projeto aberto.
+• Projeto num único arquivo .gmt para salvar, abrir e compartilhar.
+• Interface em inglês, com seletor de idioma.
+• Mapas de fundo mais leves e aplicativo menor.
 
 ## What's new (en-US)
 
 Version 0.1.2
 
-• A project in one .gmt file: surfaces, alignments, rasters, points, sections, styles and the other files the project uses. Save, open and share it.
-• English interface, with a language choice (Portuguese, English or the system language).
-• Lighter background maps, with memory and disk cache.
-• A smaller app, using Android's resource optimization.
-
-What already worked stays the same: LandXML, DXF, KML, CSV, TIFF, NTRIP and .gromatic projects.
+• Pro unlocks every feature right away, as soon as the subscription is confirmed.
+• Tap the plan to see the station, offset and elevations of that point.
+• An image picked from Drive is added to the open project.
+• A project in one .gmt file to save, open and share.
+• English interface, with a language choice.
+• Lighter background maps and a smaller app.
 
 ## English Play listing draft
 

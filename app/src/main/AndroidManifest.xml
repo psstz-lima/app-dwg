@@ -69,12 +69,6 @@
                 <data android:mimeType="application/vnd.gromatic.project" />
                 <data android:mimeType="application/gromatic" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/zip" />
-            </intent-filter>
         </activity>
         <!-- Lets AppCompat remember the per-app language on its own (API 21–32). -->
         <service
