@@ -1,5 +1,6 @@
 package com.appdwg.app
 
+import com.appdwg.core.GmtArchive
 import com.appdwg.core.GmtException
 import com.appdwg.core.tr
 
@@ -3141,7 +3142,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Opens a drawing or, when [uri] is a project file, the drawing and everything saved with it. */
-    fun open(uri: Uri) {
+    fun open(uri: Uri, claimedOctetStream: Boolean = false) {
         // Read and write when the provider allows (a project on Drive is saved back in place), else read.
         val cr = getApplication<Application>().contentResolver
         runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
@@ -3191,6 +3192,19 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 tooBig(size)
                 return@launch
             }
+            // A content octet-stream from Open with is a .gmt only when the zip holds manifest.json.
+            // Anything else keeps the project that is already open.
+            if (claimedOctetStream) {
+                val gmt = withContext(Dispatchers.IO) { gmtZip(uri) }
+                if (!gmt) {
+                    val message = tr("Este arquivo não é um projeto .gmt do Gromatic.")
+                    if (projectOpen) projectMessage = message else state = ProjectState.Failed(displayName(uri), message)
+                    return@launch
+                }
+                openGmt(uri)
+                if (state is ProjectState.Loaded) remember(uri)
+                return@launch
+            }
             val image = withContext(Dispatchers.IO) { PickedFile.isImage(displayName(uri), mimeOf(uri), headBytes(uri)) }
             if (PickedFile.route(projectOpen, image) == PickRoute.ATTACH_IMAGE) {
                 attachImage(uri)
@@ -3215,6 +3229,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 savedJson = currentDoc()?.toJson()?.toString()
             }
         }
+    }
+
+    /** The cached copy, a file URI, or the provider stream: a zip with a root manifest.json. */
+    private fun gmtZip(uri: Uri): Boolean {
+        cloudCopies[uri]?.takeIf { it.isFile }?.let { return GmtArchive.isProjectZip(it) }
+        if (uri.scheme == "file") {
+            val path = uri.path ?: return false
+            return GmtArchive.isProjectZip(java.io.File(path))
+        }
+        return input(uri)?.use { GmtArchive.isProjectZip(it) } == true
     }
 
     private suspend fun openProject(uri: Uri) {

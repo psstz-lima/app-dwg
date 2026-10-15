@@ -1,12 +1,14 @@
 package com.appdwg.core
 
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GmtArchiveTest {
@@ -162,5 +164,33 @@ class GmtArchiveTest {
             r.extract("s", "dem.tif", dest)
             assertEquals(3_000_000L, dest.length())
         }
+    }
+
+    @Test
+    fun octetStreamIsAGmtOnlyWhenTheZipHasARootManifest() {
+        val gmt = writeSample()
+        assertTrue(GmtArchive.isProjectZip(gmt))
+        assertTrue(GmtArchive.isProjectZip(gmt.inputStream()))
+
+        val other = File.createTempFile("other", ".zip")
+        other.outputStream().use { raw ->
+            ZipOutputStream(raw).use { zip ->
+                zip.putNextEntry(ZipEntry("dir/manifest.json"))
+                zip.write("{}".toByteArray())
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry("readme.txt"))
+                zip.write("hello".toByteArray())
+                zip.closeEntry()
+            }
+        }
+        assertFalse(GmtArchive.isProjectZip(other))
+        assertFalse(GmtArchive.isProjectZip(other.inputStream()))
+
+        val bytes = ByteArrayOutputStream()
+        bytes.write("II*\u0000not-a-zip".toByteArray(Charsets.ISO_8859_1))
+        val tiff = File.createTempFile("ortho", ".tif").apply { writeBytes(bytes.toByteArray()) }
+        assertFalse(GmtArchive.isProjectZip(tiff))
+        assertFalse(GmtArchive.isProjectZip(ByteArrayInputStream(bytes.toByteArray())))
+        assertFalse(GmtArchive.isProjectZip(ByteArrayInputStream(ByteArray(0))))
     }
 }

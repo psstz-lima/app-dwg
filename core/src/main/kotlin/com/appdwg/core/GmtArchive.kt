@@ -8,6 +8,7 @@ import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipException
 import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
@@ -69,6 +70,34 @@ object GmtArchive {
             ?: throw GmtException("path", id)
         val safeName = safeFileName(name)
         return "assets/$safeId/$safeName"
+    }
+
+    /**
+     * True when [file] is a zip with a root `manifest.json`. That is the check for a .gmt handed
+     * over as `application/octet-stream`. Anything else, including a zip of some other kind, is false.
+     */
+    fun isProjectZip(file: File): Boolean {
+        if (!file.isFile) return false
+        return try {
+            ZipFile(file).use { it.getEntry(GmtManifest.MANIFEST) != null }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** The stream form of [isProjectZip]. A real .gmt stores `manifest.json` first. */
+    fun isProjectZip(input: InputStream): Boolean = try {
+        ZipInputStream(input).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null) {
+                if (entry.name == GmtManifest.MANIFEST) return true
+                zip.closeEntry()
+                entry = zip.nextEntry
+            }
+            false
+        }
+    } catch (_: Exception) {
+        false
     }
 
     /** File name with no directories. */

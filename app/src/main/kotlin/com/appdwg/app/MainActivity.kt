@@ -132,15 +132,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openFromIntent(intent: Intent?) {
-        val uri = when (intent?.action) {
+        if (intent == null) return
+        val uri = when (intent.action) {
             Intent.ACTION_VIEW -> intent.data
             Intent.ACTION_SEND -> {
                 if (android.os.Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
             }
             else -> null
-        }
-        uri?.let { viewModel.open(it) }
+        } ?: return
+        // Drive's Open with delivers a .gmt as a content URI of type application/octet-stream.
+        val claimedGmt = intent.action == Intent.ACTION_VIEW &&
+            uri.scheme == "content" &&
+            intent.resolveType(this) == "application/octet-stream"
+        viewModel.open(uri, claimedGmt)
     }
 }
 
