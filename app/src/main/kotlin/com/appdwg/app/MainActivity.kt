@@ -421,7 +421,12 @@ private fun ProjectScreen(
     val drape = vm.drape?.takeIf { vm.drapeVisible }
     // In 3D the picture is cut to the surfaces, at the detail chosen.
     var drape3d by remember { mutableStateOf<Drape?>(null) }
-    LaunchedEffect(drape, v.drapeQuality, v.show3d) { drape3d = if (v.show3d && drape != null) vm.drapeFor3d(drape, v.drapeQuality) else null }
+    var drapeLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(drape, v.drapeQuality, v.show3d) {
+        if (!v.show3d || drape == null) { drape3d = null; return@LaunchedEffect }
+        drapeLoading = true
+        try { drape3d = vm.drapeFor3d(drape, v.drapeQuality) } finally { drapeLoading = false }
+    }
     val ctx0 = androidx.compose.ui.platform.LocalContext.current
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
@@ -1013,7 +1018,16 @@ private fun ProjectScreen(
                     })
                     // Vertical exaggeration helps read gentle terrain.
                     if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 })
-                    if (show3d && drape != null) GButton(tr("Imagem: {0}", listOf(tr("normal"), tr("alta"), tr("máxima"))[v.drapeQuality]), { v.drapeQuality = (v.drapeQuality + 1) % 3 })
+                    if (show3d && drape != null) Box {
+                        // A direct choice of detail, up or down, instead of stepping through them.
+                        var open by remember { mutableStateOf(false) }
+                        val names = listOf(tr("normal"), tr("alta"), tr("máxima"))
+                        GButton(if (drapeLoading) tr("Imagem: carregando {0}…", names[v.drapeQuality]) else tr("Imagem: {0}", names[v.drapeQuality]), { open = true })
+                        androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
+                            MenuTitle(tr("Detalhe da imagem em 3D"))
+                            names.forEachIndexed { i, n -> MenuLine(n, checked = v.drapeQuality == i) { open = false; v.drapeQuality = i } }
+                        }
+                    }
                 }
                 if (showContours && !show3d) {
                     Card {
