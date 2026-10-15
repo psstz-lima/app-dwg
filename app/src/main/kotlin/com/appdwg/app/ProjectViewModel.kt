@@ -2652,6 +2652,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Removes the empty file a failed export left behind (the picker creates it before anything is written). */
+    private suspend fun dropEmpty(target: Uri) = withContext(Dispatchers.IO) {
+        runCatching {
+            val cr = getApplication<Application>().contentResolver
+            val size = cr.query(target, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+            if (size == 0L) android.provider.DocumentsContract.deleteDocument(cr, target)
+        }
+    }
+
     private fun writeTo(target: Uri, what: String, block: (java.io.OutputStream) -> Unit) {
         viewModelScope.launch {
             exportMessage = try {
@@ -2673,8 +2682,10 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 if (cloud) tr("{0} exportado para o Google Drive ({1}); o app Drive termina o envio em segundo plano.", what, displayName(target))
                 else tr("{0} exportado para {1}.", what, displayName(target))
             } catch (e: OutOfMemoryError) {
+                dropEmpty(target)
                 tr("Memória insuficiente para exportar {0}.", what)
             } catch (e: Exception) {
+                dropEmpty(target)
                 tr("Não foi possível exportar {0}: {1}", what, errorText(e))
             }
         }

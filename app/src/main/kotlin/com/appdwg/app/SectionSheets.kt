@@ -146,7 +146,7 @@ object SectionSheets {
         // Volume table of the measurement: the last period and the total since the first state.
         val tableRows = if (measurement && surfaces.size >= 2 && boxes.isNotEmpty()) {
             val st = boxes.map { it.sec.station }
-            val last = SurveySections.volumes(st, boxes.map { it.areas.last().first }, boxes.map { it.areas.last().second })
+            val last = SurveySections.volumes(st, boxes.map { it.areas.lastOrNull()?.first ?: 0.0 }, boxes.map { it.areas.lastOrNull()?.second ?: 0.0 })
             val total = boxes.map { b -> SurveySections.areas(b.sec.offsets, b.elev.first(), b.elev.last()) }
             val acc = SurveySections.volumes(st, total.map { it.first }, total.map { it.second })
             last.zip(acc)
