@@ -536,6 +536,9 @@ private fun ProjectScreen(
         if (uri != null) vm.exportAsBuiltPdf(uri, fileName)
     }
     var drawingRoad by v::drawingRoad
+    // PI picked on the axis being edited, for its radius and transition.
+    var selectedPi by remember(fileName) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(drawingRoad) { if (!drawingRoad) selectedPi = null }
     // Region and side whose edge target line is being tapped.
     var roadTargetPick by remember(fileName) { mutableStateOf<Pair<Int, Int>?>(null) }
     val noteSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
@@ -909,6 +912,10 @@ private fun ProjectScreen(
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
                     measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
+                    handles = if (drawingRoad) v.roadParams.pis else emptyList(),
+                    selectedHandle = selectedPi,
+                    onHandleDrag = if (drawingRoad) { i, p -> v.roadParams.let { rp -> if (i in rp.pis.indices) v.roadParams = rp.copy(pis = rp.pis.toMutableList().apply { set(i, p) }) } } else null,
+                    onHandleTap = { i -> selectedPi = if (selectedPi == i) null else i },
                     snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
                         (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS, EditPick.DRAW)),
                     selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||
@@ -1061,8 +1068,12 @@ private fun ProjectScreen(
                     }
                 } else if (drawingRoad) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                        val rp = v.roadParams
+                        selectedPi?.takeIf { it in rp.pis.indices }?.let { i ->
+                            PiEditor(rp, i, onChange = { v.roadParams = it }, onSelect = { selectedPi = it })
+                        }
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}).", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}). Arraste um PI para movê-lo; toque nele para raio e transição.", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
                             TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
                             TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }

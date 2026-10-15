@@ -1236,3 +1236,11 @@ Cruz	Cross
 Poste	Post
 Árvore	Tree
 Caixa	Box
+Toque os PIs do eixo, do início ao fim ({0}). Arraste um PI para movê-lo; toque nele para raio e transição.	Tap the axis PIs from start to end ({0}). Drag a PI to move it; tap it for radius and transition.
+Greide: arraste um PVI (bolinha vermelha) para mudar estaca e cota; toque para escolher.	Grade: drag a PVI (red dot) to change station and elevation; tap to pick one.
+Curva vertical L ({0}, 0 = pelo K)	Vertical curve L ({0}, 0 = from K)
+PI {0}	PI {0}
+início/fim, sem curva	start/end, no curve
+Transição Ls ({0})	Transition Ls ({0})
+Inserir PI depois	Insert PI after
+Apagar PI	Delete PI

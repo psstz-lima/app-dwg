@@ -1758,7 +1758,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
      * fewer than 2 PIs, or the road was already built (it then shows its own axis).
      */
     fun axisPreview(rp: RoadParams): List<Point2> {
-        if (rp.alignmentIndex >= 0 || rp.pis.size < 2 || road != null) return emptyList()
+        // A built road shows its own axis, except while its PIs are being edited.
+        if (rp.alignmentIndex >= 0 || rp.pis.size < 2 || (road != null && view?.drawingRoad != true)) return emptyList()
         if (rp != previewKey) {
             val project = (state as? ProjectState.Loaded)?.project
             previewAxis = project?.let { runCatching { roadAxis(rp, it)?.vertices }.getOrNull() }.orEmpty()

@@ -4,7 +4,10 @@ import com.appdwg.core.tr
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,6 +132,13 @@ fun PlanView(
     measure: List<Point2> = emptyList(),
     /** False for an open path (a road axis, a line being drawn): no closing edge nor area fill. */
     measureClosed: Boolean = true,
+    /** Points that can be dragged (PIs of the axis being edited), with the one selected. */
+    handles: List<Point2> = emptyList(),
+    selectedHandle: Int? = null,
+    /** A handle moved to a new plan position while dragged. */
+    onHandleDrag: ((Int, Point2) -> Unit)? = null,
+    /** A handle touched and let go without moving. */
+    onHandleTap: ((Int) -> Unit)? = null,
     /** Taps snap to the nearest point or vertex, for measuring. */
     snap: Boolean = false,
     /** Ends of the cross section being shown, drawn across the alignment. */
@@ -199,6 +209,10 @@ fun PlanView(
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
     // so the view stays where it was.
     val origin = remember(viewKey) { bounds.center }
+    // Read inside the drag gesture, which is not restarted while the handles move.
+    val handlesNow = androidx.compose.runtime.rememberUpdatedState(handles)
+    val dragNow = androidx.compose.runtime.rememberUpdatedState(onHandleDrag)
+    val tapNow = androidx.compose.runtime.rememberUpdatedState(onHandleTap)
     val pointStyles = remember(points, pointCodes) { if (pointCodes.isEmpty()) emptyList() else points.map { com.appdwg.core.PointCodes.match(it.description, pointCodes)?.first } }
     val scene = remember(project) { Scene.build(project, origin) }
     // An edited surface stands in for its original, whose mesh and lines would show through its holes.
@@ -397,6 +411,31 @@ fun PlanView(
         modifier = modifier
             .clipToBounds()
             .onSizeChanged { size = it }
+            .pointerInput(onHandleDrag != null) {
+                if (onHandleDrag == null) return@pointerInput
+                // A finger that lands on a handle drags it; anywhere else the plan pans and zooms as usual.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val cam = camera ?: return@awaitEachGesture
+                    val hs = handlesNow.value
+                    val reach = SNAP_DP * density
+                    val idx = hs.indices.minByOrNull { (toScreen(hs[it], cam) - down.position).getDistance() }
+                        ?.takeIf { (toScreen(hs[it], cam) - down.position).getDistance() <= reach } ?: return@awaitEachGesture
+                    down.consume()
+                    var moved = false
+                    while (true) {
+                        val ev = awaitPointerEvent(PointerEventPass.Initial)
+                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) { ch.consume(); break }
+                        if (!moved && (ch.position - down.position).getDistance() < viewConfiguration.touchSlop) { ch.consume(); continue }
+                        moved = true
+                        ch.consume()
+                        val local = toLocal(ch.position, cam)
+                        dragNow.value?.invoke(idx, Point2(local.x + origin.x, local.y + origin.y))
+                    }
+                    if (!moved) tapNow.value?.invoke(idx)
+                }
+            }
             .pointerInput(project) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     val cam = camera ?: return@detectTransformGestures
@@ -599,6 +638,12 @@ fun PlanView(
             }
         }
         if (measure.isNotEmpty()) drawMeasure(measure, measureClosed) { toScreen(it, cam) }
+        handles.forEachIndexed { i, h ->
+            val sp = toScreen(h, cam); val r = 7.sp.toPx()
+            drawRect(Color.White, topLeft = sp - Offset(r, r), size = androidx.compose.ui.geometry.Size(2 * r, 2 * r))
+            drawRect(if (i == selectedHandle) Color(0xFFD81B60) else Color(0xFF1565C0), topLeft = sp - Offset(r, r),
+                size = androidx.compose.ui.geometry.Size(2 * r, 2 * r), style = Stroke(width = 3f))
+        }
         if (sectionLine != null) {
             val a = toScreen(sectionLine.first, cam)
             val b = toScreen(sectionLine.second, cam)
