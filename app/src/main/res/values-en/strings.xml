@@ -43,7 +43,10 @@
     <string name="vol_surface">Measured surface</string>
     <string name="vol_area">Area</string>
     <string name="vol_area_all">Whole surface</string>
-    <string name="vol_area_polygon">Measurement polygon (%1$d vertices)</string>
+    <plurals name="vol_area_polygon">
+        <item quantity="one">Measurement polygon (%1$d vertex)</item>
+        <item quantity="other">Measurement polygon (%1$d vertices)</item>
+    </plurals>
     <string name="vol_draw">Draw polygon</string>
     <string name="vol_draw_hint">Use Measure to mark the outline of the stockpile or area (3 or more vertices) and come back here.</string>
     <string name="vol_base">Base</string>
@@ -122,7 +125,6 @@
     <string name="ta_flow_hint">Arrows: water direction on each patch (steepest descent). Blue lines: drainage lines, where water from at least this area gathers.</string>
     <string name="ta_slope_hint">Relief classes (Embrapa), by slope in %.</string>
     <string name="ta_legend">Slope (%)</string>
-    <string name="ta_class_row">%1$s · %2$s ha</string>
     <string name="ta_running">Analysing the terrain</string>
     <string name="ta_cell">%1$s grid</string>
 
@@ -131,7 +133,10 @@
     <string name="se_title">Surface editing</string>
     <string name="se_surface">Surface</string>
     <string name="se_result">The result becomes the surface "%1$s"; the original stays as it is.</string>
-    <string name="se_polygon">Measurement polygon: %1$d vertices</string>
+    <plurals name="se_polygon">
+        <item quantity="one">Measurement polygon: %1$d vertex</item>
+        <item quantity="other">Measurement polygon: %1$d vertices</item>
+    </plurals>
     <string name="se_no_polygon">No polygon: use Measure to mark the area (3 or more vertices).</string>
     <string name="se_draw">Draw polygon</string>
     <string name="se_area_ops">In the polygon area</string>
@@ -148,7 +153,15 @@
     <string name="se_add_point">Add point</string>
     <string name="se_flip">Swap nearest edge</string>
     <string name="se_undo">Undo</string>
-    <string name="se_done">%1$s: %2$d points, %3$d triangles.</string>
+    <string name="se_done">%1$s: %2$s, %3$s.</string>
+    <plurals name="se_done_points">
+        <item quantity="one">%1$d point</item>
+        <item quantity="other">%1$d points</item>
+    </plurals>
+    <plurals name="se_done_triangles">
+        <item quantity="one">%1$d triangle</item>
+        <item quantity="other">%1$d triangles</item>
+    </plurals>
     <string name="se_failed">Nothing changed: the spot is outside the surface or the edge cannot be swapped.</string>
 
     <!-- Cross-section sheets -->
@@ -186,7 +199,6 @@
     <string name="crs_local">Local / no projection</string>
     <string name="crs_local_hint">Local site coordinates: the GPS is projected to UTM in the chosen zone and brought to the local system by the calibration (Calibrate).</string>
     <string name="crs_zone">UTM zone (e.g. 23S)</string>
-    <string name="crs_use">Use</string>
     <string name="crs_new">New custom system</string>
     <string name="crs_edit">Edit</string>
     <string name="crs_delete">Delete</string>
@@ -241,7 +253,23 @@
     <string name="asbuilt_clear">Clear</string>
     <string name="asbuilt_no_points">No points with elevation. Import the survey in Points or here.</string>
     <string name="asbuilt_no_surface">The project has no surface to compare with.</string>
-    <string name="asbuilt_summary">%1$d points checked · %2$s%% within tolerance · %3$d above · %4$d below · %5$d outside the design</string>
+    <string name="asbuilt_summary">%1$s · %2$s%% within tolerance · %3$s · %4$s · %5$s</string>
+    <plurals name="asbuilt_checked">
+        <item quantity="one">%1$d point checked</item>
+        <item quantity="other">%1$d points checked</item>
+    </plurals>
+    <plurals name="asbuilt_above">
+        <item quantity="one">%1$d above</item>
+        <item quantity="other">%1$d above</item>
+    </plurals>
+    <plurals name="asbuilt_below">
+        <item quantity="one">%1$d below</item>
+        <item quantity="other">%1$d below</item>
+    </plurals>
+    <plurals name="asbuilt_outside">
+        <item quantity="one">%1$d outside the design</item>
+        <item quantity="other">%1$d outside the design</item>
+    </plurals>
     <string name="asbuilt_stats">Mean difference %1$s · RMS %2$s · standard deviation %3$s · min. %4$s · max. %5$s</string>
     <string name="asbuilt_sign">Difference = surveyed − design (positive: above the design).</string>
     <string name="asbuilt_csv">Report (CSV)</string>

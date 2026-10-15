@@ -4,6 +4,8 @@ import com.appdwg.core.tr
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.core.content.edit
+import androidx.core.graphics.get
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -77,15 +79,15 @@ class BasemapStore(context: Context) {
         if (!prefs.getBoolean("osmEmptyFixed", false)) {
             scope.launch {
                 File(root, "osm").walkBottomUp().filter { it.isFile && it.length() == 0L }.forEach { it.delete() }
-                prefs.edit().putBoolean("osmEmptyFixed", true).apply()
+                prefs.edit { putBoolean("osmEmptyFixed", true) }
             }
         }
     }
 
-    fun enable(v: Boolean) { enabled = v; prefs.edit().putBoolean("enabled", v).apply() }
-    fun choose(s: BasemapSource) { source = s; prefs.edit().putString("source", s.id).apply(); version++ }
-    fun changeOpacity(v: Float) { opacity = v; prefs.edit().putFloat("opacity", v).apply() }
-    fun allowOnline(v: Boolean) { online = v; prefs.edit().putBoolean("online", v).apply() }
+    fun enable(v: Boolean) { enabled = v; prefs.edit { putBoolean("enabled", v) } }
+    fun choose(s: BasemapSource) { source = s; prefs.edit { putString("source", s.id) }; version++ }
+    fun changeOpacity(v: Float) { opacity = v; prefs.edit { putFloat("opacity", v) } }
+    fun allowOnline(v: Boolean) { online = v; prefs.edit { putBoolean("online", v) } }
 
     /** Bitmap plus the Compose wrapper, so the place picker does not allocate one per tile per frame. */
     private class CachedTile(val bitmap: Bitmap, val image: ImageBitmap)
@@ -183,7 +185,7 @@ class BasemapStore(context: Context) {
         val b = images.decode(f, f.path + "#sample", 32, opaque = true, disk = false, memory = false) ?: return true
         run {
             if (b.width < 2 || b.height < 2) return true
-            val ref = b.getPixel(b.width / 2, b.height / 2)
+            val ref = b[b.width / 2, b.height / 2]
             val r = (ref shr 16) and 0xFF; val g = (ref shr 8) and 0xFF; val bl = ref and 0xFF
             if (kotlin.math.abs(r - g) > 6 || kotlin.math.abs(g - bl) > 6) return false
             val x0 = b.width / 8
@@ -192,7 +194,7 @@ class BasemapStore(context: Context) {
             val y1 = (b.height - 1 - y0).coerceAtLeast(y0)
             var same = 0
             for (i in 0 until 16) for (j in 0 until 16) {
-                val p = b.getPixel(x0 + i * (x1 - x0) / 15, y0 + j * (y1 - y0) / 15)
+                val p = b[x0 + i * (x1 - x0) / 15, y0 + j * (y1 - y0) / 15]
                 if (kotlin.math.abs(((p shr 16) and 0xFF) - r) < 6 && kotlin.math.abs((p and 0xFF) - bl) < 6) same++
             }
             return same >= 220

@@ -5,6 +5,8 @@ import com.appdwg.core.tr
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -181,7 +183,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     }
 
     val g = LocalG.current
-    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+    val compact = windowWidthDp() < 600.dp
     Scaffold(
         containerColor = g.bg,
         // safeDrawing covers status bar, navigation bar, display cutout and the keyboard,
@@ -268,7 +270,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         viewModel.recent.forEach { (name, uri) ->
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                RecentButton(name, Modifier.weight(1f), cloud = CloudDocs.isDrive(uri)) { showRecent = false; guarded { viewModel.open(Uri.parse(uri)) } }
+                                RecentButton(name, Modifier.weight(1f), cloud = CloudDocs.isDrive(uri)) { showRecent = false; guarded { viewModel.open(uri.toUri()) } }
                                 GButton(tr("Remover"), { viewModel.forgetRecent(uri) }, outlined = true)
                             }
                         }
@@ -733,7 +735,7 @@ private fun ProjectScreen(
     )
     var planZoom by remember { mutableStateOf<ZoomRequest?>(null) }
     var planWidthPx by remember { mutableStateOf(0) }
-    val xdpi = androidx.compose.ui.platform.LocalContext.current.resources.displayMetrics.xdpi
+    val xdpi = androidx.compose.ui.platform.LocalResources.current.displayMetrics.xdpi
 
     var show3d by v::show3d
     var exaggeration by v::exaggeration
@@ -751,8 +753,9 @@ private fun ProjectScreen(
         }
     }
 
-    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 900
-    val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
+    val windowWidth = windowWidthDp()
+    val wide = windowWidth >= 900.dp
+    val compact = windowWidth < 600.dp
     val asBuiltLabel = androidx.compose.ui.res.stringResource(R.string.asbuilt_tool)
     val calibLabel = androidx.compose.ui.res.stringResource(R.string.calib_tool)
     val volumeLabel = androidx.compose.ui.res.stringResource(R.string.vol_tool)
@@ -1809,11 +1812,18 @@ private fun sectionLineFor(vm: ProjectViewModel, project: LandXmlProject): Pair<
     return s.pointAt(-s.offsets.last()) to s.pointAt(s.offsets.last())
 }
 
+/** Window width in dp. Compact is under 600, wide is 900 and up. */
+@Composable
+private fun windowWidthDp(): androidx.compose.ui.unit.Dp {
+    val px = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width
+    return with(androidx.compose.ui.platform.LocalDensity.current) { px.toDp() }
+}
+
 /** Copy of what the window shows, including the 3D view's GL surface. */
 private suspend fun captureWindow(window: android.view.Window): android.graphics.Bitmap? {
     val view = window.decorView
     if (view.width <= 0 || view.height <= 0) return null
-    val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
     return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
         android.view.PixelCopy.request(window, bitmap, { result ->
             cont.resume(if (result == android.view.PixelCopy.SUCCESS) bitmap else null) { _, _, _ -> }

@@ -3,6 +3,7 @@ package com.appdwg.app
 import android.app.Activity
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import androidx.core.content.edit
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -68,11 +69,14 @@ class ProStore(private val context: Context) {
     /** Days left of offline trust, for the Pro screen. */
     val offlineDaysLeft: Int get() = (OFFLINE_DAYS - (System.currentTimeMillis() - lastCheck) / DAY).toInt().coerceAtLeast(0)
 
-    fun simulate(s: Simulation) { if (debuggable) { simulation = s; prefs.edit().putInt("sim", s.ordinal).apply() } }
+    fun simulate(s: Simulation) { if (debuggable) { simulation = s; prefs.edit { putInt("sim", s.ordinal) } } }
 
     private fun store(active: Boolean) {
         licensed = active; lastCheck = System.currentTimeMillis()
-        prefs.edit().putBoolean("active", active).putLong("checked", lastCheck).apply()
+        prefs.edit {
+            putBoolean("active", active)
+            putLong("checked", lastCheck)
+        }
     }
 
     private val client: BillingClient = BillingClient.newBuilder(context)

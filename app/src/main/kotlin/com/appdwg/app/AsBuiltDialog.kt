@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -136,8 +137,13 @@ fun AsBuiltDialog(
                 if (report != null) {
                     HorizontalDivider(Modifier.padding(vertical = 4.dp))
                     fun n(v: Double?) = v?.let { StationFormat.decimal(it, 3) } ?: "—"
-                    Text(stringResource(R.string.asbuilt_summary, report.checked, StationFormat.decimal(report.passRate * 100, 1),
-                        report.above, report.below, report.outside), fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.asbuilt_summary,
+                        pluralStringResource(R.plurals.asbuilt_checked, report.checked, report.checked),
+                        StationFormat.decimal(report.passRate * 100, 1),
+                        pluralStringResource(R.plurals.asbuilt_above, report.above, report.above),
+                        pluralStringResource(R.plurals.asbuilt_below, report.below, report.below),
+                        pluralStringResource(R.plurals.asbuilt_outside, report.outside, report.outside),
+                    ), fontWeight = FontWeight.SemiBold)
                     Text(stringResource(R.string.asbuilt_stats, len(report.mean), len(report.rms), len(report.stdDev), len(report.min), len(report.max)),
                         style = MaterialTheme.typography.bodySmall)
                     Text(stringResource(R.string.asbuilt_sign), style = MaterialTheme.typography.bodySmall)

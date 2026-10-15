@@ -3,6 +3,7 @@ package com.appdwg.app
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.core.graphics.createBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.appdwg.core.Bounds
@@ -64,7 +65,7 @@ class OpenCache(private val context: Context) {
                     val name = d.readUTF(); val b = Bounds(d.readDouble(), d.readDouble(), d.readDouble(), d.readDouble())
                     val w = d.readInt(); val h = d.readInt()
                     val bytes = ByteArray(w * h * 4); d.readFully(bytes)
-                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(ByteBuffer.wrap(bytes)) }
+                    val bmp = createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(ByteBuffer.wrap(bytes)) }
                     TerrainImage(name, b, bmp.asImageBitmap())
                 }
                 p to images

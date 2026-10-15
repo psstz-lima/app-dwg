@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -75,7 +76,7 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
                 HorizontalDivider()
                 Text(stringResource(R.string.se_area_ops), style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(if (poly != null) stringResource(R.string.se_polygon, poly.size) else stringResource(R.string.se_no_polygon),
+                    Text(if (poly != null) pluralStringResource(R.plurals.se_polygon, poly.size, poly.size) else stringResource(R.string.se_no_polygon),
                         style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     OutlinedButton(onClick = onDraw) { Text(stringResource(R.string.se_draw)) }
                 }

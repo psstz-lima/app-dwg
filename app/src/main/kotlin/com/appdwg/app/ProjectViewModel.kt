@@ -13,6 +13,9 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.edit
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import android.util.Xml
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -791,7 +794,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun savePointCodes(codes: List<com.appdwg.core.PointCode>) {
         pointCodes = codes
-        codePrefs.edit().putString("table", com.appdwg.core.PointCodes.toTsv(codes)).apply()
+        codePrefs.edit { putString("table", com.appdwg.core.PointCodes.toTsv(codes)) }
     }
 
     /** Points the automatic drawing works on: the imported ones, or else those of the drawing. */
@@ -923,7 +926,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val drawing = tracked("XREF ${displayName(uri)}") { t -> withContext(Dispatchers.IO) { read(uri, t) } }
                 xrefDrawings = xrefDrawings + (name to drawing)
-                prefs.edit().putString("xref:$path", uri.toString()).apply()
+                prefs.edit { putString("xref:$path", uri.toString()) }
                 refreshProject()
             } catch (e: OutOfMemoryError) {
                 referenceMessage = tr("Desenho grande demais para a memória deste aparelho.")
@@ -1091,13 +1094,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         rasterError = null
         viewModelScope.launch {
             try {
-                if ((state as? ProjectState.Loaded)?.project?.images?.firstOrNull { it.file == file }?.let { tiledRaster(it, uri) } == true) { prefs.edit().putString(file, uri.toString()).apply(); return@launch }
+                if ((state as? ProjectState.Loaded)?.project?.images?.firstOrNull { it.file == file }?.let { tiledRaster(it, uri) } == true) { prefs.edit { putString(file, uri.toString()) }; return@launch }
                 val bitmap = tracked(tr("Imagem {0}", displayName(uri))) { t -> withContext(Dispatchers.IO) { decodeRaster(uri, t) } }
                 if (bitmap != null) {
                     tiledRasters[file]?.close()
                     tiledRasters = tiledRasters - file
                     rasters = rasters + (file to bitmap)
-                    prefs.edit().putString(file, uri.toString()).apply()
+                    prefs.edit { putString(file, uri.toString()) }
                 } else {
                     rasterError = tr("Formato de imagem não reconhecido.")
                 }
@@ -1234,7 +1237,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val area = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) } ?: project.bounds
         drape?.tiles?.close()
         val overview = if (ready) withContext(Dispatchers.IO) { tiles.overview() } else null
-        drape = Drape(name, tiles.bounds, (overview ?: Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)).asImageBitmap(), placement, tiles)
+        drape = Drape(name, tiles.bounds, (overview ?: createBitmap(1, 1, Bitmap.Config.ARGB_8888)).asImageBitmap(), placement, tiles)
         drapeUris = uris
         drapeVisible = true
         drapeMessage = if (area != null && !overlaps(tiles.bounds, area)) {
@@ -1630,7 +1633,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Receiver connection; lives with the view model so rotating the screen keeps it. */
     val gnss = GnssManager(app)
-    val geo = Geodesy(app).also { g -> g.gridUri?.let { u -> viewModelScope.launch { readGeoidGrid(Uri.parse(u), quiet = true) } } }
+    val geo = Geodesy(app).also { g -> g.gridUri?.let { u -> viewModelScope.launch { readGeoidGrid(u.toUri(), quiet = true) } } }
 
     /** Loads a geoid grid (MAPGEO/hgeoHNOR as text "lat lon N", or GTX) and keeps it for the next sessions. */
     fun loadGeoidGrid(uri: Uri) {
@@ -1683,12 +1686,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveCustomCrs(c: com.appdwg.core.Crs) {
         customCrs = customCrs.filter { it.id != c.id } + c
-        crsPrefs.edit().putString("custom", org.json.JSONArray(customCrs.map { CrsJson.toJson(it) }).toString()).apply()
+        crsPrefs.edit { putString("custom", org.json.JSONArray(customCrs.map { CrsJson.toJson(it) }).toString()) }
     }
 
     fun deleteCustomCrs(c: com.appdwg.core.Crs) {
         customCrs = customCrs.filter { it.id != c.id }
-        crsPrefs.edit().putString("custom", org.json.JSONArray(customCrs.map { CrsJson.toJson(it) }).toString()).apply()
+        crsPrefs.edit { putString("custom", org.json.JSONArray(customCrs.map { CrsJson.toJson(it) }).toString()) }
     }
 
     /** Coordinate system in use: the project's choice, else the drawing's EPSG, else SIRGAS 2000 / UTM 23S. */
@@ -1701,7 +1704,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun chooseCrs(c: com.appdwg.core.Crs) {
         view?.crs = c
         recentCrs = (listOf(c.id) + recentCrs.filter { it != c.id }).take(6)
-        crsPrefs.edit().putString("recent", recentCrs.joinToString(",")).apply()
+        crsPrefs.edit { putString("recent", recentCrs.joinToString(",")) }
     }
 
     /** Ids of the systems chosen lately, newest first. */
@@ -2009,7 +2012,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             canUndoSurface = true
             addedFiles = addedFiles.filter { it.label != name } +
                 AddedFile(name, LandXmlProject(null, null, listOf(r), emptyList(), emptyList(), emptyList()), null)
-            surfaceEditMessage = app.getString(R.string.se_done, name, r.vertexCount, r.triangleCount)
+            surfaceEditMessage = app.getString(
+                R.string.se_done, name,
+                app.resources.getQuantityString(R.plurals.se_done_points, r.vertexCount, r.vertexCount),
+                app.resources.getQuantityString(R.plurals.se_done_triangles, r.triangleCount, r.triangleCount),
+            )
             refreshJob?.cancel(); refreshNow()
         }
     }
@@ -2161,8 +2168,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun exportSectionSheets(target: Uri, p: SheetParams, title: String) {
         val app = getApplication<Application>()
-        app.getSharedPreferences("sheets", android.content.Context.MODE_PRIVATE).edit()
-            .putString("company", p.company).putString("responsible", p.responsible).putString("registration", p.registration).apply()
+        app.getSharedPreferences("sheets", android.content.Context.MODE_PRIVATE).edit {
+            putString("company", p.company)
+            putString("responsible", p.responsible)
+            putString("registration", p.registration)
+        }
         val project = (state as? ProjectState.Loaded)?.project ?: return
         val axis = sheetAxis(p.alignment, project) ?: return
         val hidden = hiddenLayers()
@@ -2173,7 +2183,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
         val logoUri = p.logo
         writeTo(target, app.getString(R.string.sh_export)) { out ->
-            val logo = logoUri?.let { runCatching { readLogo(Uri.parse(it)) }.getOrNull() }
+            val logo = logoUri?.let { runCatching { readLogo(it.toUri()) }.getOrNull() }
             val doc = android.graphics.pdf.PdfDocument()
             val built = SectionSheets.render(doc, p, axis, surfaces, roadSections, title, date, measurement, logo)
             doc.writeTo(out); doc.close()
@@ -2364,7 +2374,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun asBuiltSummary(r: com.appdwg.core.AsBuiltReport, u: com.appdwg.core.ReportUnits): Pair<String, String> {
         val app = getApplication<Application>()
         fun l(v: Double?) = v?.let { u.lu(it) } ?: "—"
-        return app.getString(R.string.asbuilt_summary, r.checked, StationFormat.decimal(r.passRate * 100, 1), r.above, r.below, r.outside) to
+        fun qty(id: Int, n: Int) = app.resources.getQuantityString(id, n, n)
+        return app.getString(
+            R.string.asbuilt_summary,
+            qty(R.plurals.asbuilt_checked, r.checked),
+            StationFormat.decimal(r.passRate * 100, 1),
+            qty(R.plurals.asbuilt_above, r.above),
+            qty(R.plurals.asbuilt_below, r.below),
+            qty(R.plurals.asbuilt_outside, r.outside),
+        ) to
             app.getString(R.string.asbuilt_stats, l(r.mean), l(r.rms), l(r.stdDev), l(r.min), l(r.max))
     }
 
@@ -2975,7 +2993,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
         fun addUri(role: String, uri: String) {
             if (!uri.contains("://")) return
-            val u = Uri.parse(uri)
+            val u = uri.toUri()
             add(role, uri, displayName(u), fileSize(u).coerceAtLeast(-1)) { input(u) }
         }
         addUri("main", doc.main)
@@ -3046,12 +3064,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun remember(uri: Uri) {
         val list = (listOf(displayName(uri) to uri.toString()) + recent.filter { it.second != uri.toString() }).take(12)
         recent = list
-        recentPrefs.edit().putString("list", org.json.JSONArray(list.map { (n, u) -> JSONObject().put("name", n).put("uri", u) }).toString()).apply()
+        recentPrefs.edit { putString("list", org.json.JSONArray(list.map { (n, u) -> JSONObject().put("name", n).put("uri", u) }).toString()) }
     }
 
     fun forgetRecent(uri: String) {
         recent = recent.filter { it.second != uri }
-        recentPrefs.edit().putString("list", org.json.JSONArray(recent.map { (n, u) -> JSONObject().put("name", n).put("uri", u) }).toString()).apply()
+        recentPrefs.edit { putString("list", org.json.JSONArray(recent.map { (n, u) -> JSONObject().put("name", n).put("uri", u) }).toString()) }
     }
 
     /** Opens a drawing or, when [uri] is a project file, the drawing and everything saved with it. */
@@ -3149,7 +3167,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun openProjectDoc(uri: Uri, doc: ProjectDoc, main: String) {
         val name = displayName(uri)
         relocating = null
-        if (!openNow(Uri.parse(main), allowEmpty = true)) {
+        if (!openNow(main.toUri(), allowEmpty = true)) {
             val s = state
             if (s is ProjectState.Failed) {
                 relocating = uri to doc
@@ -3170,7 +3188,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         timelineShown = states.size > 1
         for ((label, u) in doc.files) {
             val before = addedFiles.size
-            addFileNow(Uri.parse(u), label)
+            addFileNow(u.toUri(), label)
             if (addedFiles.size == before) problems += label
         }
         userPoints = doc.points

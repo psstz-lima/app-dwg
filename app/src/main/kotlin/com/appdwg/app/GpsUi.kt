@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -73,8 +74,17 @@ fun GpsDialog(
     var mount by remember { mutableStateOf(prefs.getString("mount", "") ?: "") }
     var user by remember { mutableStateOf(prefs.getString("user", "") ?: "") }
     var pass by remember { mutableStateOf(prefs.getString("pass", "") ?: "") }
-    fun save() = prefs.edit().putInt("source", source.ordinal).putString("device", device).putString("host", host).putString("port", port)
-        .putString("mount", mount).putString("user", user).putString("pass", pass).apply()
+    fun save() {
+        prefs.edit {
+            putInt("source", source.ordinal)
+            putString("device", device)
+            putString("host", host)
+            putString("port", port)
+            putString("mount", mount)
+            putString("user", user)
+            putString("pass", pass)
+        }
+    }
     AlertDialog(
         onDismissRequest = { save(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),

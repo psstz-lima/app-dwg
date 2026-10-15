@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,7 +66,7 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                 Text(stringResource(R.string.vol_area), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.Center) {
                     FilterChip(!st.usePolygon || !hasPolygon, { st.usePolygon = false; vm.clearVolume() }, { Text(stringResource(R.string.vol_area_all)) })
-                    if (hasPolygon) FilterChip(st.usePolygon, { st.usePolygon = true; vm.clearVolume() }, { Text(stringResource(R.string.vol_area_polygon, polygon.size)) })
+                    if (hasPolygon) FilterChip(st.usePolygon, { st.usePolygon = true; vm.clearVolume() }, { Text(pluralStringResource(R.plurals.vol_area_polygon, polygon.size, polygon.size)) })
                     OutlinedButton(onClick = onDraw) { Text(stringResource(R.string.vol_draw)) }
                 }
                 if (!hasPolygon) Text(stringResource(R.string.vol_draw_hint), style = MaterialTheme.typography.bodySmall)

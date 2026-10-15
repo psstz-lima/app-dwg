@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -171,13 +172,13 @@ class ThemeStore(context: Context) {
     var choice by mutableStateOf(ThemeChoice.entries.firstOrNull { it.name == prefs.getString("theme", null) } ?: ThemeChoice.FIELD_DARK)
         private set
 
-    fun choose(c: ThemeChoice) { choice = c; prefs.edit().putString("theme", c.name).apply() }
+    fun choose(c: ThemeChoice) { choice = c; prefs.edit { putString("theme", c.name) } }
 
     /** Whether the properties panel (right side; the bottom card on phones) is open; kept between sessions. */
     var panelOpen by mutableStateOf(prefs.getBoolean("panelOpen", true))
         private set
 
-    fun togglePanel() { panelOpen = !panelOpen; prefs.edit().putBoolean("panelOpen", panelOpen).apply() }
+    fun togglePanel() { panelOpen = !panelOpen; prefs.edit { putBoolean("panelOpen", panelOpen) } }
 }
 
 private fun scheme(g: GTheme): ColorScheme {
@@ -251,7 +252,7 @@ class UnitStore(context: Context) {
     var choice by mutableStateOf(UnitChoice.entries.firstOrNull { it.name == prefs.getString("units", null) } ?: UnitChoice.AUTO)
         private set
 
-    fun choose(c: UnitChoice) { choice = c; prefs.edit().putString("units", c.name).apply() }
+    fun choose(c: UnitChoice) { choice = c; prefs.edit { putString("units", c.name) } }
 
     /** Sets the shown units and number format for [locale]; returns the system in use. */
     fun apply(locale: java.util.Locale): com.appdwg.core.UnitSystem {
@@ -307,7 +308,7 @@ class LanguageStore(private val context: Context) {
 
     fun choose(c: LanguageChoice) {
         choice = c
-        prefs.edit().putString("language", c.tag).apply()
+        prefs.edit { putString("language", c.tag) }
         androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
             if (c.tag == null) androidx.core.os.LocaleListCompat.getEmptyLocaleList()
             else androidx.core.os.LocaleListCompat.forLanguageTags(c.tag),

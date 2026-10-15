@@ -2,6 +2,7 @@ package com.appdwg.app
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import androidx.core.graphics.createBitmap
 import android.graphics.Paint
 import android.graphics.Rect
 import android.os.ParcelFileDescriptor
@@ -181,7 +182,7 @@ class TiledPicture private constructor(
         val x0 = tx * TILE * f; val y0 = ty * TILE * f
         if (x0 >= width || y0 >= height) return null
         val w = min(TILE, ceil((width - x0) / f.toDouble()).toInt()); val h = min(TILE, ceil((height - y0) / f.toDouble()).toInt())
-        val bmp = Bitmap.createBitmap(w, h, config)
+        val bmp = createBitmap(w, h, config)
         val bw = layout.blockWidth; val bh = layout.blockHeight
         for (by in y0 / bh..min(layout.down - 1, (y0 + TILE * f - 1) / bh)) for (bx in x0 / bw..min(layout.across - 1, (x0 + TILE * f - 1) / bw)) {
             val r = reader.readBlock(by * layout.across + bx, f) ?: continue
@@ -219,7 +220,7 @@ class TiledPicture private constructor(
                     } else quads.map { (dx, dy) -> build(k - 1, 2 * tx + dx, 2 * ty + dy) }
                     val w = min(TILE, ceil((width shr k).coerceAtLeast(1).toDouble() - tx * TILE).toInt().coerceAtLeast(1))
                     val h = min(TILE, ceil((height shr k).coerceAtLeast(1).toDouble() - ty * TILE).toInt().coerceAtLeast(1))
-                    val bmp = Bitmap.createBitmap(w, h, config)
+                    val bmp = createBitmap(w, h, config)
                     val c = Canvas(bmp); val paint = Paint(Paint.FILTER_BITMAP_FLAG)
                     children.forEachIndexed { i, child ->
                         child ?: return@forEachIndexed
@@ -249,7 +250,7 @@ class TiledPicture private constructor(
         var k = topLevel
         while (k > DIRECT + 1 && max(width shr (k - 1), height shr (k - 1)) <= maxSize) k--
         val w = (width shr k).coerceAtLeast(1); val h = (height shr k).coerceAtLeast(1)
-        val bmp = Bitmap.createBitmap(w, h, config)
+        val bmp = createBitmap(w, h, config)
         val c = Canvas(bmp)
         for (ty in 0 until tilesDown(k)) for (tx in 0 until tilesAcross(k)) {
             val f = File(dir, "$k-$tx-$ty.jpg")
@@ -279,7 +280,7 @@ class TiledPicture private constructor(
         while (k < topLevel && (w(k).toLong() * h(k) > maxPixels || max(w(k), h(k)) > maxSide)) k++
         if (k > DIRECT && !ready) return null
         val x0 = c0 shr k; val y0 = r0 shr k; val wk = w(k); val hk = h(k)
-        val bmp = Bitmap.createBitmap(wk, hk, config)
+        val bmp = createBitmap(wk, hk, config)
         val canvas = Canvas(bmp)
         for (ty in y0 / TILE..(y0 + hk - 1) / TILE) for (tx in x0 / TILE..(x0 + wk - 1) / TILE) {
             val cached = memory.get("$k/$tx/$ty")?.bitmap

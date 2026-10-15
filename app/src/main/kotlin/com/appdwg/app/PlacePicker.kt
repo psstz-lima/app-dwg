@@ -2,6 +2,7 @@ package com.appdwg.app
 
 import android.Manifest
 import android.content.Context
+import androidx.core.content.edit
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
@@ -208,7 +209,11 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
                     GButton(tr("Digitar coordenadas…"), { typing = true }, outlined = true)
                 }
                 GButton(tr("Usar este local"), {
-                    prefs.edit().putFloat("lat", lat.toFloat()).putFloat("lon", lon.toFloat()).putFloat("zoom", zoom.toFloat()).apply()
+                    prefs.edit {
+                        putFloat("lat", lat.toFloat())
+                        putFloat("lon", lon.toFloat())
+                        putFloat("zoom", zoom.toFloat())
+                    }
                     onPick(lat, lon, widthM / 2, heightM / 2)
                 }, primary = true, enabled = screen.width > 0 && widthM <= 30_000 && heightM <= 30_000, modifier = Modifier.fillMaxWidth())
             }

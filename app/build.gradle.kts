@@ -16,6 +16,7 @@ android {
         targetSdk = 36
         versionCode = 3
         versionName = "0.1.2"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Native debug symbols travel inside the AAB (Play Console "native code without debug symbols").
         ndk {
             debugSymbolLevel = "FULL"
@@ -81,4 +82,8 @@ dependencies {
     // which AGP 9's built-in Kotlin 2.2.10 cannot read.
     implementation("io.coil-kt.coil3:coil:3.3.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
+
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
