@@ -165,6 +165,39 @@ class Surface(
         if (l0 < eps || l1 < eps || l2 < eps) return null
         return l0 * zs[i0] + l1 * zs[i1] + l2 * zs[i2]
     }
+
+    /** Height of triangle [t]'s plane at (x, y), including points outside the triangle. */
+    fun zOn(t: Int, x: Double, y: Double): Double {
+        val i0 = triangles[3 * t]
+        val i1 = triangles[3 * t + 1]
+        val i2 = triangles[3 * t + 2]
+        val x0 = xs[i0]; val y0 = ys[i0]
+        val x1 = xs[i1]; val y1 = ys[i1]
+        val x2 = xs[i2]; val y2 = ys[i2]
+        val det = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
+        if (det == 0.0) return zs[i0]
+        val l0 = ((y1 - y2) * (x - x2) + (x2 - x1) * (y - y2)) / det
+        val l1 = ((y2 - y0) * (x - x2) + (x0 - x2) * (y - y2)) / det
+        return l0 * zs[i0] + l1 * zs[i1] + (1 - l0 - l1) * zs[i2]
+    }
+
+    /**
+     * First intersection of the ray (origin + t · direction, t > 0) with this TIN.
+     * Walks the plan grid along the ray, so only triangles in the crossed cells are tested.
+     */
+    fun rayHit(ox: Double, oy: Double, oz: Double, dx: Double, dy: Double, dz: Double): RayHit? =
+        grid?.rayHit(ox, oy, oz, dx, dy, dz)
+
+    /**
+     * Triangles whose cells overlap [region], possibly more than once. No full-surface scratch
+     * array, so a tight region on a huge TIN stays cheap. Callers that need each triangle once
+     * dedupe the few indices they see.
+     */
+    fun forEachNear(region: Bounds, action: (Int) -> Unit) {
+        val g = grid ?: return
+        if (region.maxX < region.minX || region.maxY < region.minY) return
+        g.forEachTriangleIn(region) { t -> action(t); true }
+    }
 }
 
 /** Elevations sampled on a regular grid; row 0 is the northern edge of [bounds]. */
@@ -241,5 +274,110 @@ private class TriangleGrid(private val s: Surface, private val b: Bounds, val si
         if (x < b.minX || x > b.maxX || y < b.minY || y > b.maxY) return
         val cell = row(y) * cols + col(x)
         for (i in cellStart[cell] until cellStart[cell + 1]) if (!action(items[i])) return
+    }
+
+    /** Nearest hit of the ray with a triangle in the cells the ray crosses in plan. */
+    fun rayHit(ox: Double, oy: Double, oz: Double, dx: Double, dy: Double, dz: Double): RayHit? {
+        val span = slab(ox, oy, dx, dy) ?: return null
+        val tStart = max(span.first, 0.0)
+        val tEnd = span.second
+        if (tEnd < tStart) return null
+        var bestT = Double.POSITIVE_INFINITY
+        var best: RayHit? = null
+        fun consider(tri: Int) {
+            val i0 = s.triangles[3 * tri]
+            val i1 = s.triangles[3 * tri + 1]
+            val i2 = s.triangles[3 * tri + 2]
+            val t = rayTriangle(
+                ox, oy, oz, dx, dy, dz,
+                s.xs[i0], s.ys[i0], s.zs[i0],
+                s.xs[i1], s.ys[i1], s.zs[i1],
+                s.xs[i2], s.ys[i2], s.zs[i2],
+            ) ?: return
+            if (t < bestT) {
+                bestT = t
+                best = RayHit(ox + t * dx, oy + t * dy, oz + t * dz, t, tri)
+            }
+        }
+        if (dx * dx + dy * dy < 1e-24) {
+            if (ox < b.minX || ox > b.maxX || oy < b.minY || oy > b.maxY) return null
+            val cell = row(oy) * cols + col(ox)
+            for (i in cellStart[cell] until cellStart[cell + 1]) consider(items[i])
+            return best
+        }
+        var cx = col(ox + tStart * dx)
+        var cy = row(oy + tStart * dy)
+        val stepX = if (dx >= 0) 1 else -1
+        val stepY = if (dy >= 0) 1 else -1
+        val tDeltaX = if (dx != 0.0) kotlin.math.abs(cellW / dx) else Double.POSITIVE_INFINITY
+        val tDeltaY = if (dy != 0.0) kotlin.math.abs(cellH / dy) else Double.POSITIVE_INFINITY
+        var tMaxX = if (dx != 0.0) {
+            val edge = b.minX + (if (stepX > 0) cx + 1 else cx) * cellW
+            (edge - ox) / dx
+        } else Double.POSITIVE_INFINITY
+        var tMaxY = if (dy != 0.0) {
+            val edge = b.minY + (if (stepY > 0) cy + 1 else cy) * cellH
+            (edge - oy) / dy
+        } else Double.POSITIVE_INFINITY
+        var tCell = tStart
+        val limit = cols + rows + 3
+        var steps = 0
+        while (steps++ <= limit && tCell <= tEnd + 1e-9 && tCell < bestT) {
+            val cell = cy * cols + cx
+            for (i in cellStart[cell] until cellStart[cell + 1]) consider(items[i])
+            if (tMaxX < tMaxY) {
+                tCell = tMaxX
+                cx += stepX
+                if (cx !in 0 until cols) break
+                tMaxX += tDeltaX
+            } else {
+                tCell = tMaxY
+                cy += stepY
+                if (cy !in 0 until rows) break
+                tMaxY += tDeltaY
+            }
+        }
+        return best
+    }
+
+    /** Ray parameters where the plan line enters and leaves the surface bounds. */
+    private fun slab(ox: Double, oy: Double, dx: Double, dy: Double): Pair<Double, Double>? {
+        var t0 = Double.NEGATIVE_INFINITY
+        var t1 = Double.POSITIVE_INFINITY
+        fun axis(o: Double, d: Double, minV: Double, maxV: Double): Boolean {
+            if (kotlin.math.abs(d) < 1e-15) return o in minV..maxV
+            var a = (minV - o) / d
+            var c = (maxV - o) / d
+            if (a > c) { val s = a; a = c; c = s }
+            if (a > t0) t0 = a
+            if (c < t1) t1 = c
+            return t0 <= t1
+        }
+        if (!axis(ox, dx, b.minX, b.maxX) || !axis(oy, dy, b.minY, b.maxY)) return null
+        return t0 to t1
+    }
+
+    private fun rayTriangle(
+        ox: Double, oy: Double, oz: Double, dx: Double, dy: Double, dz: Double,
+        ax: Double, ay: Double, az: Double, bx: Double, by: Double, bz: Double, cx: Double, cy: Double, cz: Double,
+    ): Double? {
+        val e1x = bx - ax; val e1y = by - ay; val e1z = bz - az
+        val e2x = cx - ax; val e2y = cy - ay; val e2z = cz - az
+        val px = dy * e2z - dz * e2y
+        val py = dz * e2x - dx * e2z
+        val pz = dx * e2y - dy * e2x
+        val det = e1x * px + e1y * py + e1z * pz
+        if (kotlin.math.abs(det) < 1e-12) return null
+        val inv = 1.0 / det
+        val tx = ox - ax; val ty = oy - ay; val tz = oz - az
+        val u = (tx * px + ty * py + tz * pz) * inv
+        if (u < -1e-8 || u > 1.0 + 1e-8) return null
+        val qx = ty * e1z - tz * e1y
+        val qy = tz * e1x - tx * e1z
+        val qz = tx * e1y - ty * e1x
+        val v = (dx * qx + dy * qy + dz * qz) * inv
+        if (v < -1e-8 || u + v > 1.0 + 1e-8) return null
+        val t = (e2x * qx + e2y * qy + e2z * qz) * inv
+        return if (t > 1e-8) t else null
     }
 }

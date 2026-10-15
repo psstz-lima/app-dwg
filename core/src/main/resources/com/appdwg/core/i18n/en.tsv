@@ -1313,3 +1313,14 @@ Este arquivo não é um projeto .gmt do Gromatic.	This file is not a Gromatic .g
 O arquivo .gmt contém um caminho inválido e foi recusado.	The .gmt file contains an invalid path and was refused.
 O arquivo .gmt é grande demais para abrir neste aparelho.	The .gmt file is too large to open on this device.
 Não foi possível ler o projeto .gmt ({0}).	Could not read the .gmt project ({0}).
+Toque na superfície para marcar os pontos. O toque encaixa em pontos e vértices próximos.	Tap the surface to mark the points. Taps snap to nearby points and vertices.
+Comprimento no terreno	Ground length
+Área na superfície	Surface area
+Perímetro na superfície	Surface perimeter
+Cota mínima	Minimum elevation
+Cota máxima	Maximum elevation
+Cota média	Average elevation
+Declividade média	Average slope
+Entre {0} e {1}	Between {0} and {1}
+Calculando na superfície…	Computing on the surface…
+1 dedo gira · 2 dedos movem · pinça aproxima. Um toque curto marca um ponto na superfície.	1 finger orbits · 2 fingers pan · pinch zooms. A short tap marks a point on the surface.
