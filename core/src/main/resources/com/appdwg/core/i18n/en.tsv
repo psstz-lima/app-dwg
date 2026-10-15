@@ -609,7 +609,10 @@ Aterro 	Fill
 Corte 	Cut 
 não é um projeto do Gromatic	not a Gromatic project
 Aguardando o Google Drive…	Waiting for Google Drive…
+Aguardando o arquivo…	Waiting for the file…
 Baixando do Google Drive · 	Downloading from Google Drive · 
+Baixando · 	Downloading · 
+Não foi possível baixar o arquivo: {0}	Could not download the file: {0}
 Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência.	Choose the image too (TIFF, JPG or PNG), not just the world file.
 Imagem {0}	Image {0}
 formato de imagem não reconhecido	image format not recognised

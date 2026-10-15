@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import androidx.core.content.edit
 import androidx.core.graphics.createBitmap
@@ -78,6 +79,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.xmlpull.v1.XmlPullParser
 import org.json.JSONObject
@@ -156,6 +159,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Local copies of cloud files opened in this session, by their document. */
     private val cloudCopies = java.util.concurrent.ConcurrentHashMap<Uri, java.io.File>()
+    private val cacheMutex = Mutex()
 
     /** The file's content: its downloaded copy when there is one. */
     private fun input(uri: Uri): java.io.InputStream? =
@@ -169,14 +173,50 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }.getOrNull()
 
     /**
-     * Downloads a Google Drive file to the app's cache, showing the bytes received on [task].
-     * Throws CancellationException when the user cancels.
+     * Copies a cloud document into the cache so TIFF readers can seek it. A second call for the
+     * same URI does nothing once the copy is in place. Local files are left where they are.
+     */
+    private suspend fun ensureCached(uri: Uri, onCancel: (() -> Unit)? = null) {
+        if (!PickedFile.needsStreamedCopy(uri.scheme, uri.authority)) return
+        cacheMutex.withLock {
+            if (cloudCopies[uri]?.isFile == true) return@withLock
+            tracked(tr("Abrindo {0}", displayName(uri)), onCancel) { download(uri, it) }
+        }
+    }
+
+    /** The cached copy when this URI was streamed, otherwise the provider's own descriptor. */
+    private fun openLocal(uri: Uri): ParcelFileDescriptor? =
+        cloudCopies[uri]?.takeIf { it.isFile }?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
+            ?: getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")
+
+    private fun mimeOf(uri: Uri): String? =
+        runCatching { getApplication<Application>().contentResolver.getType(uri) }.getOrNull()
+
+    private fun headBytes(uri: Uri): ByteArray = runCatching {
+        input(uri)?.use { s ->
+            val b = ByteArray(16)
+            val n = s.read(b)
+            if (n <= 0) ByteArray(0) else b.copyOf(n)
+        }
+    }.getOrNull() ?: ByteArray(0)
+
+    /** Lays [uri] on the open project. Does not replace the drawing. */
+    private fun attachImage(uri: Uri) {
+        if (state !is ProjectState.Loaded) return
+        loadDrape(listOf(uri))
+    }
+
+    /**
+     * Copies a cloud file into the app's cache, showing the bytes received on [task].
+     * Throws CancellationException when the user cancels. A copy already in place is left as it is.
      */
     private suspend fun download(uri: Uri, task: LoadTask) = withContext(Dispatchers.IO) {
+        if (cloudCopies[uri]?.isFile == true) return@withContext
+        val drive = CloudDocs.isDrive(uri.toString())
         val total = reportedSize(uri)?.takeIf { it > 0 }
         val dir = java.io.File(getApplication<Application>().cacheDir, "cloud").apply { mkdirs() }
         val file = java.io.File(dir, Integer.toHexString(uri.toString().hashCode()))
-        task.step(tr("Aguardando o Google Drive…"))
+        task.step(if (drive) tr("Aguardando o Google Drive…") else tr("Aguardando o arquivo…"))
         val job = coroutineContext[Job]!!
         try {
             (getApplication<Application>().contentResolver.openInputStream(uri) ?: error(tr("arquivo indisponível"))).use { inp ->
@@ -194,7 +234,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         if (done - shown >= 1 shl 18) {
                             shown = done
                             fun mb(b: Long) = StationFormat.decimal(b / 1048576.0, 1)
-                            task.step(tr("Baixando do Google Drive · ") + mb(done) + (total?.let { " de " + mb(it) } ?: "") + " MB",
+                            task.step((if (drive) tr("Baixando do Google Drive · ") else tr("Baixando · ")) + mb(done) + (total?.let { " de " + mb(it) } ?: "") + " MB",
                                 total?.let { (done.toFloat() / it).coerceAtMost(1f) })
                         }
                     }
@@ -287,6 +327,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drapeMessage = null
         if (picture == null) {
             drapeMessage = tr("Escolha também a imagem (TIFF, JPG ou PNG), não só o arquivo de georreferência.")
+            projectMessage = drapeMessage
             return
         }
         val (uri, name) = picture
@@ -299,8 +340,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun drapeNow(project: LandXmlProject, uri: Uri, name: String, world: Pair<Uri, String>?, uris: List<Uri>) {
         run {
             try {
+                for (u in uris) ensureCached(u)
                 // Very large TIFFs are shown in tiles, never decoded whole.
-                tiledDrape(project, uri, name, world, uris)?.let { return }
+                tiledDrape(project, uri, name, world, uris)?.let { projectMessage = drapeMessage; return }
                 val t0 = System.nanoTime()
                 val pic = tracked(tr("Imagem {0}", name)) { t -> withContext(Dispatchers.IO) { decodePicture(uri, t) } }
                     ?: error(tr("formato de imagem não reconhecido"))
@@ -309,7 +351,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val area = surfaces ?: project.bounds ?: error(tr("projeto sem área"))
                 val worldText = world?.let { (w, _) ->
                     withContext(Dispatchers.IO) {
-                        getApplication<Application>().contentResolver.openInputStream(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) }
+                        input(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) }
                     }
                 }
                 val (bounds, placement) = when {
@@ -325,10 +367,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     tr("Imagem {0}.", placement)
                 }
+                projectMessage = drapeMessage
             } catch (e: OutOfMemoryError) {
                 drapeMessage = tr("Imagem grande demais para a memória deste aparelho.")
+                projectMessage = drapeMessage
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 drapeMessage = tr("Não foi possível usar a imagem: {0}", errorText(e))
+                projectMessage = drapeMessage
             }
         }
     }
@@ -382,8 +429,19 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun addFileNow(uri: Uri, wantedLabel: String? = null) {
         val name = displayName(uri)
-        if (Regex("\\.(tiff?|jpe?g|png|webp)$", RegexOption.IGNORE_CASE).containsMatchIn(name)) {
-            projectMessage = tr("{0} é uma imagem: use Imagem > Trocar para colocá-la na planta.", name)
+        try {
+            ensureCached(uri)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            compareMessage = tr("Não foi possível baixar o arquivo: {0}", errorText(e))
+            projectMessage = compareMessage
+            return
+        }
+        val image = withContext(Dispatchers.IO) { PickedFile.isImage(name, mimeOf(uri), headBytes(uri)) }
+        if (image) {
+            if (state is ProjectState.Loaded) attachImage(uri)
+            else projectMessage = tr("{0} é uma imagem: use Imagem > Trocar para colocá-la na planta.", name)
             return
         }
         try { addFileRead(uri, name, wantedLabel) } finally { compareMessage?.let { projectMessage = it } }
@@ -393,7 +451,6 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         run {
             try {
                 val drawing = tracked(tr("Adicionando {0}", name)) { t ->
-                    if (CloudDocs.isDrive(uri.toString())) download(uri, t)
                     withContext(Dispatchers.IO) { read(uri, t) }
                 }
                 if (drawing.surfaces.isEmpty() && drawing.alignments.isEmpty() && drawing.cgPoints.isEmpty() && drawing.polylines.isEmpty()) {
@@ -1094,6 +1151,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         rasterError = null
         viewModelScope.launch {
             try {
+                ensureCached(uri)
                 if ((state as? ProjectState.Loaded)?.project?.images?.firstOrNull { it.file == file }?.let { tiledRaster(it, uri) } == true) { prefs.edit { putString(file, uri.toString()) }; return@launch }
                 val bitmap = tracked(tr("Imagem {0}", displayName(uri))) { t -> withContext(Dispatchers.IO) { decodeRaster(uri, t) } }
                 if (bitmap != null) {
@@ -1106,6 +1164,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } catch (e: OutOfMemoryError) {
                 rasterError = tr("Imagem grande demais para a memória deste aparelho.")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 rasterError = tr("Não foi possível ler a imagem: {0}", errorText(e))
             }
@@ -1117,6 +1177,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         for (image in project.images) {
             val uri = prefs.getString(image.file, null)?.let(Uri::parse) ?: continue
             viewModelScope.launch {
+                try {
+                    ensureCached(uri)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@launch
+                }
                 if (runCatching { tiledRaster(image, uri) }.getOrDefault(false)) return@launch
                 val bitmap = tracked(tr("Imagem {0}", image.fileName)) { t ->
                     withContext(Dispatchers.IO) { runCatching { decodeRaster(uri, t) }.getOrNull() }
@@ -1142,8 +1209,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val text = String(head, Charsets.ISO_8859_1)
             if (!(text.startsWith("II*") || text.startsWith("II+") || text.startsWith("MM\u0000*") || text.startsWith("MM\u0000+"))) return@withContext null
             val key = openCache.keyOf(uri, fileSize(uri)) { input(uri) } ?: return@withContext null
-            val fd = cloudCopies[uri]?.takeIf { it.exists() }?.let { android.os.ParcelFileDescriptor.open(it, android.os.ParcelFileDescriptor.MODE_READ_ONLY) }
-                ?: app.contentResolver.openFileDescriptor(uri, "r") ?: return@withContext null
+            val fd = openLocal(uri) ?: return@withContext null
             val tp = runCatching {
                 TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, Bounds(0.0, 0.0, img.widthPx.toDouble(), img.heightPx.toDouble()))
             }.getOrNull()
@@ -1186,9 +1252,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun decodeRaster(uri: Uri, task: LoadTask): ImageBitmap? = decodePicture(uri, task)?.image
 
     private fun decodePicture(uri: Uri, task: LoadTask): Picture? {
-        val resolver = getApplication<Application>().contentResolver
         val head = ByteArray(8)
-        resolver.openInputStream(uri)?.use { it.read(head) }
+        input(uri)?.use { it.read(head) }
         val text = String(head, Charsets.ISO_8859_1)
         when {
             text.startsWith("II*\u0000") || text.startsWith("MM\u0000*") || text.startsWith("II+\u0000") || text.startsWith("MM\u0000+") ->
@@ -1199,12 +1264,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 error(tr("JPEG 2000 não é suportado. Converta para TIFF ou JPG"))
         }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        input(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0) return null
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
         task.step(tr("Decodificando imagem"))
-        val bitmap = resolver.openInputStream(uri)?.use {
+        val bitmap = input(uri)?.use {
             BitmapDecode.decodeStream(it, BitmapDecode.configForMime(bounds.outMimeType), sample)
         } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
@@ -1223,13 +1288,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val opened = withContext(Dispatchers.IO) {
             val size = fileSize(uri)
             val key = openCache.keyOf(uri, size) { input(uri) } ?: return@withContext null
-            val fd = cloudCopies[uri]?.takeIf { it.exists() }?.let { android.os.ParcelFileDescriptor.open(it, android.os.ParcelFileDescriptor.MODE_READ_ONLY) }
-                ?: app.contentResolver.openFileDescriptor(uri, "r") ?: return@withContext null
+            val fd = openLocal(uri) ?: return@withContext null
             val probe = runCatching { TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, null) }.getOrNull()
             if (probe == null || maxOf(probe.width, probe.height) <= TILED_FROM) { probe?.close() ?: fd.close(); return@withContext null }
-            val worldText = world?.let { (w, _) -> app.contentResolver.openInputStream(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) } }
+            val worldText = world?.let { (w, _) -> input(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) } }
             val placed = worldText?.let { WorldFile.extent(it, probe.width, probe.height) }
-            val tiles = if (placed != null) { probe.close(); TiledPicture.open(name, app.contentResolver.openFileDescriptor(uri, "r")!!, java.io.File(app.cacheDir, "pyramid"), key, placed) } else probe
+            val tiles = if (placed != null) {
+                probe.close()
+                val again = openLocal(uri) ?: return@withContext null
+                TiledPicture.open(name, again, java.io.File(app.cacheDir, "pyramid"), key, placed)
+            } else probe
             Triple(tiles, if (placed != null) tr("posicionada pelo arquivo {0}", world?.second) else tr("posicionada pelo GeoTIFF"), tiles?.ready == true)
         } ?: return null
         val (tiles, placement, ready) = opened
@@ -3083,34 +3151,49 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         openJob?.cancel()
         val before = state
         openJob = viewModelScope.launch {
-            // The free version opens small files only (the cloud reports the size before downloading).
-            if (CloudDocs.isDrive(uri.toString())) {
+            val projectOpen = before is ProjectState.Loaded
+            fun tooBig(bytes: Long) {
+                val text = getApplication<Application>().getString(R.string.pro_too_big,
+                    StationFormat.decimal(bytes / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString())
+                if (projectOpen) projectMessage = text else state = ProjectState.Failed(displayName(uri), text)
+                proRequested = true
+            }
+            // The free version opens small files only. A cloud provider reports the size before the copy.
+            if (PickedFile.needsStreamedCopy(uri.scheme, uri.authority)) {
                 val known = reportedSize(uri)
                 if (!ProAccess.allows(ProFeature.OPEN_LARGE_FILE, pro.isPro) && known != null && known > FreeLimits.MAX_FILE_BYTES) {
-                    state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
-                        StationFormat.decimal(known / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString()))
-                    proRequested = true
+                    tooBig(known)
                     return@launch
                 }
-                val name = displayName(uri)
-                val task = LoadTask(tr("Abrindo {0}", name)) { openJob?.cancel() }
-                state = ProjectState.Loading(name, task)
                 try {
-                    download(uri, task)
+                    if (projectOpen) ensureCached(uri) { openJob?.cancel() }
+                    else {
+                        val name = displayName(uri)
+                        val task = LoadTask(tr("Abrindo {0}", name)) { openJob?.cancel() }
+                        state = ProjectState.Loading(name, task)
+                        download(uri, task)
+                    }
                 } catch (e: kotlinx.coroutines.CancellationException) {
-                    state = before
+                    if (!projectOpen) state = before
                     projectMessage = tr("Download cancelado.")
                     return@launch
                 } catch (e: Exception) {
-                    state = ProjectState.Failed(name, tr("Não foi possível baixar do Google Drive: {0}", errorText(e)))
+                    val name = displayName(uri)
+                    if (projectOpen) projectMessage = tr("Não foi possível baixar o arquivo: {0}", errorText(e))
+                    else state = ProjectState.Failed(name, if (CloudDocs.isDrive(uri.toString()))
+                        tr("Não foi possível baixar do Google Drive: {0}", errorText(e))
+                    else tr("Não foi possível baixar o arquivo: {0}", errorText(e)))
                     return@launch
                 }
             }
             val size = withContext(Dispatchers.IO) { fileSize(uri) }
             if (!ProAccess.allows(ProFeature.OPEN_LARGE_FILE, pro.isPro) && size > FreeLimits.MAX_FILE_BYTES) {
-                state = ProjectState.Failed(displayName(uri), getApplication<Application>().getString(R.string.pro_too_big,
-                    StationFormat.decimal(size / 1048576.0, 1), (FreeLimits.MAX_FILE_BYTES / 1048576).toString()))
-                proRequested = true
+                tooBig(size)
+                return@launch
+            }
+            val image = withContext(Dispatchers.IO) { PickedFile.isImage(displayName(uri), mimeOf(uri), headBytes(uri)) }
+            if (PickedFile.route(projectOpen, image) == PickRoute.ATTACH_IMAGE) {
+                attachImage(uri)
                 return@launch
             }
             if (GmtIo.isGmt(displayName(uri), getApplication<Application>().contentResolver.getType(uri), uri.lastPathSegment)) {
@@ -3407,8 +3490,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun decodeTiff(uri: Uri, task: LoadTask): Picture {
-        val resolver = getApplication<Application>().contentResolver
-        val fd = resolver.openFileDescriptor(uri, "r") ?: error(tr("arquivo indisponível"))
+        val fd = openLocal(uri) ?: error(tr("arquivo indisponível"))
         return fd.use {
             FileInputStream(it.fileDescriptor).channel.use { channel ->
                 val input = object : RandomInput {
