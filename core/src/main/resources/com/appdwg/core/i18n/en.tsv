@@ -1210,3 +1210,29 @@ Período: {0}	Period: {0}
 Acumulado: {0}	Cumulative: {0}
 SEÇÕES DE MEDIÇÃO	MEASUREMENT SECTIONS
 Trecho completado pelo app (interpolado ou pela primitiva)	Stretch completed by the app (interpolated or from the original ground)
+Nenhum ponto com descrição de linha (PE, CR, BORDO…). Confira a tabela de códigos.	No point with a line description (PE, CR, BORDO…). Check the code table.
+Desenho automático: {0} linha(s) ({1}). Ajuste no editor de linhas se preciso.	Automatic drawing: {0} line(s) ({1}). Adjust in the line editor if needed.
+{0} linha(s) obrigatória(s) respeitada(s).	{0} breakline(s) honoured.
+Desenho automático	Automatic drawing
+Códigos de campo…	Field codes…
+Liga os pontos de mesma descrição (pé, crista, bordo…) em 3D polys editáveis; a superfície gerada depois as usa como obrigatórias.	Joins points of the same description (toe, crest, edge…) into editable 3D polylines; the surface generated afterwards uses them as breaklines.
+Novo código	New code
+Adicionar	Add
+Restaurar padrão	Restore defaults
+Códigos de campo	Field codes
+A descrição de cada ponto escolhe o código (PE, PE1, "pé talude 2"…). Números separam linhas do mesmo código.	Each point's description picks its code (PE, PE1, "pé talude 2"…). Numbers keep lines of the same code apart.
+ponto ({0})	point ({0})
+obrigatória	breakline
+fechada	closed
+Código {0}	Code {0}
+Código	Code
+Descrições aceitas (separadas por vírgula)	Accepted descriptions (comma separated)
+Cor (#RRGGBB)	Colour (#RRGGBB)
+Liga em linha	Joined into lines
+Só ponto	Point only
+Obrigatória da superfície	Surface breakline
+Fechada	Closed
+Cruz	Cross
+Poste	Post
+Árvore	Tree
+Caixa	Box

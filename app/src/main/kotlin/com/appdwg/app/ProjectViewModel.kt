@@ -778,6 +778,50 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Triangulates the points that have an elevation into a surface laid over the project. */
+    // ---- Automatic drawing of survey points ----
+
+    private val codePrefs = app.getSharedPreferences("pointCodes", Context.MODE_PRIVATE)
+
+    /** Field codes of the device, editable; the defaults until the user changes them. */
+    var pointCodes by mutableStateOf(
+        codePrefs.getString("table", null)?.let { runCatching { com.appdwg.core.PointCodes.fromTsv(it) }.getOrNull()?.takeIf { l -> l.isNotEmpty() } }
+            ?: com.appdwg.core.PointCodes.defaults)
+        private set
+
+    fun savePointCodes(codes: List<com.appdwg.core.PointCode>) {
+        pointCodes = codes
+        codePrefs.edit().putString("table", com.appdwg.core.PointCodes.toTsv(codes)).apply()
+    }
+
+    /** Points the automatic drawing works on: the imported ones, or else those of the drawing. */
+    private fun surveyPoints(): List<CogoPoint> = userPoints.ifEmpty {
+        (state as? ProjectState.Loaded)?.project?.cgPoints.orEmpty().map { c -> CogoPoint(c.name, c.code ?: "", c.position.x, c.position.y, c.position.z) }
+    }
+
+    /**
+     * Joins the survey points of each line code into 3D polylines, as editable lines; a new run
+     * replaces the lines of the previous one (undo brings them back).
+     */
+    fun autoDraw() {
+        val pts = surveyPoints()
+        val lines = com.appdwg.core.Linework.build(pts, pointCodes)
+        if (lines.isEmpty()) {
+            pointsMessage = tr("Nenhum ponto com descrição de linha (PE, CR, BORDO…). Confira a tabela de códigos.")
+            return
+        }
+        val layers = pointCodes.filter { it.connect }.map { it.layer }.toSet()
+        val previous = userLines.indices.filter { userLines[it].layer in layers }.map { it + keptOriginals.size }
+        editLines(previous, lines.map { it.polyline() }, replace = true)
+        val byCode = lines.groupBy { it.code.name }.map { (n, l) -> "$n ${l.size}" }
+        pointsMessage = tr("Desenho automático: {0} linha(s) ({1}). Ajuste no editor de linhas se preciso.", lines.size, byCode.joinToString(", "))
+    }
+
+    /** Lines that the surface must follow: the drawn lines of breakline codes, with heights. */
+    private fun breaklines(): List<Polyline> {
+        val layers = pointCodes.filter { it.breakline && it.connect }.map { it.layer }.toSet()
+        return userLines.filter { it.layer in layers && it.zs != null }
+    }
+
     fun surfaceFromPoints() {
         val pts = userPoints.filter { !it.z.isNaN() }
         if (pts.size < 3) {
@@ -793,11 +837,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         run {
             try {
                 val label = tr("{0} superfície", POINTS_LAYER)
+                val breaks = breaklines()
                 val surface = withContext(Dispatchers.Default) {
+                    // Breaklines: extra points along them, a third of their usual segment apart, keep the triangles off them.
+                    val segs = breaks.flatMap { l -> (1 until l.xs.size).map { kotlin.math.hypot(l.xs[it] - l.xs[it - 1], l.ys[it] - l.ys[it - 1]) } }.sorted()
+                    val step = (segs.getOrNull(segs.size / 2) ?: 3.0).div(3).coerceIn(0.25, 5.0)
+                    val all = pts + com.appdwg.core.Linework.densify(breaks, step)
                     // Named like its entry, so it shows as just the label.
                     AeccPointCache.triangulate(
                         label,
-                        DoubleArray(pts.size) { pts[it].x }, DoubleArray(pts.size) { pts[it].y }, DoubleArray(pts.size) { pts[it].z },
+                        DoubleArray(all.size) { all[it].x }, DoubleArray(all.size) { all[it].y }, DoubleArray(all.size) { all[it].z },
                     )
                 }
                 addedFiles = addedFiles.filter { it.label != label } +
@@ -805,6 +854,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 refreshJob?.cancel()
                 refreshNow()
                 pointsMessage = tr("Superfície \"{0}\" gerada com {1} pontos ({2} triângulos).", label, pts.size, surface.triangleCount)
+                if (breaks.isNotEmpty()) pointsMessage = pointsMessage.orEmpty() + " " + tr("{0} linha(s) obrigatória(s) respeitada(s).", breaks.size)
             } catch (e: Exception) {
                 pointsMessage = tr("Não foi possível gerar a superfície: {0}", e.message ?: e.javaClass.simpleName)
             }

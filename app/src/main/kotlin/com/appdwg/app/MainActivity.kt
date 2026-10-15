@@ -962,6 +962,7 @@ private fun ProjectScreen(
                     channels = if (vm.analysisMode >= 2) vm.flowChannels else emptyList(),
                     arrows = if (vm.analysisMode >= 2) vm.flowArrows else emptyList(),
                     points = vm.userPoints,
+                    pointCodes = vm.pointCodes,
                     onPointTap = if (measuring || addingPoints || !isPro) null else { pt -> selectedPoint = pt; tapped = null },
                     selectedPoint = selectedPoint,
                     focus = focus,

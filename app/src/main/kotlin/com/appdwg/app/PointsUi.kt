@@ -67,6 +67,15 @@ fun PointsDialog(
                         Text(tr("Gerar superfície"))
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                var showCodes by remember { mutableStateOf(false) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { vm.autoDraw() }) { Text(tr("Desenho automático")) }
+                    TextButton(onClick = { showCodes = true }) { Text(tr("Códigos de campo…")) }
+                }
+                Text(tr("Liga os pontos de mesma descrição (pé, crista, bordo…) em 3D polys editáveis; a superfície gerada depois as usa como obrigatórias."),
+                    style = MaterialTheme.typography.bodySmall)
+                if (showCodes) CodesDialog(vm, onDismiss = { showCodes = false })
                 if (vm.lastGenerated.isNotEmpty()) {
                     TextButton(onClick = { vm.undoGenerated() }) { Text(tr("Desfazer última geração ({0} pontos)", vm.lastGenerated.size)) }
                 }

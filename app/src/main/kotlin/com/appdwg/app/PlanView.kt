@@ -137,6 +137,8 @@ fun PlanView(
     overlay: TerrainImage? = null,
     /** User COGO points (layer _POINTS). */
     points: List<CogoPoint> = emptyList(),
+    /** Field codes: points take the colour and symbol of their code. */
+    pointCodes: List<com.appdwg.core.PointCode> = emptyList(),
     /** Called instead of [onTap] when a tap lands on one of [points]; not while snapping. */
     onPointTap: ((CogoPoint) -> Unit)? = null,
     /** Point highlighted as selected. */
@@ -197,6 +199,7 @@ fun PlanView(
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
     // so the view stays where it was.
     val origin = remember(viewKey) { bounds.center }
+    val pointStyles = remember(points, pointCodes) { if (pointCodes.isEmpty()) emptyList() else points.map { com.appdwg.core.PointCodes.match(it.description, pointCodes)?.first } }
     val scene = remember(project) { Scene.build(project, origin) }
     // An edited surface stands in for its original, whose mesh and lines would show through its holes.
     val replaced = project.surfaces.map { it.name }.filter { n -> project.surfaces.any { it.name == n + EDITED_SUFFIX } }.toSet()
@@ -496,7 +499,7 @@ fun PlanView(
         } else drawVectors(cam)
         drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors, pointLabels) { toScreen(it, cam) }
-        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels) { toScreen(it, cam) }
+        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels, pointStyles) { toScreen(it, cam) }
         if (channels.isNotEmpty()) {
             val maxA = channels.maxOf { it.third }
             val minA = channels.minOf { it.third }
@@ -1064,26 +1067,46 @@ private fun DrawScope.drawCogoPoints(
     cam: Camera,
     colors: PlanColors,
     withLabels: Boolean,
+    styles: List<com.appdwg.core.PointCode?>,
     toScreen: (Point2) -> Offset,
 ) {
     if (points.isEmpty()) return
-    val color = layerColor?.let { Color(it) } ?: COGO_COLOR
+    val layerTint = layerColor?.let { Color(it) } ?: COGO_COLOR
     val labels = withLabels && points.size <= 3000 && cam.scale > 0.4
     val paint = Paint().apply {
         isAntiAlias = true
         textSize = 11.sp.toPx()
-        this.color = color.toArgb()
+        this.color = layerTint.toArgb()
         setShadowLayer(3f, 0f, 0f, colors.background.toArgb())
     }
     val r = 5.sp.toPx()
     val canvas = drawContext.canvas.nativeCanvas
     val taken = ArrayList<android.graphics.RectF>()
-    for (pt in points) {
+    for ((k, pt) in points.withIndex()) {
         val sp = toScreen(Point2(pt.x, pt.y))
         if (sp.x < -100f || sp.y < -60f || sp.x > size.width + 20f || sp.y > size.height + 60f) continue
-        drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f))
-        drawLine(color, sp - Offset(r * 1.6f, 0f), sp + Offset(r * 1.6f, 0f), strokeWidth = 1.5f)
-        drawLine(color, sp - Offset(0f, r * 1.6f), sp + Offset(0f, r * 1.6f), strokeWidth = 1.5f)
+        val code = styles.getOrNull(k)
+        val color = code?.let { Color(it.color) } ?: layerTint
+        paint.color = color.toArgb()
+        when (code?.symbol) {
+            // Post: filled circle in a ring.
+            "poste" -> { drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f)); drawCircle(color, radius = r * 0.45f, center = sp) }
+            // Tree: crown with branches.
+            "arvore" -> {
+                drawCircle(color, radius = r * 1.3f, center = sp, style = Stroke(width = 1.5f))
+                for (a in 0 until 6) { val t = a * Math.PI / 3; drawLine(color, sp, sp + Offset((kotlin.math.cos(t) * r * 1.3f).toFloat(), (kotlin.math.sin(t) * r * 1.3f).toFloat()), strokeWidth = 1f) }
+            }
+            // Box (drain inlet, manhole): square with a cross.
+            "caixa" -> {
+                drawRect(color, topLeft = sp - Offset(r, r), size = androidx.compose.ui.geometry.Size(2 * r, 2 * r), style = Stroke(width = 2f))
+                drawLine(color, sp - Offset(r, r), sp + Offset(r, r), strokeWidth = 1f); drawLine(color, sp + Offset(-r, r), sp + Offset(r, -r), strokeWidth = 1f)
+            }
+            else -> {
+                drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f))
+                drawLine(color, sp - Offset(r * 1.6f, 0f), sp + Offset(r * 1.6f, 0f), strokeWidth = 1.5f)
+                drawLine(color, sp - Offset(0f, r * 1.6f), sp + Offset(0f, r * 1.6f), strokeWidth = 1.5f)
+            }
+        }
         if (pt == selected) drawCircle(colors.marker, radius = r * 2.2f, center = sp, style = Stroke(width = 3f))
         if (labels && taken.size < 400) {
             val x = sp.x + r * 1.8f
