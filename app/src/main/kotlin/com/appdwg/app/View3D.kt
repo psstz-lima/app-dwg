@@ -362,8 +362,34 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private var overlayTriCount = 0
 
     fun setDrape(drape: Drape?) {
+        val previous = this.drape
         this.drape = drape
-        drapeDirty = true
+        val sameTiles = previous?.tiles != null && previous.tiles === drape?.tiles &&
+            previous.quality == drape?.quality && previous.focus == drape?.focus
+        if (!sameTiles) drapeDirty = true
+    }
+
+    private var anisotropy = Float.NaN
+
+    /** Sharper on a tilted surface when the driver has the extension. A missing one is left at 1. */
+    private fun applyAnisotropy() {
+        if (anisotropy.isNaN()) {
+            val count = IntArray(1)
+            GLES30.glGetIntegerv(GLES30.GL_NUM_EXTENSIONS, count, 0)
+            val extensions = if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                emptyList()
+            } else {
+                List(count[0].coerceAtLeast(0)) { i -> GLES30.glGetStringi(GLES30.GL_EXTENSIONS, i) ?: "" }
+            }
+            val maxA = FloatArray(1)
+            GLES30.glGetFloatv(GlTexture.MAX_TEXTURE_MAX_ANISOTROPY_EXT, maxA, 0)
+            val reported = if (GLES30.glGetError() != GLES30.GL_NO_ERROR) 1f else maxA[0]
+            anisotropy = GlTexture.anisotropy(extensions, reported)
+        }
+        if (anisotropy > 1f) {
+            GLES30.glTexParameterf(GLES30.GL_TEXTURE_2D, GlTexture.TEXTURE_MAX_ANISOTROPY_EXT, anisotropy)
+            while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
+        }
     }
 
     private fun deleteTextures(ids: List<Int>) {
@@ -383,6 +409,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             gpuTiles = emptyList()
             deleteTextures(previous.map { it.id })
             if (drape == null) drapeDirty = false
+            return
+        }
+        val picture = snapshot.tiles
+        if (picture != null) {
+            uploadFromTiles(snapshot, picture)
             return
         }
         val source = snapshot.image.asAndroidBitmap()
@@ -423,6 +454,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                         break
                     }
                     GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+                    applyAnisotropy()
                     val placed = GlTexture.placed(
                         snapshot.bounds.minX, snapshot.bounds.maxY, snapshot.bounds.width, snapshot.bounds.height,
                         source.width, source.height, tile,
@@ -451,6 +483,85 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             return
         }
         if (failed || built.size != tiles.size) {
+            deleteTextures(built.map { it.id })
+            drapeDirty = false
+            onDrapeFailed?.invoke()
+            return
+        }
+        val old = gpuTiles
+        gpuTiles = built
+        deleteTextures(old.map { it.id })
+        drapeDirty = false
+    }
+
+    /**
+     * Uploads [picture] at the drape's quality, one GPU tile at a time. Máxima is level 0 (the file).
+     * A failure drops the new textures and asks for the next quality down. The old ones stay until then.
+     */
+    private fun uploadFromTiles(snapshot: Drape, picture: TiledPicture) {
+        while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
+        val reported = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0]
+        val maxSize = reported.takeIf { it > 0 } ?: 2048
+        val built = ArrayList<GpuTile>()
+        var failed = false
+        try {
+            val ok = picture.eachGpuTile(
+                snapshot.focus ?: picture.bounds,
+                DrapeQuality.pyramidLevel(snapshot.quality),
+                GlTexture.tileSide(maxSize),
+            ) { bitmap, plan ->
+                val parts = GlTexture.plan(bitmap.width, bitmap.height, bitmap.hasAlpha(), maxSize)
+                    ?: throw OutOfMemoryError()
+                for (tile in parts) {
+                    val piece = GlTexture.tileBitmap(bitmap, tile) ?: throw OutOfMemoryError()
+                    try {
+                        if (piece.isRecycled) throw IllegalStateException("tile recycled")
+                        val ids = IntArray(1)
+                        GLES30.glGenTextures(1, ids, 0)
+                        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ids[0])
+                        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+                        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+                        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+                        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+                        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, tile.unpackAlignment)
+                        while (GLES30.glGetError() != GLES30.GL_NO_ERROR) { }
+                        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, piece, 0)
+                        if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                            GLES30.glDeleteTextures(1, ids, 0)
+                            throw IllegalStateException("glTexImage2D")
+                        }
+                        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+                        applyAnisotropy()
+                        val placed = GlTexture.placed(
+                            plan.minX, plan.maxY, plan.width, plan.height,
+                            bitmap.width, bitmap.height, tile,
+                        )
+                        built += GpuTile(
+                            ids[0],
+                            floatArrayOf(
+                                (placed[0] - scene.originX).toFloat(),
+                                (placed[1] - scene.originY).toFloat(),
+                                placed[2].toFloat(),
+                                placed[3].toFloat(),
+                            ),
+                        )
+                    } finally {
+                        if (!piece.isRecycled) piece.recycle()
+                    }
+                }
+            }
+            if (!ok) failed = true
+        } catch (e: Throwable) {
+            android.util.Log.e("Gromatic", "textura 3D", e)
+            failed = true
+        } finally {
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        }
+        if (drape !== snapshot) {
+            deleteTextures(built.map { it.id })
+            return
+        }
+        if (failed) {
             deleteTextures(built.map { it.id })
             drapeDirty = false
             onDrapeFailed?.invoke()

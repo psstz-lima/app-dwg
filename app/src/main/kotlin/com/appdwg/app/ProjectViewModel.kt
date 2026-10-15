@@ -126,7 +126,17 @@ private val IDENTITY = Placement(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, "0")
 
 /** Picture laid over the surfaces ("imagem sobre a superfície"), placed at [bounds] in plan. */
 /** Picture over the surfaces; a very large one also comes in [tiles], drawn on top of [image] (its overview). */
-class Drape(val name: String, val bounds: Bounds, val image: ImageBitmap, val placement: String, val tiles: TiledPicture? = null)
+class Drape(
+    val name: String,
+    val bounds: Bounds,
+    val image: ImageBitmap,
+    val placement: String,
+    val tiles: TiledPicture? = null,
+    /** 0 normal, 1 high, 2 highest. The 3D upload reads this. */
+    val quality: Int = 2,
+    /** Plan window to upload. Null uploads [bounds]. */
+    val focus: Bounds? = null,
+)
 
 /** Decoded picture, with its plan extent when the file carries one and its size in the file. */
 private class Picture(val image: ImageBitmap, val extent: Bounds?, val sourceWidth: Int, val sourceHeight: Int)
@@ -303,28 +313,78 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     /**
-     * [d] cut to the surfaces (plus a small margin) for the 3D view, at the detail of [quality]
-     * (0 normal, 1 high, 2 highest): a large picture is read from its tiles at the finest level
-     * that fits, a decoded one is cropped. [d] itself when nothing better can be made.
+     * [d] for the 3D view at [quality] (0 normal, 1 high, 2 highest).
+     * A tiled picture keeps its tiles: the GPU reads native (or half, or quarter) tiles itself,
+     * cropped to the surfaces. A picture already decoded is cropped, and Alta or Normal scales it.
+     * Nothing is reduced ahead of an out-of-memory failure.
      */
     suspend fun drapeFor3d(d: Drape, quality: Int): Drape = withContext(Dispatchers.IO) {
-        val project = (state as? ProjectState.Loaded)?.project ?: return@withContext d
-        val area = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) } ?: return@withContext d
-        val m = maxOf(area.width, area.height) * 0.02
-        val a = Bounds(area.minX - m, area.minY - m, area.maxX + m, area.maxY + m)
-        val (pixels, side) = when (quality) { 2 -> 40_000_000L to 8192; 1 -> 16_000_000L to 4096; else -> 4_000_000L to 2048 }
+        val q = quality.coerceIn(0, 2)
+        val focus = surfaceFocus(d.bounds)
+        if (d.tiles != null) {
+            return@withContext Drape(d.name, d.bounds, d.image, d.placement, d.tiles, q, focus)
+        }
+        val src = d.image.asAndroidBitmap()
+        if (src.isRecycled || src.width <= 0 || src.height <= 0) {
+            return@withContext Drape(d.name, d.bounds, d.image, d.placement, null, q, focus)
+        }
         val cut = try {
-            d.tiles?.region(a, pixels, side) ?: run {
-                val src = d.image.asAndroidBitmap()
-                val px = d.bounds.width / src.width; val py = d.bounds.height / src.height
-                val x0 = ((a.minX - d.bounds.minX) / px).toInt().coerceIn(0, src.width); val x1 = kotlin.math.ceil((a.maxX - d.bounds.minX) / px).toInt().coerceIn(0, src.width)
-                val y0 = ((d.bounds.maxY - a.maxY) / py).toInt().coerceIn(0, src.height); val y1 = kotlin.math.ceil((d.bounds.maxY - a.minY) / py).toInt().coerceIn(0, src.height)
-                if (x1 <= x0 || y1 <= y0 || (x1 - x0 == src.width && y1 - y0 == src.height)) null
-                else Bitmap.createBitmap(src, x0, y0, x1 - x0, y1 - y0) to
-                    Bounds(d.bounds.minX + x0 * px, d.bounds.maxY - y1 * py, d.bounds.minX + x1 * px, d.bounds.maxY - y0 * py)
-            }
-        } catch (e: OutOfMemoryError) { null }
-        cut?.let { (bmp, b) -> Drape(d.name, b, bmp.asImageBitmap(), d.placement) } ?: d
+            cropForQuality(d, src, focus ?: d.bounds, DrapeQuality.reduce(q))
+        } catch (_: OutOfMemoryError) {
+            null
+        }
+        cut?.let { (bmp, b) -> Drape(d.name, b, bmp.asImageBitmap(), d.placement, null, q) }
+            ?: Drape(d.name, d.bounds, d.image, d.placement, null, q, focus)
+    }
+
+    /** Surfaces, plus a small margin, when the picture actually covers them. */
+    private fun surfaceFocus(picture: Bounds): Bounds? {
+        val project = (state as? ProjectState.Loaded)?.project ?: return null
+        val area = project.surfaces.mapNotNull { it.bounds }.reduceOrNull { a, b -> a.union(b) } ?: return null
+        val m = maxOf(area.width, area.height) * 0.02
+        val grown = Bounds(area.minX - m, area.minY - m, area.maxX + m, area.maxY + m)
+        return if (overlaps(grown, picture)) grown else null
+    }
+
+    /**
+     * [src] cut to [area], then scaled by [reduce] (1 keeps every pixel). Null when the crop is the
+     * whole picture and [reduce] is 1, so the caller keeps the bitmap it already has.
+     */
+    private fun cropForQuality(d: Drape, src: Bitmap, area: Bounds, reduce: Int): Pair<Bitmap, Bounds>? {
+        val px = d.bounds.width / src.width
+        val py = d.bounds.height / src.height
+        if (px <= 0.0 || py <= 0.0) return null
+        val x0 = ((area.minX - d.bounds.minX) / px).toInt().coerceIn(0, src.width)
+        val x1 = kotlin.math.ceil((area.maxX - d.bounds.minX) / px).toInt().coerceIn(0, src.width)
+        val y0 = ((d.bounds.maxY - area.maxY) / py).toInt().coerceIn(0, src.height)
+        val y1 = kotlin.math.ceil((d.bounds.maxY - area.minY) / py).toInt().coerceIn(0, src.height)
+        if (x1 <= x0 || y1 <= y0) return null
+        val full = x0 == 0 && y0 == 0 && x1 == src.width && y1 == src.height
+        val k = reduce.coerceAtLeast(1)
+        if (full && k == 1) return null
+        val cropped = if (full) src else Bitmap.createBitmap(src, x0, y0, x1 - x0, y1 - y0)
+        val plan = Bounds(
+            d.bounds.minX + x0 * px, d.bounds.maxY - y1 * py,
+            d.bounds.minX + x1 * px, d.bounds.maxY - y0 * py,
+        )
+        if (k == 1) return cropped to plan
+        val w = ((cropped.width + k - 1) / k).coerceAtLeast(1)
+        val h = ((cropped.height + k - 1) / k).coerceAtLeast(1)
+        val config = if (cropped.hasAlpha()) Bitmap.Config.ARGB_8888 else Bitmap.Config.RGB_565
+        val out = try {
+            createBitmap(w, h, config)
+        } catch (e: OutOfMemoryError) {
+            if (cropped !== src && !cropped.isRecycled) cropped.recycle()
+            throw e
+        }
+        android.graphics.Canvas(out).drawBitmap(
+            cropped,
+            android.graphics.Rect(0, 0, cropped.width, cropped.height),
+            android.graphics.Rect(0, 0, w, h),
+            android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG),
+        )
+        if (cropped !== src && !cropped.isRecycled) cropped.recycle()
+        return out to plan
     }
 
     fun removeDrape() {
@@ -1235,7 +1295,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val key = openCache.keyOf(uri, fileSize(uri)) { input(uri) } ?: return@withContext null
             val fd = openLocal(uri) ?: return@withContext null
             val tp = runCatching {
-                TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, Bounds(0.0, 0.0, img.widthPx.toDouble(), img.heightPx.toDouble()))
+                TiledPicture.open(name, fd, java.io.File(app.cacheDir, TiledPicture.PYRAMID_DIR), key, Bounds(0.0, 0.0, img.widthPx.toDouble(), img.heightPx.toDouble()))
             }.getOrNull()
             when {
                 tp == null -> { fd.close(); null }
@@ -1308,14 +1368,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val size = fileSize(uri)
             val key = openCache.keyOf(uri, size) { input(uri) } ?: return@withContext null
             val fd = openLocal(uri) ?: return@withContext null
-            val probe = runCatching { TiledPicture.open(name, fd, java.io.File(app.cacheDir, "pyramid"), key, null) }.getOrNull()
+            val probe = runCatching { TiledPicture.open(name, fd, java.io.File(app.cacheDir, TiledPicture.PYRAMID_DIR), key, null) }.getOrNull()
             if (probe == null || !RasterBudget.tileTiff(probe.width, probe.height)) { probe?.close() ?: fd.close(); return@withContext null }
             val worldText = world?.let { (w, _) -> input(w)?.use { it.readBytes().toString(Charsets.ISO_8859_1) } }
             val placed = worldText?.let { WorldFile.extent(it, probe.width, probe.height) }
             val tiles = if (placed != null) {
                 probe.close()
                 val again = openLocal(uri) ?: return@withContext null
-                TiledPicture.open(name, again, java.io.File(app.cacheDir, "pyramid"), key, placed)
+                TiledPicture.open(name, again, java.io.File(app.cacheDir, TiledPicture.PYRAMID_DIR), key, placed)
             } else probe
             Triple(tiles, if (placed != null) tr("posicionada pelo arquivo {0}", world?.second) else tr("posicionada pelo GeoTIFF"), tiles?.ready == true)
         } ?: return null

@@ -1286,6 +1286,10 @@ PIs	PIs
 Toque numa célula para destacar a linha e a célula.	Tap a cell to highlight its row and cell.
 Imagem: carregando {0}…	Picture: loading {0}…
 Detalhe da imagem em 3D	Picture detail in 3D
+Detalhe da imagem	Picture detail
+Normal — um quarto dos pixels	Normal — a quarter of the pixels
+Alta — metade dos pixels	High — half the pixels
+Máxima — cada pixel do arquivo	Highest — every pixel of the file
 Padrão do sistema	System default
 Português	Português
 PROJETO	PROJECT

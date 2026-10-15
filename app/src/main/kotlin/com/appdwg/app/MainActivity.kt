@@ -1040,7 +1040,7 @@ private fun ProjectScreen(
                         background = g.planBg,
                         foreground = g.text,
                         exaggeration = exaggeration.toFloat(),
-                        drape = drape3d ?: drape,
+                        drape = drape3d,
                         modifier = Modifier.fillMaxSize(),
                         surfaceStyle = { v.styleOf(it) },
                         onTap = if (pickingArea) onPlanTap else null,
@@ -1066,6 +1066,7 @@ private fun ProjectScreen(
                     rasters = rasters,
                     tiledRasters = vm.tiledRasters.filterKeys { it !in vm.unloaded },
                     drape = drape,
+                    imageQuality = v.drapeQuality,
                     onTap = onPlanTap, // defined above; 3D uses the same vertex flow
                     modifier = Modifier.fillMaxSize(),
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
@@ -1178,14 +1179,19 @@ private fun ProjectScreen(
                     })
                     // Vertical exaggeration helps read gentle terrain.
                     if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 })
-                    if (show3d && drape != null) Box {
-                        // A direct choice of detail, up or down, instead of stepping through them.
+                    if (drape != null || vm.tiledRasters.isNotEmpty()) Box {
+                        // Same three steps in plan and in 3D. Máxima is the file's own pixels.
                         var open by remember { mutableStateOf(false) }
                         val names = listOf(tr("normal"), tr("alta"), tr("máxima"))
-                        GButton(if (drapeLoading) tr("Imagem: carregando {0}…", names[v.drapeQuality]) else tr("Imagem: {0}", names[v.drapeQuality]), { open = true })
+                        val details = listOf(
+                            tr("Normal — um quarto dos pixels"),
+                            tr("Alta — metade dos pixels"),
+                            tr("Máxima — cada pixel do arquivo"),
+                        )
+                        GButton(if (show3d && drapeLoading) tr("Imagem: carregando {0}…", names[v.drapeQuality]) else tr("Imagem: {0}", names[v.drapeQuality]), { open = true })
                         androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
-                            MenuTitle(tr("Detalhe da imagem em 3D"))
-                            names.forEachIndexed { i, n -> MenuLine(n, checked = v.drapeQuality == i) { open = false; v.drapeQuality = i } }
+                            MenuTitle(tr("Detalhe da imagem"))
+                            details.forEachIndexed { i, n -> MenuLine(n, checked = v.drapeQuality == i) { open = false; v.drapeQuality = i } }
                         }
                     }
                 }
