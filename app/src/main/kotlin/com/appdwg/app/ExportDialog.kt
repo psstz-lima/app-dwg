@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +72,7 @@ fun ExportDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.padding(16.dp).widthIn(max = 720.dp).fillMaxWidth(),
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Exportar")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -84,7 +83,7 @@ fun ExportDialog(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(tr("Sistema de coordenadas: {0}", crs.name), style = MaterialTheme.typography.bodySmall, color = g.muted, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onCrs) { Text(tr("Trocar…")) }
+                    OutlinedButton(onClick = onCrs) { Text(tr("Trocar…")) }
                 }
 
                 ExportGroup(tr("Desenho e CAD"))

@@ -34,7 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -543,10 +543,10 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                         }
                     }
                 }
-                TextButton(onClick = onAbout) { Text(tr("Sobre o Gromatic")) }
+                OutlinedButton(onClick = onAbout) { Text(tr("Sobre o Gromatic")) }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
     )
 }
 

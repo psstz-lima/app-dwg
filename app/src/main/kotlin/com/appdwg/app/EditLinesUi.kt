@@ -24,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +55,7 @@ enum class LineOp(private val labelPt: String) {
 enum class MoveBy(private val labelPt: String) { DELTA("ΔX / ΔY"), POLAR("Distância + azimute"), POINTS("Ponto a ponto"); val label: String get() = tr(labelPt) }
 
 /** What the plan is picking for the line editor. */
-enum class EditPick { SELECT, WINDOW, FROM_TO, CENTER, AXIS }
+enum class EditPick { SELECT, WINDOW, FROM_TO, CENTER, AXIS, DRAW }
 
 /** Line editor settings and picks, alive while the editor is open. */
 class EditState {
@@ -81,6 +80,8 @@ class EditState {
     var layer by mutableStateOf("_EDICAO")
     var color by mutableStateOf<Int?>(null)
     var surface by mutableStateOf<String?>(null)
+    /** Elevation of a drawn line: 0 flat 2D, 1 on the surface, 2 at a fixed elevation. */
+    var drawZ by mutableStateOf(0)
     var preview by mutableStateOf<List<Polyline>>(emptyList())
     var message by mutableStateOf<String?>(null)
 }
@@ -155,7 +156,7 @@ fun runLineOp(e: EditState, vm: ProjectViewModel, project: LandXmlProject): Trip
 
 /** Bottom bar of the line editor: selection, properties, undo/redo and the operation dialog. */
 @Composable
-fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, onDone: () -> Unit, modifier: Modifier) {
+fun EditLinesBar(e: EditState, vm: ProjectViewModel, project: LandXmlProject, onOperation: () -> Unit, onDone: () -> Unit, modifier: Modifier) {
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
             val one = e.selected.singleOrNull()?.let { vm.shownLine(it) }
@@ -165,7 +166,56 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, on
                 EditPick.CENTER -> tr("Toque o centro da rotação.")
                 EditPick.AXIS -> tr("Toque dois pontos do eixo de espelhamento ({0}/2).", e.picked.size)
                 EditPick.SELECT -> tr("{0} linha(s) selecionada(s). Toque linhas para marcar ou desmarcar.", e.selected.size)
+                EditPick.DRAW -> tr("Nova linha: toque os vértices ({0}). O toque encaixa em pontos e vértices.", e.picked.size)
             }, style = MaterialTheme.typography.bodyMedium)
+            if (e.pick == EditPick.DRAW) {
+                val names = project.surfaces.map { it.name }
+                fun create(closed: Boolean) {
+                    val p = e.picked
+                    val flat = Polyline(e.layer.ifBlank { "_EDICAO" }, DoubleArray(p.size) { p[it].x }, DoubleArray(p.size) { p[it].y }, closed, e.color)
+                    val line = when (e.drawZ) {
+                        1 -> {
+                            val s = project.surfaces.firstOrNull { it.name == e.surface } ?: project.surfaces.firstOrNull()
+                                ?: run { e.message = tr("Sem superfície para projetar."); return }
+                            val step = len(e.step)?.takeIf { it > 0 } ?: run { e.message = tr("{0} inválido.", tr("Espaçamento")); return }
+                            LineOps.drape(flat, s, step)
+                        }
+                        2 -> LineOps.flatten(flat, len(e.z) ?: run { e.message = tr("{0} inválido.", tr("Cota")); return })
+                        else -> flat
+                    }
+                    e.message = null
+                    vm.editLines(emptyList(), listOf(line), false)
+                    e.picked = emptyList()
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(selected = e.drawZ == 0, onClick = { e.drawZ = 0 }, label = { Text(tr("Linha 2D")) })
+                    FilterChip(selected = e.drawZ == 1, onClick = { e.drawZ = 1 }, label = { Text(tr("3D sobre a superfície")) }, enabled = names.isNotEmpty())
+                    FilterChip(selected = e.drawZ == 2, onClick = { e.drawZ = 2 }, label = { Text(tr("3D numa cota")) })
+                    if (e.drawZ == 1) {
+                        var open by remember { mutableStateOf(false) }
+                        Box {
+                            OutlinedButton(onClick = { open = true }) { Text((e.surface ?: names.firstOrNull())?.substringAfterLast('|') ?: tr("sem superfície")) }
+                            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                                names.forEach { n -> DropdownMenuItem(text = { Text(n.substringAfterLast('|')) }, onClick = { e.surface = n; open = false }) }
+                            }
+                        }
+                        OutlinedTextField(e.step, { e.step = it }, label = { Text(tr("Densificar a cada ({0})", StationFormat.lengthUnit)) }, singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(170.dp))
+                    }
+                    if (e.drawZ == 2) OutlinedTextField(e.z, { e.z = it }, label = { Text(tr("Cota ({0})", StationFormat.lengthUnit)) }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.width(140.dp))
+                }
+                e.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(onClick = { e.picked = e.picked.dropLast(1) }, enabled = e.picked.isNotEmpty()) { Text(tr("Desfazer ponto")) }
+                    OutlinedButton(onClick = { create(false) }, enabled = e.picked.size >= 2) { Text(tr("Criar linha")) }
+                    OutlinedButton(onClick = { create(true) }, enabled = e.picked.size >= 3) { Text(tr("Criar polígono")) }
+                    OutlinedButton(onClick = { vm.undoLines() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
+                    OutlinedButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT }) { Text(tr("Selecionar linhas")) }
+                    OutlinedButton(onClick = { e.picked = emptyList(); e.pick = EditPick.SELECT; onDone() }) { Text(tr("Concluir")) }
+                }
+                return@Column
+            }
             one?.let { l ->
                 val i = LineOps.info(l)
                 Text(tr("Camada {0} · {1} vértices · 2D {2}", l.layer, i.vertices, StationFormat.length(i.length2d, 3)) +
@@ -175,12 +225,13 @@ fun EditLinesBar(e: EditState, vm: ProjectViewModel, onOperation: () -> Unit, on
                     style = MaterialTheme.typography.bodySmall)
             }
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }) { Text(tr("Janela")) }
-                TextButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty()) { Text(tr("Limpar seleção")) }
-                TextButton(onClick = onOperation, enabled = e.selected.isNotEmpty()) { Text(tr("Operação…")) }
-                TextButton(onClick = { vm.undoLines(); e.selected = emptyList() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
-                TextButton(onClick = { vm.redoLines(); e.selected = emptyList() }, enabled = vm.canRedo) { Text(tr("Refazer")) }
-                TextButton(onClick = onDone) { Text(tr("Concluir")) }
+                OutlinedButton(onClick = { e.pick = EditPick.DRAW; e.picked = emptyList(); e.selected = emptyList() }) { Text(tr("Nova linha")) }
+                OutlinedButton(onClick = { e.pick = EditPick.WINDOW; e.windowCorner = null }) { Text(tr("Janela")) }
+                OutlinedButton(onClick = { e.selected = emptyList() }, enabled = e.selected.isNotEmpty()) { Text(tr("Limpar seleção")) }
+                OutlinedButton(onClick = onOperation, enabled = e.selected.isNotEmpty()) { Text(tr("Operação…")) }
+                OutlinedButton(onClick = { vm.undoLines(); e.selected = emptyList() }, enabled = vm.canUndo) { Text(tr("Desfazer")) }
+                OutlinedButton(onClick = { vm.redoLines(); e.selected = emptyList() }, enabled = vm.canRedo) { Text(tr("Refazer")) }
+                OutlinedButton(onClick = onDone) { Text(tr("Concluir")) }
             }
         }
     }
@@ -199,20 +250,20 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
         modifier = Modifier.fillMaxWidth(0.94f),
         confirmButton = {
             Row {
-                TextButton(onClick = {
+                OutlinedButton(onClick = {
                     val (res, _, why) = runLineOp(e, vm, project)
                     e.preview = res.orEmpty(); e.message = why ?: tr("{0} linha(s) resultante(s) em ciano na planta.", res!!.size)
                 }) { Text(tr("Pré-visualizar")) }
-                TextButton(onClick = {
+                OutlinedButton(onClick = {
                     val (res, replace, why) = runLineOp(e, vm, project)
-                    if (res == null) { e.message = why; return@TextButton }
+                    if (res == null) { e.message = why; return@OutlinedButton }
                     vm.editLines(e.selected, res, replace)
                     e.selected = emptyList(); e.preview = emptyList(); e.picked = emptyList(); e.message = null
                     onDismiss()
                 }) { Text(tr("Aplicar")) }
             }
         },
-        dismissButton = { TextButton(onClick = { e.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
+        dismissButton = { OutlinedButton(onClick = { e.preview = emptyList(); onDismiss() }) { Text(tr("Fechar")) } },
         title = { Text(tr("Editar {0} linha(s)", e.selected.size)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -257,7 +308,7 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
                         var open by remember { mutableStateOf(false) }
                         val names = project.surfaces.map { it.name }
                         Box {
-                            TextButton(onClick = { open = true }) { Text(e.surface ?: names.firstOrNull() ?: tr("sem superfície")) }
+                            OutlinedButton(onClick = { open = true }) { Text(e.surface ?: names.firstOrNull() ?: tr("sem superfície")) }
                             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                                 names.forEach { n -> DropdownMenuItem(text = { Text(n) }, onClick = { e.surface = n; open = false }) }
                             }

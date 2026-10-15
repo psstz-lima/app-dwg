@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -56,8 +55,8 @@ fun ModelsDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f),
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
-        dismissButton = { TextButton(onClick = onAdd) { Text(tr("Adicionar modelo")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        dismissButton = { OutlinedButton(onClick = onAdd) { Text(tr("Adicionar modelo")) } },
         title = { Text(tr("Modelos 3D")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -105,15 +104,15 @@ private fun ModelRow(
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = { onPickPoint(index) }) { Text(tr("Tocar ponto de inserção")) }
-        if (pickedPoint != null) TextButton(onClick = {
+        if (pickedPoint != null) OutlinedButton(onClick = {
             e = StationFormat.lengthValue(pickedPoint.x); n = StationFormat.lengthValue(pickedPoint.y)
             vm.groundAt(pickedPoint)?.let { z = StationFormat.lengthValue(it) }
         }) { Text(tr("Usar ponto tocado")) }
-        TextButton(onClick = { val pe = len(e); val pn = len(n); if (pe != null && pn != null) vm.groundAt(Point2(pe, pn))?.let { z = StationFormat.lengthValue(it) } }) {
+        OutlinedButton(onClick = { val pe = len(e); val pn = len(n); if (pe != null && pn != null) vm.groundAt(Point2(pe, pn))?.let { z = StationFormat.lengthValue(it) } }) {
             Text(tr("Cota do terreno"))
         }
         entry.model.georef?.let { g: ModelGeoref ->
-            TextButton(onClick = {
+            OutlinedButton(onClick = {
                 e = StationFormat.lengthValue(g.east); n = StationFormat.lengthValue(g.north); z = StationFormat.lengthValue(g.height)
                 rot = StationFormat.decimal(g.rotationDeg, 3); scale = StationFormat.decimal(g.scale, 4); unit = entry.model.unitScale
             }) { Text(tr("Georreferência do IFC")) }

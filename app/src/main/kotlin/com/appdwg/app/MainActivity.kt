@@ -44,7 +44,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.draw.clip
@@ -213,6 +212,12 @@ private fun AppScreen(viewModel: ProjectViewModel) {
                         }
                         GButton(tr("Configurações"), { showAppearance = true }, icon = GIcon.SETTINGS, outlined = true)
                     }
+                    if (state is ProjectState.Loaded) {
+                        val close = remember(g.iconStroke) { GIcon.CLOSE.vector(g.iconStroke) }
+                        androidx.compose.material3.IconButton(onClick = { guarded { viewModel.closeProject() } }) {
+                            androidx.compose.material3.Icon(close, tr("Fechar projeto"), tint = onBar)
+                        }
+                    }
                 }
             }
         },
@@ -363,8 +368,8 @@ fun CoordinatesDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -> Unit)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(tr("Digitar coordenadas")) },
-        confirmButton = { TextButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Ir para o ponto")) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancelar")) } },
+        confirmButton = { OutlinedButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Ir para o ponto")) } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) } },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.material3.OutlinedTextField(text, { text = it }, label = { Text(tr("Latitude, longitude do centro")) },
@@ -414,6 +419,14 @@ private fun ProjectScreen(
         }
     }
     val drape = vm.drape?.takeIf { vm.drapeVisible }
+    // In 3D the picture is cut to the surfaces, at the detail chosen.
+    var drape3d by remember { mutableStateOf<Drape?>(null) }
+    var drapeLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(drape, v.drapeQuality, v.show3d) {
+        if (!v.show3d || drape == null) { drape3d = null; return@LaunchedEffect }
+        drapeLoading = true
+        try { drape3d = vm.drapeFor3d(drape, v.drapeQuality) } finally { drapeLoading = false }
+    }
     val ctx0 = androidx.compose.ui.platform.LocalContext.current
     // Files laid over this one and the two surfaces compared.
     var showCompare by remember(fileName) { mutableStateOf(false) }
@@ -425,6 +438,12 @@ private fun ProjectScreen(
     val filePicker = rememberLauncherForActivityResult(OpenMultipleDocumentsAt { if (addDrive.getAndSet(false)) CloudDocs.driveStart(ctx0) else null }) { uris ->
         if (uris.isNotEmpty()) vm.addFiles(uris)
     }
+    // A measurement of the works: its LandXML/DXF and its picture, chosen together.
+    val statePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) vm.addState(uris)
+    }
+    // Company logo for the title block of the section sheets.
+    val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.setSheetLogo(uri) }
     val hasDriveApp = remember { CloudDocs.driveInstalled(ctx0) }
     fun addFiles(drive: Boolean) { addDrive.set(drive); filePicker.launch(arrayOf("*/*")) }
     // COGO points: dialog, tapped point, point being edited or created, and the "create" mode.
@@ -489,6 +508,14 @@ private fun ProjectScreen(
     var showAsBuilt by remember(fileName) { mutableStateOf(false) }
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
+    var showBasin by remember(fileName) { mutableStateOf(false) }
+    var showAdvice by remember(fileName) { mutableStateOf(false) }
+    var adviceCard by remember(fileName) { mutableStateOf(true) }
+    var roadOnGrade by remember(fileName) { mutableStateOf(false) }
+    // What the opened files hold, read once per project: the design tools that fit it.
+    val advice = remember(project) {
+        com.appdwg.core.ProjectAdvisor.advise(project, project.surfaces.filter { !it.name.startsWith(PLATFORM_LABEL) && !it.name.startsWith(ROAD_LABEL) })
+    }
     var showSurfaceEdit by remember(fileName) { mutableStateOf(false) }
     var showSheets by remember(fileName) { mutableStateOf(false) }
     var sheetParams by remember { mutableStateOf<SheetParams?>(null) }
@@ -513,6 +540,11 @@ private fun ProjectScreen(
         if (uri != null) vm.exportAsBuiltPdf(uri, fileName)
     }
     var drawingRoad by v::drawingRoad
+    // PI picked on the axis being edited, for its radius and transition.
+    var selectedPi by remember(fileName) { mutableStateOf<Int?>(null) }
+    var showElements by remember(fileName) { mutableStateOf(false) }
+    var showAxisDisplay by remember(fileName) { mutableStateOf(false) }
+    LaunchedEffect(drawingRoad) { if (!drawingRoad) selectedPi = null }
     // Region and side whose edge target line is being tapped.
     var roadTargetPick by remember(fileName) { mutableStateOf<Pair<Int, Int>?>(null) }
     val noteSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
@@ -564,7 +596,7 @@ private fun ProjectScreen(
         val kind = pendingExport
         pendingExport = null
         if (uri != null && kind != null) {
-            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines() + vm.roadLines()
+            val line = vm.extraLines(sectionLineFor(vm, project)) + vm.platformLines() + vm.roadLines() + vm.basinLines()
             when (kind) {
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
@@ -703,9 +735,10 @@ private fun ProjectScreen(
     fun allTools(): List<RailTool> = buildList {
         if (!show3d) add(RailTool(GIcon.MEASURE, tr("Medir"), measuring) { measuring = !measuring; showSection = false; showProfile = false; tapped = null })
         add(RailTool(GIcon.POINTS, tr("Pontos"), addingPoints) { showPoints = true })
-        if (project.polylines.isNotEmpty() || vm.userLines.isNotEmpty()) add(RailTool(GIcon.LINES, tr("Linhas"), editing) {
+        add(RailTool(GIcon.LINES, tr("Linhas"), editing) {
             editing = !editing; measuring = false; showSection = false; showProfile = false; show3d = false
-            edit.pick = EditPick.SELECT
+            // Without lines to pick, the editor starts drawing a new one.
+            edit.pick = if (project.polylines.isEmpty()) EditPick.DRAW else EditPick.SELECT; edit.picked = emptyList()
         })
         if (project.layers.isNotEmpty() || vm.userPoints.isNotEmpty()) add(RailTool(GIcon.LAYERS, tr("Camadas")) { showLayers = true })
         if (project.surfaces.isNotEmpty()) {
@@ -720,6 +753,8 @@ private fun ProjectScreen(
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel) { showSurfaceEdit = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0) { showAnalysis = true })
+        if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões")) { showAdvice = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet) { showBasin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, tr("Modelos")) { showModels = true })
@@ -780,7 +815,7 @@ private fun ProjectScreen(
             }
             // The properties card folds into a small button, so the plan stays clear on a phone.
             if (vm.themes.panelOpen) Column(Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth()) {
-                TextButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
+                OutlinedButton(onClick = { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.End)) { Text(tr("Recolher") + " ▾") }
                 InfoCard(current, differenceAt(project, difference, current.position), markedElevations(project, vm.crossSelected, current.position), Modifier.fillMaxWidth())
             } else GButton(tr("Propriedades") + " ▴", { vm.themes.togglePanel() }, modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp))
         }
@@ -807,7 +842,7 @@ private fun ProjectScreen(
                         background = g.planBg,
                         foreground = g.text,
                         exaggeration = exaggeration.toFloat(),
-                        drape = drape,
+                        drape = drape3d ?: drape,
                         modifier = Modifier.fillMaxSize(),
                         surfaceStyle = { v.styleOf(it) },
                     )
@@ -826,6 +861,12 @@ private fun ProjectScreen(
                     onTap = {
                         // Tapping the same snapped point twice would add a zero-length leg.
                         when {
+                            v.pickingOutlet -> {
+                                v.pickingOutlet = false
+                                val name = vm.analysisSurface ?: project.surfaces.firstOrNull()?.name
+                                project.surfaces.firstOrNull { s -> s.name == name }?.let { s -> vm.basinAt(s, it) }
+                                showBasin = true
+                            }
                             addingNote -> { addingNote = false; editingNote = newNote(it, PointQuery.at(project, it).terrainElevation) to true }
                             drawingRoad -> v.roadParams = v.roadParams.copy(pis = (v.roadParams.pis + it).let { l -> if (l.size > 1 && l[l.size - 2] == it) l.dropLast(1) else l })
                             modelPickFor != null -> {
@@ -853,6 +894,7 @@ private fun ProjectScreen(
                                 edit.picked = edit.picked + it
                                 if (edit.picked.size >= 2) { edit.pick = EditPick.SELECT; showLineOp = true }
                             }
+                            editing && edit.pick == EditPick.DRAW -> if (it != edit.picked.lastOrNull()) edit.picked = edit.picked + it
                             editing && edit.pick == EditPick.CENTER -> { edit.picked = listOf(it); edit.pick = EditPick.SELECT; showLineOp = true }
                             genPick == GenPick.AREA_DRAW -> if (it != gen.drawnArea.lastOrNull()) gen.drawnArea = gen.drawnArea + it
                             drawingPlatform -> if (it != platformOutline.lastOrNull()) platformOutline = platformOutline + it
@@ -873,10 +915,18 @@ private fun ProjectScreen(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
-                    measure = if (measuring) measurePoints else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
+                    measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
+                    measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
+                    extraAlignments = listOfNotNull(vm.previewAlignment(v.roadParams)),
+                    axisHidden = v.axisHidden,
+                    measureIsAxis = drawingRoad && !measuring,
+                    handles = if (drawingRoad) v.roadParams.pis else emptyList(),
+                    selectedHandle = selectedPi,
+                    onHandleDrag = if (drawingRoad) { i, p -> v.roadParams.let { rp -> if (i in rp.pis.indices) v.roadParams = rp.copy(pis = rp.pis.toMutableList().apply { set(i, p) }) } } else null,
+                    onHandleTap = { i -> selectedPi = if (selectedPi == i) null else i },
                     snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
-                        (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS)),
+                        (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS, EditPick.DRAW)),
                     selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||
                         (editing && edit.pick == EditPick.SELECT),
                     selectedLines = if (editing) edit.selected else emptyList(),
@@ -920,12 +970,15 @@ private fun ProjectScreen(
                     selectedLine = if (genPick == null && !showGen && !genReview) null else if (gen.grid) gen.areaLine?.takeIf { gen.area == GridArea.LINE } else gen.line,
                     previewPoints = gen.preview.map { Point2(it.x, it.y) },
                     onViewport = { viewport = it },
+                    guides = designGuides(vm).first,
+                    guideMarks = designGuides(vm).second,
                     designLines = vm.platform?.let { r -> listOf(r.edge, r.daylight) + r.benches }?.map { l -> l.map { Point2(it.x, it.y) } }.orEmpty(),
                     sectionLine = section?.let { it.pointAt(-it.offsets.last()) to it.pointAt(it.offsets.last()) } ?: profileMark,
                     overlay = vm.slopeImage.takeIf { vm.analysisMode == 1 || vm.analysisMode == 3 } ?: differenceOverlay,
                     channels = if (vm.analysisMode >= 2) vm.flowChannels else emptyList(),
                     arrows = if (vm.analysisMode >= 2) vm.flowArrows else emptyList(),
                     points = vm.userPoints,
+                    pointCodes = vm.pointCodes,
                     onPointTap = if (measuring || addingPoints || !isPro) null else { pt -> selectedPoint = pt; tapped = null },
                     selectedPoint = selectedPoint,
                     focus = focus,
@@ -965,6 +1018,16 @@ private fun ProjectScreen(
                     })
                     // Vertical exaggeration helps read gentle terrain.
                     if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 })
+                    if (show3d && drape != null) Box {
+                        // A direct choice of detail, up or down, instead of stepping through them.
+                        var open by remember { mutableStateOf(false) }
+                        val names = listOf(tr("normal"), tr("alta"), tr("máxima"))
+                        GButton(if (drapeLoading) tr("Imagem: carregando {0}…", names[v.drapeQuality]) else tr("Imagem: {0}", names[v.drapeQuality]), { open = true })
+                        androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
+                            MenuTitle(tr("Detalhe da imagem em 3D"))
+                            names.forEachIndexed { i, n -> MenuLine(n, checked = v.drapeQuality == i) { open = false; v.drapeQuality = i } }
+                        }
+                    }
                 }
                 if (showContours && !show3d) {
                     Card {
@@ -1001,14 +1064,14 @@ private fun ProjectScreen(
                         style = MaterialTheme.typography.labelMedium, color = g.text,
                     )
                 } else if (editing) {
-                    EditLinesBar(edit, vm, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
+                    EditLinesBar(edit, vm, project, onOperation = { showLineOp = true }, onDone = { editing = false; edit.selected = emptyList(); edit.preview = emptyList() },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 900.dp))
                 } else if (addingNote) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque na planta onde fica a anotação."), style = MaterialTheme.typography.bodyMedium)
-                            if (gpsPoint != null) TextButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text(tr("Na posição do GPS")) }
-                            TextButton(onClick = { addingNote = false }) { Text(tr("Cancelar")) }
+                            Text(tr("Toque na planta onde fica a anotação."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            if (gpsPoint != null) OutlinedButton(onClick = { addingNote = false; editingNote = newNote(gpsPoint, gpsHeight) to true }) { Text(tr("Na posição do GPS")) }
+                            OutlinedButton(onClick = { addingNote = false }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (openNote != null && !wide) {
@@ -1017,34 +1080,40 @@ private fun ProjectScreen(
                 } else if (roadTargetPick != null) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque na linha que o bordo da pista deve seguir."), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { roadTargetPick = null; showRoad = true }) { Text(tr("Cancelar")) }
+                            Text(tr("Toque na linha que o bordo da pista deve seguir."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { roadTargetPick = null; showRoad = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingRoad) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                        val rp = v.roadParams
+                        selectedPi?.takeIf { it in rp.pis.indices }?.let { i ->
+                            PiEditor(rp, i, onChange = { v.roadParams = it }, onSelect = { selectedPi = it })
+                        }
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}).", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
-                            TextButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
-                            TextButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
+                            Text(tr("Toque os PIs do eixo, do início ao fim ({0}). Arraste um PI para movê-lo; toque nele para raio e transição.", v.roadParams.pis.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { v.roadParams = v.roadParams.copy(pis = v.roadParams.pis.dropLast(1)) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Desfazer")) }
+                            OutlinedButton(onClick = { v.roadParams = v.roadParams.copy(pis = emptyList()) }, enabled = v.roadParams.pis.isNotEmpty()) { Text(tr("Limpar")) }
+                            OutlinedButton(onClick = { showElements = true }) { Text(tr("Elementos")) }
+                            OutlinedButton(onClick = { showAxisDisplay = true }) { Text(tr("Exibir")) }
+                            OutlinedButton(onClick = { drawingRoad = false; showRoad = true }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (modelPickFor != null) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(when (alignPick) { 1 -> tr("Toque onde fica o ponto A do modelo."); 2 -> tr("Toque onde fica o ponto B do modelo.")
-                                else -> tr("Toque o ponto de inserção do modelo.") } + tr(" O toque encaixa em pontos e vértices."), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { modelPickFor = null; showModels = true }) { Text(tr("Cancelar")) }
+                                else -> tr("Toque o ponto de inserção do modelo.") } + tr(" O toque encaixa em pontos e vértices."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { modelPickFor = null; showModels = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genReview) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("{0} ponto(s) em ciano.", gen.preview.size), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { genReview = false; showGen = true }) { Text(tr("Ajustar")) }
-                            TextButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text(tr("Criar")) }
-                            TextButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text(tr("Cancelar")) }
+                            Text(tr("{0} ponto(s) em ciano.", gen.preview.size), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { genReview = false; showGen = true }) { Text(tr("Ajustar")) }
+                            OutlinedButton(onClick = { vm.addGenerated(gen.preview); gen.preview = emptyList(); genReview = false }) { Text(tr("Criar")) }
+                            OutlinedButton(onClick = { gen.preview = emptyList(); genReview = false }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (genPick != null) {
@@ -1055,29 +1124,36 @@ private fun ProjectScreen(
                                 GenPick.AREA_LINE -> tr("Toque numa polilinha fechada.")
                                 GenPick.ROTATION -> tr("Toque na linha que dá a direção da malha.")
                                 else -> tr("Toque na linha, polilinha 3D ou eixo.")
-                            }, style = MaterialTheme.typography.bodyMedium)
+                            }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
                             if (genPick == GenPick.AREA_DRAW) {
-                                TextButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Desfazer")) }
-                                TextButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
+                                OutlinedButton(onClick = { gen.drawnArea = gen.drawnArea.dropLast(1) }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Desfazer")) }
+                                OutlinedButton(onClick = { gen.drawnArea = emptyList() }, enabled = gen.drawnArea.isNotEmpty()) { Text(tr("Limpar")) }
                             }
-                            TextButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) tr("Concluir") else tr("Cancelar")) }
+                            OutlinedButton(onClick = { genPick = null; showGen = true }) { Text(if (genPick == GenPick.AREA_DRAW) tr("Concluir") else tr("Cancelar")) }
+                        }
+                    }
+                } else if (v.pickingOutlet) {
+                    Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
+                        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(tr("Toque no ponto de lançamento; ele encaixa no talvegue mais próximo."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { v.pickingOutlet = false; showBasin = true }) { Text(tr("Cancelar")) }
                         }
                     }
                 } else if (drawingPlatform) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp).pointerInput(Unit) { detectTapGestures { } }) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("Toque os vértices da plataforma ({0}). O toque encaixa em pontos e vértices.", platformOutline.size),
-                                style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text(tr("Desfazer")) }
-                            TextButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text(tr("Limpar")) }
-                            TextButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text(tr("Concluir")) }
+                                style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { platformOutline = platformOutline.dropLast(1) }, enabled = platformOutline.isNotEmpty()) { Text(tr("Desfazer")) }
+                            OutlinedButton(onClick = { platformOutline = emptyList() }, enabled = platformOutline.isNotEmpty()) { Text(tr("Limpar")) }
+                            OutlinedButton(onClick = { drawingPlatform = false; showPlatform = true }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (addingPoints) {
                     Card(Modifier.align(Alignment.BottomCenter).padding(8.dp)) {
                         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("Toque na planta para criar um ponto (cota da superfície)."), style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = { addingPoints = false }) { Text(tr("Concluir")) }
+                            Text(tr("Toque na planta para criar um ponto (cota da superfície)."), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false))
+                            OutlinedButton(onClick = { addingPoints = false }) { Text(tr("Concluir")) }
                         }
                     }
                 } else if (showProfile && longProfile != null) {
@@ -1090,7 +1166,7 @@ private fun ProjectScreen(
                         onClose = { showProfile = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
                         editPvis = roadPvis,
-                        onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list) },
+                        onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list); vm.redesignSoon() },
                         onRecalc = { vm.designRoad() },
                     )
                 } else if (showSection && sectionAxis != null) {
@@ -1110,6 +1186,14 @@ private fun ProjectScreen(
                     NarrowCards()
                 }
 
+            if (vm.timelineShown && vm.states.size > 1) TimelineBar(vm, Modifier.align(Alignment.TopCenter).padding(top = 80.dp, start = 8.dp, end = 8.dp).widthIn(max = 900.dp))
+            else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
+                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
+                    OutlinedButton(onClick = { showAdvice = true }) { Text(tr("Ver sugestões")) }
+                    OutlinedButton(onClick = { adviceCard = false }) { Text(tr("Fechar")) }
+                }
+            }
             if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
         }
         // The side panel folds away to give the plan the whole width; a tab brings it back.
@@ -1118,10 +1202,12 @@ private fun ProjectScreen(
             enter = androidx.compose.animation.expandHorizontally(androidx.compose.animation.core.tween(180)),
             exit = androidx.compose.animation.shrinkHorizontally(androidx.compose.animation.core.tween(180))) { SidePanel {
             Text(summary(project.copy(points = vm.userPoints)), style = MaterialTheme.typography.labelLarge, color = g.muted)
-            if (project.warnings.isNotEmpty()) TextButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
+            if (project.warnings.isNotEmpty()) OutlinedButton(onClick = { showWarnings = true }) { Text(plural(project.warnings.size, "aviso", "avisos") + tr(" da leitura")) }
             if (gpsPoint != null) GpsCard(vm.gnss, gpsPoint.x, gpsPoint.y, gpsHeight, calibration != null, gpsInfo, Modifier.fillMaxWidth())
             if (measuring) MeasureCard(measurement, onUndo = { measurePoints = measurePoints.dropLast(1) }, onClear = { measurePoints = emptyList() },
-                onDone = { measuring = false }, modifier = Modifier.fillMaxWidth())
+                onDone = { measuring = false }, modifier = Modifier.fillMaxWidth(),
+                saved = v.savedMeasures.size, onSave = { v.savedMeasures = v.savedMeasures + listOf(measurePoints); measurePoints = emptyList() },
+                onClearSaved = { v.savedMeasures = emptyList() })
             selectedPoint?.let { pt ->
                 val q = remember(project, pt, frozenLayers) { PointQuery.at(project, Point2(pt.x, pt.y), frozenLayers.toSet()) }
                 PointCard(pt, q.alignment?.takeIf { !it.stationOffset.outside }, q.terrainElevation,
@@ -1295,7 +1381,7 @@ private fun ProjectScreen(
                     MenuLine(tr("Escolher sistema de coordenadas…")) { close(); showCrs = true }
                 })
                 val fix = gnssFix
-                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: tr("GPS desligado"),
+                add(FooterItem(fix?.let { f -> f.quality.label + (f.sigmaH?.let { " · " + StationFormat.length(it, 3) } ?: "") } ?: "GPS",
                     dot = if (fix == null) g.muted else if (fix.quality == com.appdwg.core.FixQuality.RTK_FIXED) g.gps else fixColor(fix.quality)) { close ->
                     MenuLine(if (fix == null) tr("Conectar GPS…") else "GPS…") { close(); showGps = true }
                     MenuLine(tr("Calibração e geoide…")) { close(); showCalibration = true }
@@ -1314,8 +1400,10 @@ private fun ProjectScreen(
     if (showSheets) {
         SheetsDialog(vm, project, fileName, onMake = { p ->
             sheetParams = p
-            sheetsSaver.launch("$baseName-secoes-${(p.alignment ?: "eixo").replace(Regex("[^A-Za-z0-9_-]+"), "_")}.pdf")
-        }, onDismiss = { showSheets = false })
+            sheetsSaver.launch("$baseName-secoes-${(p.alignment ?: "eixo").replace(Regex("[^A-Za-z0-9_-]+"), "_").trim('_')}.pdf")
+        }, onDismiss = { showSheets = false },
+            onDrawAxis = { showSheets = false; measuring = false; show3d = false; v.roadParams = v.roadParams.copy(alignmentIndex = -1); drawingRoad = true },
+            onPickLogo = { logoPicker.launch(arrayOf("image/*")) })
     }
 
     if (showSurfaceEdit) {
@@ -1325,6 +1413,55 @@ private fun ProjectScreen(
     }
 
     if (showAnalysis) AnalysisDialog(vm, project, onDismiss = { showAnalysis = false })
+
+    if (showAdvice) AdviceDialog(advice, onDo = { a ->
+        showAdvice = false; adviceCard = false
+        val terrainName = project.surfaces.firstOrNull { !it.name.startsWith(PLATFORM_LABEL) && !it.name.startsWith(ROAD_LABEL) }?.name
+        val terrainSurface = project.surfaces.firstOrNull { it.name == terrainName }
+        val axes = project.alignments.filter { !it.name.endsWith(ROAD_SUFFIX) }
+        fun linePoints(i: Int) = project.polylines.getOrNull(i)?.let { l -> List(l.xs.size) { k -> Point2(l.xs[k], l.ys[k]) } }.orEmpty()
+        when (a.kind) {
+            com.appdwg.core.Advice.Kind.CORRIDOR, com.appdwg.core.Advice.Kind.GRADE -> {
+                v.roadParams = v.roadParams.copy(alignmentIndex = axes.indexOf(project.alignments[a.alignment]), terrain = terrainName)
+                roadOnGrade = a.kind == com.appdwg.core.Advice.Kind.GRADE
+                showRoad = true
+            }
+            com.appdwg.core.Advice.Kind.AXIS_FROM_LINE -> project.polylines.getOrNull(a.line)?.let { l ->
+                val rp = v.roadParams
+                val pis = com.appdwg.core.ProjectAdvisor.pisFromLine(l, rp.speed, rp.emax)
+                v.roadParams = rp.copy(alignmentIndex = -1, pis = pis.map { it.position }, radii = pis.map { it.radius }, spirals = pis.map { 0.0 }, terrain = terrainName)
+                roadOnGrade = true
+                showRoad = true
+            }
+            com.appdwg.core.Advice.Kind.PLATFORM_FROM_OUTLINE -> {
+                platformOutline = linePoints(a.line)
+                v.platformTerrain = terrainName
+                showPlatform = true
+            }
+            com.appdwg.core.Advice.Kind.CULVERTS -> {
+                vm.analysisSurface = terrainName
+                val extra = advice.filter { it.kind == com.appdwg.core.Advice.Kind.AXIS_FROM_LINE }.map { linePoints(it.line) }
+                terrainSurface?.let { vm.suggestOutlets(it, project, v.basinParams.minArea, extra) }
+                showBasin = true
+            }
+            com.appdwg.core.Advice.Kind.BASINS -> { vm.analysisSurface = terrainName; showBasin = true }
+            com.appdwg.core.Advice.Kind.ROUTE -> {
+                measuring = false; showSection = false; showProfile = false; show3d = false
+                v.roadParams = v.roadParams.copy(alignmentIndex = -1, pis = emptyList(), radii = emptyList(), spirals = emptyList(), terrain = terrainName)
+                drawingRoad = true
+            }
+            com.appdwg.core.Advice.Kind.COMPARE -> {
+                val names = project.surfaces.filter { !it.name.startsWith(PLATFORM_LABEL) && !it.name.startsWith(ROAD_LABEL) }.map { it.name }
+                v.compareBase = names.getOrNull(0); v.compareOther = names.getOrNull(1)
+                showCompare = true
+            }
+            com.appdwg.core.Advice.Kind.SLOPES -> terrainSurface?.let { vm.analysisSurface = it.name; vm.analysisMode = 1; vm.runAnalysis(it) }
+        }
+    }, onDismiss = { showAdvice = false; adviceCard = false })
+
+    if (showBasin) BasinDialog(vm, project, onPick = {
+        showBasin = false; v.pickingOutlet = true; measuring = false; show3d = false; tapped = null
+    }, onDismiss = { showBasin = false })
 
     if (showVolume) {
         VolumeDialog(vm, project, volumeState, measurePoints, onDraw = {
@@ -1384,6 +1521,8 @@ private fun ProjectScreen(
             onAddFile = { addFiles(false) },
             onAddDrive = if (hasDriveApp) ({ addFiles(true) }) else null,
             onCross = { showCompare = false; showCross = true },
+            onAddState = { statePicker.launch(arrayOf("*/*")) },
+            onTimeline = { showCompare = false; vm.timelineShown = true; if (vm.activeState == null) vm.showState(0) },
             onDismiss = { showCompare = false },
         )
     }
@@ -1414,6 +1553,9 @@ private fun ProjectScreen(
         )
     }
 
+    if (showAxisDisplay) AxisDisplayDialog(v, onDismiss = { showAxisDisplay = false })
+    if (showElements) AlignmentElementsDialog(project.alignments + listOfNotNull(vm.previewAlignment(v.roadParams)), onDismiss = { showElements = false })
+
     if (showRoad) {
         RoadDialog(vm, project, onDrawAxis = {
             showRoad = false; measuring = false; showSection = false; showProfile = false; show3d = false
@@ -1422,8 +1564,10 @@ private fun ProjectScreen(
         }, onServiceNote = { noteSaver.launch("$baseName-nota-de-servico.csv") },
             onServiceNotePdf = { notePdfSaver.launch("$baseName-nota-de-servico.pdf") },
             onBulletin = { showRoad = false; showBulletin = true },
+            onElements = { showElements = true },
+            onDisplay = { showAxisDisplay = true },
             onPickTarget = { i, side -> showRoad = false; show3d = false; roadTargetPick = i to side },
-            onDismiss = { showRoad = false })
+            onDismiss = { showRoad = false; roadOnGrade = false }, startOnGrade = roadOnGrade)
     }
 
     if (showPlatform) {
@@ -1436,8 +1580,8 @@ private fun ProjectScreen(
     if (showContourDialog) {
         AlertDialog(
             onDismissRequest = { showContourDialog = false },
-            confirmButton = { TextButton(onClick = { showContourDialog = false }) { Text(tr("Fechar")) } },
-            dismissButton = { TextButton(onClick = { showContours = false; showContourDialog = false }) { Text(tr("Desligar")) } },
+            confirmButton = { OutlinedButton(onClick = { showContourDialog = false }) { Text(tr("Fechar")) } },
+            dismissButton = { OutlinedButton(onClick = { showContours = false; showContourDialog = false }) { Text(tr("Desligar")) } },
             title = { Text(tr("Curvas de nível")) },
             text = {
                 Column {
@@ -1461,7 +1605,7 @@ private fun ProjectScreen(
         )
     }
 
-    editingNote?.let { (n, isNew) -> key(n.id) { NoteDialog(vm, n, isNew, onDismiss = { editingNote = null }) } }
+    editingNote?.let { (n, isNew) -> key(n.id) { NoteDialog(vm, n, isNew, onDismiss = { editingNote = null }, onSaveAndNew = { editingNote = null; addingNote = true }) } }
 
     if (showGps) {
         GpsDialog(vm.gnss, crs, { showGps = false; showCrs = true }, gpsFollow, { gpsFollow = it },
@@ -1519,7 +1663,7 @@ private fun ProjectScreen(
             },
             toDrive = if (hasDrive) exportToDrive else null,
             onToDrive = { exportToDrive = it },
-            onSheets = if (project.alignments.isNotEmpty()) ({ showExport = false; showSheets = true }) else null,
+            onSheets = { showExport = false; showSheets = true },
             onDismiss = { showExport = false },
         )
     }
@@ -1552,7 +1696,7 @@ private fun ProjectScreen(
     if (showWarnings) {
         AlertDialog(
             onDismissRequest = { showWarnings = false },
-            confirmButton = { TextButton(onClick = { showWarnings = false }) { Text(tr("Fechar")) } },
+            confirmButton = { OutlinedButton(onClick = { showWarnings = false }) { Text(tr("Fechar")) } },
             title = { Text(tr("Avisos da leitura")) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -1569,10 +1713,10 @@ private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () 
     val d = vm.drape
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onPick) { Text(if (d == null) tr("Escolher") else tr("Trocar")) }
+                OutlinedButton(onClick = onPick) { Text(if (d == null) tr("Escolher") else tr("Trocar")) }
                 if (d != null) OutlinedButton(onClick = { vm.removeDrape(); onDismiss() }) { Text(tr("Remover")) }
             }
         },
@@ -1667,7 +1811,10 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
 
 /** Results of the measurement being taken, with undo, clear and done. */
 @Composable
-private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier) {
+private fun MeasureCard(
+    m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier,
+    saved: Int = 0, onSave: () -> Unit = {}, onClearSaved: () -> Unit = {},
+) {
     // Taps on the card must not reach the plan underneath and add a point.
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
         Column(Modifier.padding(12.dp)) {
@@ -1697,12 +1844,15 @@ private fun MeasureCard(m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit
                 m.area?.let { Line(tr("Área"), Measure.area(it)) }
                 m.perimeter?.let { Line(tr("Perímetro"), StationFormat.length(it, 3)) }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            if (saved > 0) Text(tr("{0} medição(ões) salva(s) na planta (M1, M2…).", saved), style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
                 if (m != null) {
-                    TextButton(onClick = onUndo) { Text(tr("Desfazer")) }
-                    TextButton(onClick = onClear) { Text(tr("Limpar")) }
+                    OutlinedButton(onClick = onUndo) { Text(tr("Desfazer")) }
+                    OutlinedButton(onClick = onClear) { Text(tr("Limpar")) }
+                    if (m.legs.isNotEmpty()) OutlinedButton(onClick = onSave) { Text(tr("Salvar e nova")) }
                 }
-                TextButton(onClick = onDone) { Text(tr("Concluir")) }
+                if (saved > 0) OutlinedButton(onClick = onClearSaved) { Text(tr("Apagar salvas")) }
+                OutlinedButton(onClick = onDone) { Text(tr("Concluir")) }
             }
         }
     }
@@ -1758,11 +1908,11 @@ private fun LayersDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onAllOn) { Text(tr("Ligar todas")) }
-                TextButton(onClick = onAllOff) { Text(tr("Desligar todas")) }
+                OutlinedButton(onClick = onAllOn) { Text(tr("Ligar todas")) }
+                OutlinedButton(onClick = onAllOff) { Text(tr("Desligar todas")) }
             }
         },
         title = { Text(tr("Camadas")) },
@@ -1805,9 +1955,9 @@ private fun LayersDialog(
     editing?.let { layer ->
         AlertDialog(
             onDismissRequest = { editing = null },
-            confirmButton = { TextButton(onClick = { editing = null }) { Text(tr("Fechar")) } },
+            confirmButton = { OutlinedButton(onClick = { editing = null }) { Text(tr("Fechar")) } },
             dismissButton = {
-                TextButton(onClick = { onColor(layer, null); editing = null }) { Text(tr("Cor original")) }
+                OutlinedButton(onClick = { onColor(layer, null); editing = null }) { Text(tr("Cor original")) }
             },
             title = { Text(tr("Cor de {0}", layer)) },
             text = {

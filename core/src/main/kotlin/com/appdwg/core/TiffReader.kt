@@ -364,19 +364,20 @@ class TiffReader(
         val colormap = ifd.tags[320]
         val jpegTables = ifd.raw[347]?.let { (pos, len) -> bytes(pos, len.toInt()) }
 
-        for (b in offsets.indices) {
-            if (b % 64 == 0) onProgress(b.toFloat() / offsets.size)
+        // Blocks are independent and each writes its own output pixels: they are decoded on all cores.
+        val done = java.util.concurrent.atomic.AtomicInteger()
+        fun block(b: Int) {
             val bx = (b % across) * blockW
             val by = (b / across) * blockH
-            if (by >= height) continue
+            if (by >= height) return
             val rows = min(blockH, height - by)
             // Skips blocks that hold no sampled row or column.
             val firstRow = ((by + step - 1) / step) * step
-            if (firstRow >= by + rows) continue
+            if (firstRow >= by + rows) return
             val firstCol = ((bx + step - 1) / step) * step
-            if (firstCol >= min(bx + blockW, width)) continue
+            if (firstCol >= min(bx + blockW, width)) return
             val length = counts.getOrElse(b) { 0L }.toInt()
-            if (length <= 0) continue
+            if (length <= 0) return
             val data = bytes(offsets[b], length)
 
             if (compression == 7) {
@@ -385,7 +386,7 @@ class TiffReader(
                     // Abbreviated stream: shared tables (without EOI) followed by the block (without SOI).
                     jpegTables.copyOfRange(0, jpegTables.size - 2) + data.copyOfRange(2, data.size)
                 } else data
-                val tile = decoder(stream) ?: continue
+                val tile = decoder(stream) ?: return
                 var y = firstRow
                 while (y < by + rows) {
                     val ty = y - by
@@ -399,7 +400,7 @@ class TiffReader(
                     }
                     y += step
                 }
-                continue
+                return
             }
 
             val rowBytes = blockW * pixelBytes
@@ -426,6 +427,14 @@ class TiffReader(
                 }
                 y += step
             }
+        }
+        Parallel.forChunks(offsets.size, 1) { from, until ->
+            for (b in from until until) {
+                block(b)
+                val n = done.incrementAndGet()
+                if (n % 64 == 0) onProgress(n.toFloat() / offsets.size)
+            }
+            true
         }
         return Raster(outW, outH, out)
     }

@@ -65,7 +65,8 @@ object CopernicusDem {
             val r1 = ceil((ext.maxY - max(south, ext.minY)) / py).toInt() + 1
             val ww = c1 - c0 + 1; val wh = r1 - r0 + 1
             val win = reader.readFloats(level, c0, r0, ww, wh)
-            for (r in 0 until rows) {
+            // Rows are independent: they are interpolated on all cores.
+            Parallel.forChunks(rows, 16) { rFrom, rUntil -> for (r in rFrom until rUntil) {
                 val lat = north - r * step
                 if (lat < ext.minY || lat > ext.maxY) continue
                 for (c in 0 until cols) {
@@ -79,7 +80,7 @@ object CopernicusDem {
                     val v = (a * (1 - tx) + b * tx) * (1 - ty) + (cc * (1 - tx) + d * tx) * ty
                     if (!v.isNaN()) values[r * cols + c] = v.toFloat()
                 }
-            }
+            }; true }
         }
         return GeoGrid(north, west, step, step, rows, cols, values)
     }

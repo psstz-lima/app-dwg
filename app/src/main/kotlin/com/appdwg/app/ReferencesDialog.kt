@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,9 +54,9 @@ fun ReferencesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("Fechar")) } },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
-            TextButton(enabled = vm.pathEdits.isNotEmpty(), onClick = { saver.launch("referencias-editadas.dxf") }) {
+            OutlinedButton(enabled = vm.pathEdits.isNotEmpty(), onClick = { saver.launch("referencias-editadas.dxf") }) {
                 Text(tr("Salvar cópia do DXF"))
             }
         },

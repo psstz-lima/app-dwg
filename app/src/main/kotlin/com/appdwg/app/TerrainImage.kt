@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.appdwg.core.Bounds
 import com.appdwg.core.ElevationGrid
+import com.appdwg.core.Parallel
 import com.appdwg.core.Surface
 import com.appdwg.core.SurfaceDifference
 import kotlin.math.sqrt
@@ -41,11 +42,14 @@ class TerrainImage(val name: String, val bounds: Bounds, val image: ImageBitmap)
             val range = (max - min).takeIf { it > 0f } ?: 1f
             val cell = g.cellSize.toFloat()
             val pixels = IntArray(g.cols * g.rows)
-            for (r in 0 until g.rows) for (c in 0 until g.cols) {
-                val z = g[c, r]
-                if (z.isNaN()) continue
-                val shade = hillshade(g, c, r, z, cell)
-                pixels[r * g.cols + c] = ramp((z - min) / range, shade)
+            Parallel.forChunks(g.rows, 16) { r0, r1 ->
+                for (r in r0 until r1) for (c in 0 until g.cols) {
+                    val z = g[c, r]
+                    if (z.isNaN()) continue
+                    val shade = hillshade(g, c, r, z, cell)
+                    pixels[r * g.cols + c] = ramp((z - min) / range, shade)
+                }
+                true
             }
             return Bitmap.createBitmap(pixels, g.cols, g.rows, Bitmap.Config.ARGB_8888)
         }

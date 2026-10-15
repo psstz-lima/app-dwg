@@ -1054,3 +1054,232 @@ Usar este local	Use this place
 Digitar coordenadas	Type coordinates
 Ir para o ponto	Go to the point
 A área escolhida no mapa	The area chosen on the map
+Lançamento	Outlet
+Bacia de contribuição	Drainage basin
+Superfície	Surface
+Tocar no ponto de lançamento	Tap the outlet
+Sugerir pontos de lançamento	Suggest outlets
+Talvegue mínimo para as sugestões	Smallest stream for the suggestions
+Pontos sugeridos (numerados na planta)	Suggested points (numbered on the plan)
+Delimitar	Delineate
+Vazão de pico (método racional)	Peak flow (rational method)
+Coef. de escoamento C	Runoff coefficient C
+Tempo de retorno (anos)	Return period (years)
+Chuva local (IDF): i = K·Tᵃ / (t + b)ᶜ, em mm/h com t em minutos	Local rainfall (IDF): i = K·Tᵃ / (t + b)ᶜ, in mm/h with t in minutes
+t = {0} min · i = {1} mm/h · Q = {2} m³/s	t = {0} min · i = {1} mm/h · Q = {2} m³/s
+Bacia maior que 2 km²: o método racional tende a superestimar; prefira o hidrograma unitário (SCS).	Basin larger than 2 km²: the rational method tends to overestimate; prefer the unit hydrograph (SCS).
+Contorno e talvegue vão no DXF exportado (camadas _BACIA e _BACIA_TALVEGUE).	The outline and stream go into the exported DXF (layers _BACIA and _BACIA_TALVEGUE).
+Bacia	Basin
+Área {0} · Perímetro {1}	Area {0} · Perimeter {1}
+Talvegue principal {0} · desnível {1} · declividade {2} %	Main stream {0} · drop {1} · slope {2} %
+Cotas {0} a {1} · declividade média {2} %	Elevations {0} to {1} · mean slope {2} %
+Kc {0} · Kf {1} · tempo de concentração (Kirpich) {2} min	Kc {0} · Kf {1} · time of concentration (Kirpich) {2} min
+Talvegue cruza o eixo (bueiro)	Stream crosses the alignment (culvert)
+Saída de água da plataforma	Water leaves the platform
+Saída do terreno	Leaves the terrain
+Bacias	Basins
+Toque no ponto de lançamento; ele encaixa no talvegue mais próximo.	Tap the outlet; it snaps to the nearest stream.
+Escoamento da superfície	Surface runoff
+A superfície não tem área para analisar.	The surface has no area to analyse.
+Delimitando a bacia	Delineating the basin
+O ponto está fora da superfície.	The point is outside the surface.
+Nenhum talvegue com essa área cruza os eixos ou sai da área.	No stream that large crosses the alignments or leaves the area.
+Estudando formas da plataforma	Studying platform shapes
+Formas sugeridas para esta área	Suggested shapes for this area
+Inclinação máxima %	Maximum grade %
+Corte por m³ de aterro	Cut per m³ of fill
+Sugerir formas	Suggest shapes
+Cota {0} · corte {1} · aterro {2} · talude até {3} · ocupa mais {4}	Elevation {0} · cut {1} · fill {2} · slopes up to {3} · takes {4} more
+Usar	Use
+Plana, corte igual ao aterro	Flat, cut equal to fill
+Inclinada {0} % como o terreno, corte igual ao aterro	Sloped {0} % like the ground, cut equal to fill
+Inclinada {0} % como o terreno, menor movimento de terra	Sloped {0} % like the ground, least earthwork
+Plana, menor movimento de terra	Flat, least earthwork
+Estudando o greide	Studying the grade
+O eixo está fora do terreno.	The alignment is outside the terrain.
+Rampa máxima %	Maximum grade %
+Espaçamento dos PVIs ({0})	PVI spacing ({0})
+Sugerir greide	Suggest grade
+Corte igual ao aterro	Cut equal to fill
+Menor movimento de terra	Least earthwork
+{0} PVIs · rampa máx. {1} % · corte ≈ {2} · aterro ≈ {3}	{0} PVIs · max. grade {1} % · cut ≈ {2} · fill ≈ {3}
+Traçado	Route
+Marque na planta o ponto de saída e o de chegada.	Mark the start and end points on the plan.
+Estudando o traçado	Studying the route
+Nenhum caminho pelo terreno entre a saída e a chegada.	No path over the terrain between the start and the end.
+Traçado automático	Automatic route
+Marque só a saída e a chegada (o primeiro e o último PI). O app procura caminhos pelo terreno dentro da rampa máxima, com raio mínimo pela velocidade ({0} km/h, e máx. {1} %), desviando de construções e água do OSM baixado.	Mark only the start and the end (the first and last PI). The app looks for paths over the terrain within the maximum grade, with the minimum radius for the speed ({0} km/h, max. e {1} %), avoiding buildings and water from the downloaded OSM.
+Velocidade (km/h)	Speed (km/h)
+Sugerir traçado	Suggest route
+{0} · {1} · rampa máx. {2} % · corte ≈ {3} · aterro ≈ {4}	{0} · {1} · max. grade {2} % · cut ≈ {3} · fill ≈ {4}
+Mais curto	Shortest
+Equilibrado	Balanced
+Mais suave (menos terraplenagem)	Gentlest (less earthwork)
+Calcular o corredor de {0}	Compute the corridor of {0}
+O eixo tem greide e passa sobre {0}.	The alignment has a grade and runs over {0}.
+Sugerir o greide de {0}	Suggest the grade of {0}
+O eixo não tem greide e passa sobre {0}.	The alignment has no grade and runs over {0}.
+Usar a linha da camada {0} como eixo	Use the line on layer {0} as the alignment
+O desenho tem a linha do eixo, mas não o alinhamento; o app ajusta PIs e curvas a ela.	The drawing has the axis line but not the alignment; the app fits PIs and curves to it.
+Estudar o platô da camada {0}	Study the platform on layer {0}
+Há um contorno fechado de {0}; o app sugere as formas da plataforma.	There is a closed outline of {0}; the app suggests platform shapes.
+Achar os bueiros do eixo	Find the alignment's culverts
+Onde os talvegues do terreno cruzam o eixo, com a bacia de cada um.	Where the terrain's streams cross the alignment, with the basin of each.
+Traçar uma estrada	Lay out a road
+Marque a saída e a chegada; o app sugere o traçado e o greide.	Mark the start and the end; the app suggests the route and the grade.
+Bacias e pontos de lançamento	Basins and outlets
+Escoamento de {0}, com a vazão de pico de cada bacia.	Runoff of {0}, with the peak flow of each basin.
+Comparar {0} com {1}	Compare {0} with {1}
+Corte e aterro entre as duas superfícies.	Cut and fill between the two surfaces.
+Mapa de declividades	Slope map
+Classes de relevo de {0}.	Relief classes of {0}.
+Sugestões para este projeto	Suggestions for this project
+O app leu o que os arquivos têm e sugere o que dá para fazer com eles.	The app read what the files hold and suggests what can be done with them.
+Fazer	Do it
+Sugestões	Suggestions
+Sugestão: {0}	Suggestion: {0}
+Ver sugestões	See suggestions
+Escolha a cidade ou informe a equação de chuvas da região (K, a, b, c) para calcular a vazão.	Pick the city or enter the local rainfall equation (K, a, b, c) to compute the flow.
+Buscar equação de chuva por cidade ou UF	Search rainfall equation by city or state
+Nenhuma equação para essa busca; digite K, a, b e c.	No equation matches; type K, a, b and c.
+Mais {0} resultados; refine a busca.	{0} more results; narrow the search.
+Equação de {0} (Coletânea das equações de chuva do Brasil, ABRH). Confira com a do órgão local.	Equation for {0} (Coletânea das equações de chuva do Brasil, ABRH). Check it against the local authority's.
+1 curva	1 curve
+{0} curvas	{0} curves
+Calculando	Calculating
+Fechar projeto	Close project
+{0} é uma imagem: use Imagem > Trocar para colocá-la na planta.	{0} is a picture: use Image > Change to place it on the plan.
+normal	normal
+alta	high
+máxima	highest
+Nova linha: toque os vértices ({0}). O toque encaixa em pontos e vértices.	New line: tap the vertices ({0}). Taps snap to points and vertices.
+Desfazer ponto	Undo point
+Criar linha	Create line
+Criar polígono	Create polygon
+Selecionar linhas	Select lines
+Nova linha	New line
+{0} medição(ões) salva(s) na planta (M1, M2…).	{0} measurement(s) kept on the plan (M1, M2…).
+Salvar e nova	Save and new
+Apagar salvas	Delete kept
+Linha 2D	2D line
+3D sobre a superfície	3D on the surface
+3D numa cota	3D at an elevation
+Estados da obra (linha do tempo)	Works states (timeline)
+O desenho aberto é a primitiva. Adicione cada medição com o XML ou DXF e a TIFF dela, escolhidos juntos.	The open drawing is the original ground. Add each measurement with its XML or DXF and its TIFF, chosen together.
+Sem imagem	No picture
+Adicionar medição	Add measurement
+Linha do tempo	Timeline
+Mostrar todos	Show all
+Volumes entre estados	Volumes between states
+Para trocar a imagem do estado marcado, use Imagem > Trocar.	To change the picture of the selected state, use Picture > Change.
+{0} → {1}: corte {2} · aterro {3}	{0} → {1}: cut {2} · fill {3}
+Ver mapa	Show map
+Acumulado {0} → {1}: corte {2} · aterro {3}	Cumulative {0} → {1}: cut {2} · fill {3}
+Estado	State
+Data (dd/mm/aaaa)	Date (dd/mm/yyyy)
+Pausar	Pause
+Reproduzir	Play
+Todos	All
+Escolha o XML ou DXF da medição junto com a imagem.	Choose the measurement's XML or DXF together with the picture.
+Primitiva	Original ground
+Medição {0}	Measurement {0}
+Sem superfície em: {0}.	No surface in: {0}.
+{0} → {1}	{0} → {1}
+{0} e {1} não se sobrepõem.	{0} and {1} do not overlap.
+Raio grande demais para as tangentes; reduzido para caber: {0}.	Radius too large for the tangents; reduced to fit: {0}.
+Só um estado está à vista. Toque em Mostrar todos para comparar superfícies, ou use Volumes entre estados.	Only one state is shown. Tap Show all to compare surfaces, or use Volumes between states.
+Eixo desenhado (PIs)	Drawn axis (PIs)
+O projeto não tem eixo. Desenhe os PIs ou gere um eixo automático pelo meio da área medida.	The project has no axis. Draw the PIs or generate an automatic axis through the middle of the measured area.
+Desenhar eixo	Draw axis
+Gerar eixo automático	Generate automatic axis
+Medição	Measurement
+Perfis dos estados ({0})	State profiles ({0})
+Completar onde a medição não alcança	Complete where the survey does not reach
+Cada seção traz os perfis de {0}, as áreas de corte e aterro entre eles e, no fim, o quadro de volumes.	Each section shows the profiles of {0}, the cut and fill areas between them and, at the end, the volume table.
+Logo escolhido	Logo chosen
+Sem logo	No logo
+Escolher logo	Choose logo
+{0}→{1}: C {2} · A {3} {4}	{0}→{1}: C {2} · F {3} {4}
+Seção completada pelo app (tracejado fino)	Section completed by the app (fine dashes)
+QUADRO DE VOLUMES (média das áreas)	VOLUME TABLE (average end areas)
+Área corte	Cut area
+Área aterro	Fill area
+Vol. corte	Cut vol.
+Vol. aterro	Fill vol.
+Período: {0}	Period: {0}
+Acumulado: {0}	Cumulative: {0}
+SEÇÕES DE MEDIÇÃO	MEASUREMENT SECTIONS
+Trecho completado pelo app (interpolado ou pela primitiva)	Stretch completed by the app (interpolated or from the original ground)
+Nenhum ponto com descrição de linha (PE, CR, BORDO…). Confira a tabela de códigos.	No point with a line description (PE, CR, BORDO…). Check the code table.
+Desenho automático: {0} linha(s) ({1}). Ajuste no editor de linhas se preciso.	Automatic drawing: {0} line(s) ({1}). Adjust in the line editor if needed.
+{0} linha(s) obrigatória(s) respeitada(s).	{0} breakline(s) honoured.
+Desenho automático	Automatic drawing
+Códigos de campo…	Field codes…
+Liga os pontos de mesma descrição (pé, crista, bordo…) em 3D polys editáveis; a superfície gerada depois as usa como obrigatórias.	Joins points of the same description (toe, crest, edge…) into editable 3D polylines; the surface generated afterwards uses them as breaklines.
+Novo código	New code
+Adicionar	Add
+Restaurar padrão	Restore defaults
+Códigos de campo	Field codes
+A descrição de cada ponto escolhe o código (PE, PE1, "pé talude 2"…). Números separam linhas do mesmo código.	Each point's description picks its code (PE, PE1, "pé talude 2"…). Numbers keep lines of the same code apart.
+ponto ({0})	point ({0})
+obrigatória	breakline
+fechada	closed
+Código {0}	Code {0}
+Código	Code
+Descrições aceitas (separadas por vírgula)	Accepted descriptions (comma separated)
+Cor (#RRGGBB)	Colour (#RRGGBB)
+Liga em linha	Joined into lines
+Só ponto	Point only
+Obrigatória da superfície	Surface breakline
+Fechada	Closed
+Cruz	Cross
+Poste	Post
+Árvore	Tree
+Caixa	Box
+Toque os PIs do eixo, do início ao fim ({0}). Arraste um PI para movê-lo; toque nele para raio e transição.	Tap the axis PIs from start to end ({0}). Drag a PI to move it; tap it for radius and transition.
+Greide: arraste um PVI (bolinha vermelha) para mudar estaca e cota; toque para escolher.	Grade: drag a PVI (red dot) to change station and elevation; tap to pick one.
+Curva vertical L ({0}, 0 = pelo K)	Vertical curve L ({0}, 0 = from K)
+PI {0}	PI {0}
+início/fim, sem curva	start/end, no curve
+Transição Ls ({0})	Transition Ls ({0})
+Inserir PI depois	Insert PI after
+Apagar PI	Delete PI
+Elementos	Elements
+Editar eixo na planta	Edit axis on the plan
+Elementos do eixo	Axis elements
+Horizontais	Horizontal
+Verticais	Vertical
+Nenhum eixo.	No axis.
+Elemento	Element
+Início	Start
+Fim	End
+Raio	Radius
+Lado	Side
+direita	right
+esquerda	left
+Pontos notáveis	Key points
+Este eixo ainda não tem greide.	This axis has no grade yet.
+Rampa antes	Grade before
+Rampa depois	Grade after
+Tangente	Tangent
+Curva circular	Circular curve
+Espiral	Spiral
+arquivo não encontrado ou sem permissão de acesso	file not found or access denied
+erro de leitura ou gravação do arquivo	file read or write error
+os dados não permitiram concluir a operação ({0})	the data did not allow the operation to finish ({0})
+número inválido no arquivo	invalid number in the file
+Exibir	Show
+Exibir no eixo: estacas, PIs, tangentes…	Show on the axis: stations, PIs, tangents…
+Linha do eixo (com as curvas)	Axis line (with curves)
+Pontos notáveis (PC, PT, TS, SC…)	Notable points (PC, PT, TS, SC…)
+Linhas entre os PIs (tangentes)	Lines between PIs (tangents)
+Extensões das linhas entre os PIs	Lengths of the lines between PIs
+Só estacas	Stations only
+Tudo	All
+Exibir no eixo	Show on the axis
+PIs, tangentes e extensões aparecem enquanto o eixo é desenhado ou editado na planta.	PIs, tangents and lengths appear while the axis is drawn or edited on the plan.
+Estacas	Stations
+PIs	PIs
+Toque numa célula para destacar a linha e a célula.	Tap a cell to highlight its row and cell.
+Imagem: carregando {0}…	Picture: loading {0}…
+Detalhe da imagem em 3D	Picture detail in 3D

@@ -1,5 +1,7 @@
 package com.appdwg.core
 
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -27,43 +29,54 @@ object Contours {
         cancelled: () -> Boolean = { false },
     ): List<ContourLevel>? {
         require(interval > 0)
-        val byLevel = HashMap<Long, DoubleArrayBuilder>()
-        var total = 0
-        var visited = 0
         val xs = surface.xs; val ys = surface.ys; val zs = surface.zs; val tri = surface.triangles
-        val ok = surface.forEachTriangle(region) { t ->
-            if (++visited % 8192 == 0 && cancelled()) return@forEachTriangle false
-            val a = tri[3 * t]; val b = tri[3 * t + 1]; val c = tri[3 * t + 2]
-            val zmin = min(zs[a], min(zs[b], zs[c]))
-            val zmax = max(zs[a], max(zs[b], zs[c]))
-            var k = ceil(zmin / interval).toLong()
-            val kEnd = floor(zmax / interval).toLong()
-            while (k <= kEnd) {
-                // Level nudged off the vertices so a contour through a vertex still gives one segment.
-                val level = k * interval
-                val l = if (level == zs[a] || level == zs[b] || level == zs[c]) level + 1e-9 else level
-                var n = 0
-                val p = DoubleArray(4)
-                fun edge(i: Int, j: Int) {
-                    val zi = zs[i]; val zj = zs[j]
-                    if ((zi < l) != (zj < l) && n < 4) {
-                        val f = (l - zi) / (zj - zi)
-                        p[n] = xs[i] + (xs[j] - xs[i]) * f
-                        p[n + 1] = ys[i] + (ys[j] - ys[i]) * f
-                        n += 2
+        val list = surface.trianglesIn(region)
+        val total = AtomicInteger()
+        // Each piece keeps its own segments by level; pieces are joined in order afterwards.
+        val pieces = ConcurrentHashMap<Int, HashMap<Long, DoubleArrayBuilder>>()
+        val ok = Parallel.forChunks(list.size, 4096) { from, until ->
+            val byLevel = HashMap<Long, DoubleArrayBuilder>()
+            pieces[from] = byLevel
+            val p = DoubleArray(4)
+            for (q in from until until) {
+                if ((q - from) % 1024 == 0 && cancelled()) return@forChunks false
+                val t = list[q]
+                val a = tri[3 * t]; val b = tri[3 * t + 1]; val c = tri[3 * t + 2]
+                val zmin = min(zs[a], min(zs[b], zs[c]))
+                val zmax = max(zs[a], max(zs[b], zs[c]))
+                var k = ceil(zmin / interval).toLong()
+                val kEnd = floor(zmax / interval).toLong()
+                while (k <= kEnd) {
+                    // Level nudged off the vertices so a contour through a vertex still gives one segment.
+                    val level = k * interval
+                    val l = if (level == zs[a] || level == zs[b] || level == zs[c]) level + 1e-9 else level
+                    var n = 0
+                    fun edge(i: Int, j: Int) {
+                        val zi = zs[i]; val zj = zs[j]
+                        if ((zi < l) != (zj < l) && n < 4) {
+                            val f = (l - zi) / (zj - zi)
+                            p[n] = xs[i] + (xs[j] - xs[i]) * f
+                            p[n + 1] = ys[i] + (ys[j] - ys[i]) * f
+                            n += 2
+                        }
                     }
+                    edge(a, b); edge(b, c); edge(c, a)
+                    if (n == 4) {
+                        byLevel.getOrPut(k) { DoubleArrayBuilder() }.add(p)
+                        if (total.incrementAndGet() > maxSegments) return@forChunks false
+                    }
+                    k++
                 }
-                edge(a, b); edge(b, c); edge(c, a)
-                if (n == 4) {
-                    byLevel.getOrPut(k) { DoubleArrayBuilder() }.add(p)
-                    if (++total > maxSegments) return@forEachTriangle false
-                }
-                k++
             }
             true
         }
         if (!ok) return null
-        return byLevel.entries.sortedBy { it.key }.map { (k, v) -> ContourLevel(k * interval, v.toArray()) }
+        val merged = java.util.TreeMap<Long, DoubleArrayBuilder>()
+        for (from in pieces.keys.sorted()) for ((k, v) in pieces.getValue(from)) {
+            val m = merged[k]
+            if (m == null) merged[k] = v else m.add(v.toArray())
+        }
+        return merged.map { (k, v) -> ContourLevel(k * interval, v.toArray()) }
     }
 
     /** Joins the segments of each level into polylines, for export. */

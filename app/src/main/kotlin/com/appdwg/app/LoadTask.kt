@@ -30,7 +30,7 @@ import java.io.InputStream
 
 /** Progress of a file being loaded: what is happening and, when known, how far along it is. */
 class LoadTask(val label: String, /** Stops the task; null when it cannot be stopped. */ val onCancel: (() -> Unit)? = null) {
-    var stage by mutableStateOf(tr("Lendo arquivo"))
+    var stage by mutableStateOf(tr("Calculando"))
     /** 0..1, or null while the step has no measurable progress. */
     var fraction by mutableStateOf<Float?>(null)
     val startedAt = SystemClock.elapsedRealtime()

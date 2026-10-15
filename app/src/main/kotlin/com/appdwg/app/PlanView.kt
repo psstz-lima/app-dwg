@@ -1,10 +1,14 @@
 package com.appdwg.app
 
+import kotlinx.coroutines.flow.first
 import com.appdwg.core.tr
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -127,6 +131,21 @@ fun PlanView(
     modifier: Modifier = Modifier,
     /** Points of the measurement being taken, drawn as a line and, from 3 points on, an area. */
     measure: List<Point2> = emptyList(),
+    /** False for an open path (a road axis, a line being drawn): no closing edge nor area fill. */
+    measureClosed: Boolean = true,
+    /** Axes not in the drawing (the one being laid out with PIs), stationed and annotated like the others. */
+    extraAlignments: List<Alignment> = emptyList(),
+    /** Axis information turned off ([AxisInfo] keys): axis line, stations, notable points, PIs, tangents, lengths. */
+    axisHidden: Set<String> = emptySet(),
+    /** The measure path is the axis being laid out: its lines, lengths and vertices follow [axisHidden]. */
+    measureIsAxis: Boolean = false,
+    /** Points that can be dragged (PIs of the axis being edited), with the one selected. */
+    handles: List<Point2> = emptyList(),
+    selectedHandle: Int? = null,
+    /** A handle moved to a new plan position while dragged. */
+    onHandleDrag: ((Int, Point2) -> Unit)? = null,
+    /** A handle touched and let go without moving. */
+    onHandleTap: ((Int) -> Unit)? = null,
     /** Taps snap to the nearest point or vertex, for measuring. */
     snap: Boolean = false,
     /** Ends of the cross section being shown, drawn across the alignment. */
@@ -135,6 +154,8 @@ fun PlanView(
     overlay: TerrainImage? = null,
     /** User COGO points (layer _POINTS). */
     points: List<CogoPoint> = emptyList(),
+    /** Field codes: points take the colour and symbol of their code. */
+    pointCodes: List<com.appdwg.core.PointCode> = emptyList(),
     /** Called instead of [onTap] when a tap lands on one of [points]; not while snapping. */
     onPointTap: ((CogoPoint) -> Unit)? = null,
     /** Point highlighted as selected. */
@@ -183,6 +204,9 @@ fun PlanView(
     pointLabels: Boolean = true,
     /** Downhill direction arrows: position and angle (radians, counterclockwise from east). */
     arrows: List<Pair<Point2, Double>> = emptyList(),
+    /** Lines and labelled marks of an analysis or a suggestion (basin, outlets, proposals). */
+    guides: List<Guide> = emptyList(),
+    guideMarks: List<GuideMark> = emptyList(),
     /** Display style of each surface (mesh, border, contours, elevations). */
     surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
     /** Area to show while the project has nothing in it yet. */
@@ -192,6 +216,13 @@ fun PlanView(
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
     // so the view stays where it was.
     val origin = remember(viewKey) { bounds.center }
+    // PC, PT, TS… of every axis, worked out once per change of the axes.
+    val keyPoints = remember(project.alignments, extraAlignments) { (project.alignments + extraAlignments).flatMap { com.appdwg.core.AlignmentReport.keyPoints(it) } }
+    // Read inside the drag gesture, which is not restarted while the handles move.
+    val handlesNow = androidx.compose.runtime.rememberUpdatedState(handles)
+    val dragNow = androidx.compose.runtime.rememberUpdatedState(onHandleDrag)
+    val tapNow = androidx.compose.runtime.rememberUpdatedState(onHandleTap)
+    val pointStyles = remember(points, pointCodes) { if (pointCodes.isEmpty()) emptyList() else points.map { com.appdwg.core.PointCodes.match(it.description, pointCodes)?.first } }
     val scene = remember(project) { Scene.build(project, origin) }
     // An edited surface stands in for its original, whose mesh and lines would show through its holes.
     val replaced = project.surfaces.map { it.name }.filter { n -> project.surfaces.any { it.name == n + EDITED_SUFFIX } }.toSet()
@@ -291,8 +322,10 @@ fun PlanView(
         frame++
     }
 
-    LaunchedEffect(focus, focusKey, size) {
+    // Only a new focus moves the view: a change of size (a panel opening) must not zoom back in.
+    LaunchedEffect(focus, focusKey) {
         val f = focus ?: return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { size.width > 0 && camera != null }.first { it }
         val cam = camera ?: return@LaunchedEffect
         cam.centerX = f.x - origin.x
         cam.centerY = f.y - origin.y
@@ -355,7 +388,7 @@ fun PlanView(
                 drawPath(c.minor, colors.contour.copy(alpha = 0.8f), style = Stroke(width = 1f / s))
                 drawPath(c.major, colors.contourMajor, style = Stroke(width = 2f / s))
             }
-            for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
+            if (AxisInfo.LINE !in axisHidden) for (path in scene.alignments) drawPath(path, colors.alignment, style = Stroke(width = 3f / s))
         }
         contours?.let { c -> drawContourLabels(c, cam, colors) { ts(it, cam) } }
 
@@ -367,7 +400,7 @@ fun PlanView(
     val dens = androidx.compose.ui.platform.LocalDensity.current
     val heavy = scene.weight + project.texts.size * 20 > HEAVY_SCENE
     val layerColors = scene.layers.associateWith(layerColor)
-    val vectorKey = listOf(scene, hiddenLayers, styles, colors, contours, layerColors, project.texts)
+    val vectorKey = listOf(scene, hiddenLayers, styles, colors, contours, layerColors, project.texts, AxisInfo.LINE in axisHidden)
     var vectorCache by remember(project) { mutableStateOf<VectorCache?>(null) }
     LaunchedEffect(frame, size, vectorKey, heavy) {
         if (!heavy) { vectorCache = null; return@LaunchedEffect }
@@ -389,6 +422,31 @@ fun PlanView(
         modifier = modifier
             .clipToBounds()
             .onSizeChanged { size = it }
+            .pointerInput(onHandleDrag != null) {
+                if (onHandleDrag == null) return@pointerInput
+                // A finger that lands on a handle drags it; anywhere else the plan pans and zooms as usual.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val cam = camera ?: return@awaitEachGesture
+                    val hs = handlesNow.value
+                    val reach = HANDLE_DP * density
+                    val idx = hs.indices.minByOrNull { (toScreen(hs[it], cam) - down.position).getDistance() }
+                        ?.takeIf { (toScreen(hs[it], cam) - down.position).getDistance() <= reach } ?: return@awaitEachGesture
+                    down.consume()
+                    var moved = false
+                    while (true) {
+                        val ev = awaitPointerEvent(PointerEventPass.Initial)
+                        val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!ch.pressed) { ch.consume(); break }
+                        if (!moved && (ch.position - down.position).getDistance() < viewConfiguration.touchSlop) { ch.consume(); continue }
+                        moved = true
+                        ch.consume()
+                        val local = toLocal(ch.position, cam)
+                        dragNow.value?.invoke(idx, Point2(local.x + origin.x, local.y + origin.y))
+                    }
+                    if (!moved) tapNow.value?.invoke(idx)
+                }
+            }
             .pointerInput(project) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
                     val cam = camera ?: return@detectTransformGestures
@@ -489,9 +547,10 @@ fun PlanView(
             drawImage(cache.bitmap, dstOffset = IntOffset(ox.roundToInt(), oy.roundToInt()),
                 dstSize = IntSize((w * k).roundToInt().coerceAtLeast(1), (h * k).roundToInt().coerceAtLeast(1)))
         } else drawVectors(cam)
-        drawStations(project.alignments, cam, colors) { toScreen(it, cam) }
+        if (AxisInfo.STATIONS !in axisHidden) drawStations(project.alignments + extraAlignments, cam, colors) { toScreen(it, cam) }
+        if (AxisInfo.KEYPOINTS !in axisHidden) drawKeyPoints(keyPoints, cam, colors) { toScreen(it, cam) }
         drawPoints(project, cam, colors, pointLabels) { toScreen(it, cam) }
-        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels) { toScreen(it, cam) }
+        if (POINTS_LAYER !in hiddenLayers) drawCogoPoints(points, selectedPoint, layerColor(POINTS_LAYER), cam, colors, pointLabels, pointStyles) { toScreen(it, cam) }
         if (channels.isNotEmpty()) {
             val maxA = channels.maxOf { it.third }
             val minA = channels.minOf { it.third }
@@ -543,6 +602,28 @@ fun PlanView(
             val c = when (k) { 0 -> Color(0xFFD32F2F); 1 -> Color(0xFF2E7D32); else -> Color(0xFF1565C0) }
             drawPath(path, c, style = Stroke(width = if (k < 2) 3f else 2f))
         }
+        for (gd in guides) {
+            if (gd.points.size < 2) continue
+            val path = Path()
+            gd.points.forEachIndexed { i, p -> val sp = toScreen(p, cam); if (i == 0) path.moveTo(sp.x, sp.y) else path.lineTo(sp.x, sp.y) }
+            if (gd.closed) path.close()
+            val c = Color(gd.color)
+            if (gd.fillAlpha > 0f) drawPath(path, c.copy(alpha = gd.fillAlpha))
+            drawPath(path, Color.Black.copy(alpha = 0.4f), style = Stroke(width = gd.width + 2f))
+            drawPath(path, c, style = Stroke(width = gd.width,
+                pathEffect = if (gd.dashed) androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 8f)) else null))
+        }
+        if (guideMarks.isNotEmpty()) {
+            val r = 7.sp.toPx()
+            val text = android.graphics.Paint().apply { isAntiAlias = true; textSize = 12.sp.toPx(); color = android.graphics.Color.WHITE; setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK) }
+            for (m in guideMarks) {
+                val sp = toScreen(m.at, cam)
+                if (sp.x < -r || sp.y < -r || sp.x > size.width + r || sp.y > size.height + r) continue
+                drawCircle(Color.Black.copy(alpha = 0.5f), radius = r + 2f, center = sp)
+                drawCircle(Color(m.color), radius = r, center = sp)
+                if (m.label.isNotEmpty()) drawContext.canvas.nativeCanvas.drawText(m.label, sp.x + r + 4f, sp.y + r / 2, text)
+            }
+        }
         selectedLine?.let { ref ->
             PointGen.path(project, ref)?.let { pth ->
                 val path = Path()
@@ -568,7 +649,17 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
-        if (measure.isNotEmpty()) drawMeasure(measure) { toScreen(it, cam) }
+        if (measure.isNotEmpty()) {
+            if (measureIsAxis) drawMeasure(measure, false, lines = AxisInfo.TANGENTS !in axisHidden, lengths = AxisInfo.LENGTHS !in axisHidden,
+                vertices = AxisInfo.PIS !in axisHidden) { toScreen(it, cam) }
+            else drawMeasure(measure, measureClosed) { toScreen(it, cam) }
+        }
+        if (!(measureIsAxis && AxisInfo.PIS in axisHidden)) handles.forEachIndexed { i, h ->
+            val sp = toScreen(h, cam); val r = 7.sp.toPx()
+            drawRect(Color.White, topLeft = sp - Offset(r, r), size = androidx.compose.ui.geometry.Size(2 * r, 2 * r))
+            drawRect(if (i == selectedHandle) Color(0xFFD81B60) else Color(0xFF1565C0), topLeft = sp - Offset(r, r),
+                size = androidx.compose.ui.geometry.Size(2 * r, 2 * r), style = Stroke(width = 3f))
+        }
         if (sectionLine != null) {
             val a = toScreen(sectionLine.first, cam)
             val b = toScreen(sectionLine.second, cam)
@@ -874,6 +965,24 @@ private fun DrawScope.drawStations(
     }
 }
 
+/** Notable points of the axes (PC, PT, TS, SC…) with their stations; labels that would overlap are left out. */
+private fun DrawScope.drawKeyPoints(points: List<com.appdwg.core.AlignmentReport.KeyPoint>, cam: Camera, colors: PlanColors, toScreen: (Point2) -> Offset) {
+    if (points.isEmpty()) return
+    val paint = Paint().apply { isAntiAlias = true; textSize = 10.sp.toPx(); color = colors.stations.toArgb(); isFakeBoldText = true }
+    val r = 3.5f.sp.toPx()
+    val taken = ArrayList<android.graphics.RectF>()
+    for (k in points) {
+        val sp = toScreen(k.point)
+        if (sp.x !in -50f..size.width + 50f || sp.y !in -50f..size.height + 50f) continue
+        drawCircle(colors.stations, radius = r, center = sp, style = Stroke(width = 2f))
+        val text = "${k.label} ${StationFormat.estaca(k.station)}"
+        val box = android.graphics.RectF(sp.x + r * 2, sp.y - r * 2 - paint.textSize, sp.x + r * 2 + paint.measureText(text), sp.y - r * 2)
+        if (taken.any { android.graphics.RectF.intersects(it, box) }) continue
+        taken += box
+        drawContext.canvas.nativeCanvas.drawHaloText(text, box.left, box.bottom, paint)
+    }
+}
+
 /** Text with a thin outline in the opposite tone, so labels stay readable over light and dark terrain alike. */
 private fun android.graphics.Canvas.drawHaloText(text: String, x: Float, y: Float, paint: Paint) {
     val fill = paint.color
@@ -962,6 +1071,8 @@ private fun DrawScope.drawPoints(
 
 /** Snap radius for measuring, in dp. */
 private const val SNAP_DP = 24f
+/** Reach of a finger around a draggable handle (PIs), wider than snapping so a quick drag still catches it. */
+private const val HANDLE_DP = 36f
 
 private val MEASURE_COLOR = Color(0xFF00B8D4)
 private val SECTION_LINE_COLOR = Color(0xFFFFD600)
@@ -991,9 +1102,10 @@ private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2
 }
 
 /** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */
-private fun DrawScope.drawMeasure(points: List<Point2>, toScreen: (Point2) -> Offset) {
+private fun DrawScope.drawMeasure(points: List<Point2>, closed: Boolean, lines: Boolean = true, lengths: Boolean = true, vertices: Boolean = true,
+                                    toScreen: (Point2) -> Offset) {
     val screen = points.map(toScreen)
-    if (screen.size >= 3) {
+    if (closed && screen.size >= 3) {
         val fill = Path().apply {
             moveTo(screen[0].x, screen[0].y)
             for (i in 1 until screen.size) lineTo(screen[i].x, screen[i].y)
@@ -1005,19 +1117,19 @@ private fun DrawScope.drawMeasure(points: List<Point2>, toScreen: (Point2) -> Of
             pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
         )
     }
-    for (i in 1 until screen.size) drawLine(MEASURE_COLOR, screen[i - 1], screen[i], strokeWidth = 4f)
+    if (lines) for (i in 1 until screen.size) drawLine(MEASURE_COLOR, screen[i - 1], screen[i], strokeWidth = 4f)
     val label = Paint().apply {
         isAntiAlias = true
         textSize = 12.sp.toPx()
         color = MEASURE_COLOR.toArgb()
         setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK)
     }
-    for (i in 1 until screen.size) {
+    if (lengths) for (i in 1 until screen.size) {
         val mid = (screen[i - 1] + screen[i]) / 2f
         val d = hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
         drawContext.canvas.nativeCanvas.drawText(StationFormat.length(d), mid.x + 6f, mid.y - 6f, label)
     }
-    for ((i, sp) in screen.withIndex()) {
+    if (vertices) for ((i, sp) in screen.withIndex()) {
         drawCircle(Color.White, radius = 6.sp.toPx(), center = sp)
         drawCircle(MEASURE_COLOR, radius = 6.sp.toPx(), center = sp, style = Stroke(width = 3f))
         if (i == 0) drawCircle(MEASURE_COLOR, radius = 3.sp.toPx(), center = sp)
@@ -1037,26 +1149,46 @@ private fun DrawScope.drawCogoPoints(
     cam: Camera,
     colors: PlanColors,
     withLabels: Boolean,
+    styles: List<com.appdwg.core.PointCode?>,
     toScreen: (Point2) -> Offset,
 ) {
     if (points.isEmpty()) return
-    val color = layerColor?.let { Color(it) } ?: COGO_COLOR
+    val layerTint = layerColor?.let { Color(it) } ?: COGO_COLOR
     val labels = withLabels && points.size <= 3000 && cam.scale > 0.4
     val paint = Paint().apply {
         isAntiAlias = true
         textSize = 11.sp.toPx()
-        this.color = color.toArgb()
+        this.color = layerTint.toArgb()
         setShadowLayer(3f, 0f, 0f, colors.background.toArgb())
     }
     val r = 5.sp.toPx()
     val canvas = drawContext.canvas.nativeCanvas
     val taken = ArrayList<android.graphics.RectF>()
-    for (pt in points) {
+    for ((k, pt) in points.withIndex()) {
         val sp = toScreen(Point2(pt.x, pt.y))
         if (sp.x < -100f || sp.y < -60f || sp.x > size.width + 20f || sp.y > size.height + 60f) continue
-        drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f))
-        drawLine(color, sp - Offset(r * 1.6f, 0f), sp + Offset(r * 1.6f, 0f), strokeWidth = 1.5f)
-        drawLine(color, sp - Offset(0f, r * 1.6f), sp + Offset(0f, r * 1.6f), strokeWidth = 1.5f)
+        val code = styles.getOrNull(k)
+        val color = code?.let { Color(it.color) } ?: layerTint
+        paint.color = color.toArgb()
+        when (code?.symbol) {
+            // Post: filled circle in a ring.
+            "poste" -> { drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f)); drawCircle(color, radius = r * 0.45f, center = sp) }
+            // Tree: crown with branches.
+            "arvore" -> {
+                drawCircle(color, radius = r * 1.3f, center = sp, style = Stroke(width = 1.5f))
+                for (a in 0 until 6) { val t = a * Math.PI / 3; drawLine(color, sp, sp + Offset((kotlin.math.cos(t) * r * 1.3f).toFloat(), (kotlin.math.sin(t) * r * 1.3f).toFloat()), strokeWidth = 1f) }
+            }
+            // Box (drain inlet, manhole): square with a cross.
+            "caixa" -> {
+                drawRect(color, topLeft = sp - Offset(r, r), size = androidx.compose.ui.geometry.Size(2 * r, 2 * r), style = Stroke(width = 2f))
+                drawLine(color, sp - Offset(r, r), sp + Offset(r, r), strokeWidth = 1f); drawLine(color, sp + Offset(-r, r), sp + Offset(r, -r), strokeWidth = 1f)
+            }
+            else -> {
+                drawCircle(color, radius = r, center = sp, style = Stroke(width = 2f))
+                drawLine(color, sp - Offset(r * 1.6f, 0f), sp + Offset(r * 1.6f, 0f), strokeWidth = 1.5f)
+                drawLine(color, sp - Offset(0f, r * 1.6f), sp + Offset(0f, r * 1.6f), strokeWidth = 1.5f)
+            }
+        }
         if (pt == selected) drawCircle(colors.marker, radius = r * 2.2f, center = sp, style = Stroke(width = 3f))
         if (labels && taken.size < 400) {
             val x = sp.x + r * 1.8f

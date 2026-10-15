@@ -61,30 +61,10 @@ class Surface(
         if (cellSize <= 0) return null
         val cols = max(1, ceil(b.width / cellSize).toInt())
         val rows = max(1, ceil(b.height / cellSize).toInt())
+        val grid = Bounds(b.minX, b.maxY - rows * cellSize, b.minX + cols * cellSize, b.maxY)
         val values = FloatArray(cols * rows) { Float.NaN }
-        for (t in 0 until triangleCount) {
-            var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
-            var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
-            for (k in 0..2) {
-                val i = triangles[3 * t + k]
-                minX = min(minX, xs[i]); maxX = max(maxX, xs[i])
-                minY = min(minY, ys[i]); maxY = max(maxY, ys[i])
-            }
-            // Cell centres inside the triangle's bounding box.
-            val c0 = max(0, ceil((minX - b.minX) / cellSize - 0.5).toInt())
-            val c1 = min(cols - 1, floor((maxX - b.minX) / cellSize - 0.5).toInt())
-            val r0 = max(0, ceil((b.maxY - maxY) / cellSize - 0.5).toInt())
-            val r1 = min(rows - 1, floor((b.maxY - minY) / cellSize - 0.5).toInt())
-            for (r in r0..r1) {
-                val y = b.maxY - (r + 0.5) * cellSize
-                for (c in c0..c1) {
-                    val x = b.minX + (c + 0.5) * cellSize
-                    val z = interpolate(t, x, y) ?: continue
-                    values[r * cols + c] = z.toFloat()
-                }
-            }
-        }
-        return ElevationGrid(Bounds(b.minX, b.maxY - rows * cellSize, b.minX + cols * cellSize, b.maxY), cols, rows, values)
+        fill(values, grid, cols, rows, cellSize, cellSize, triangleCount, { it }) { false }
+        return ElevationGrid(grid, cols, rows, values)
     }
 
     /**
@@ -93,39 +73,27 @@ class Surface(
      * null, when [cancelled] turns true.
      */
     fun rasterize(region: Bounds, cols: Int, rows: Int, cancelled: () -> Boolean = { false }): ElevationGrid? {
-        val g = grid ?: return null
+        if (grid == null) return null
         if (cols <= 0 || rows <= 0 || region.width <= 0 || region.height <= 0) return null
         val cellW = region.width / cols
         val cellH = region.height / rows
         val values = FloatArray(cols * rows) { Float.NaN }
-        val seen = BooleanArray(triangleCount)
-        var visited = 0
-        val ok = g.forEachTriangleIn(region) { t ->
-            if (seen[t]) return@forEachTriangleIn true
-            seen[t] = true
-            if (++visited % 4096 == 0 && cancelled()) return@forEachTriangleIn false
-            var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
-            var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
-            for (k in 0..2) {
-                val i = triangles[3 * t + k]
-                minX = min(minX, xs[i]); maxX = max(maxX, xs[i])
-                minY = min(minY, ys[i]); maxY = max(maxY, ys[i])
-            }
-            val c0 = max(0, ceil((minX - region.minX) / cellW - 0.5).toInt())
-            val c1 = min(cols - 1, floor((maxX - region.minX) / cellW - 0.5).toInt())
-            val r0 = max(0, ceil((region.maxY - maxY) / cellH - 0.5).toInt())
-            val r1 = min(rows - 1, floor((region.maxY - minY) / cellH - 0.5).toInt())
-            for (r in r0..r1) {
-                val y = region.maxY - (r + 0.5) * cellH
-                for (c in c0..c1) {
-                    val x = region.minX + (c + 0.5) * cellW
-                    val z = interpolate(t, x, y) ?: continue
-                    values[r * cols + c] = z.toFloat()
-                }
-            }
+        val list = trianglesIn(region)
+        val ok = fill(values, region, cols, rows, cellW, cellH, list.size, { list[it] }, cancelled)
+        return if (ok) ElevationGrid(region, cols, rows, values) else null
+    }
+
+    /** The triangles that may overlap [region] (all of them when null), each once, in index order when null. */
+    fun trianglesIn(region: Bounds?): IntArray {
+        if (region == null) return IntArray(triangleCount) { it }
+        var list = IntArray(1024)
+        var n = 0
+        forEachTriangle(region) { t ->
+            if (n == list.size) list = list.copyOf(n * 2)
+            list[n++] = t
             true
         }
-        return if (ok) ElevationGrid(region, cols, rows, values) else null
+        return list.copyOf(n)
     }
 
     /**
@@ -142,6 +110,43 @@ class Surface(
         return g.forEachTriangleIn(region) { t ->
             if (seen[t]) true else { seen[t] = true; action(t) }
         }
+    }
+
+    /**
+     * Writes into [values] the height at each cell centre of the [cols] x [rows] grid over [region]
+     * covered by one of the [count] triangles given by [triangle], on all cores. A cell centre on
+     * an edge shared by two triangles gets the height from either; they agree to rounding.
+     */
+    private fun fill(
+        values: FloatArray, region: Bounds, cols: Int, rows: Int, cellW: Double, cellH: Double,
+        count: Int, triangle: (Int) -> Int, cancelled: () -> Boolean,
+    ): Boolean = Parallel.forChunks(count, 2048) { from, until ->
+        if (cancelled()) return@forChunks false
+        for (k in from until until) {
+            if ((k - from) % 4096 == 4095 && cancelled()) return@forChunks false
+            val t = triangle(k)
+            var minX = Double.POSITIVE_INFINITY; var minY = Double.POSITIVE_INFINITY
+            var maxX = Double.NEGATIVE_INFINITY; var maxY = Double.NEGATIVE_INFINITY
+            for (j in 0..2) {
+                val i = triangles[3 * t + j]
+                minX = min(minX, xs[i]); maxX = max(maxX, xs[i])
+                minY = min(minY, ys[i]); maxY = max(maxY, ys[i])
+            }
+            // Cell centres inside the triangle's bounding box.
+            val c0 = max(0, ceil((minX - region.minX) / cellW - 0.5).toInt())
+            val c1 = min(cols - 1, floor((maxX - region.minX) / cellW - 0.5).toInt())
+            val r0 = max(0, ceil((region.maxY - maxY) / cellH - 0.5).toInt())
+            val r1 = min(rows - 1, floor((region.maxY - minY) / cellH - 0.5).toInt())
+            for (r in r0..r1) {
+                val y = region.maxY - (r + 0.5) * cellH
+                for (c in c0..c1) {
+                    val x = region.minX + (c + 0.5) * cellW
+                    val z = interpolate(t, x, y) ?: continue
+                    values[r * cols + c] = z.toFloat()
+                }
+            }
+        }
+        true
     }
 
     internal fun interpolate(t: Int, x: Double, y: Double): Double? {

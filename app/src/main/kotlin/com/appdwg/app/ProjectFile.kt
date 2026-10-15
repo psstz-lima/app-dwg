@@ -24,6 +24,10 @@ class ViewState(project: LandXmlProject) {
     var colorOverrides by mutableStateOf<Map<String, Int>>(emptyMap())
     var measuring by mutableStateOf(false)
     var measurePoints by mutableStateOf<List<Point2>>(emptyList())
+    /** Measurements kept with "Salvar e nova", drawn on the plan numbered M1, M2… */
+    var savedMeasures by mutableStateOf<List<List<Point2>>>(emptyList())
+    /** Axis information turned off on the plan ([AxisInfo] keys). */
+    var axisHidden by mutableStateOf<Set<String>>(emptySet())
     var showSection by mutableStateOf(false)
     var sectionAlignment by mutableStateOf(0)
     var sectionStation by mutableStateOf(project.alignments.firstOrNull()?.startStation ?: 0.0)
@@ -45,8 +49,13 @@ class ViewState(project: LandXmlProject) {
     var roadParams by mutableStateOf(RoadParams())
     var roadBuilt by mutableStateOf(false)
     var drawingRoad by mutableStateOf(false)
+    // Drainage basin: rain and runoff settings, and the plan waiting for the outlet to be tapped.
+    var basinParams by mutableStateOf(BasinParams())
+    var pickingOutlet by mutableStateOf(false)
     var show3d by mutableStateOf(false)
     var exaggeration by mutableStateOf(1)
+    /** Detail of the picture over the surfaces in 3D: 0 normal, 1 high, 2 highest. */
+    var drapeQuality by mutableStateOf(0)
     // Site calibration of the GNSS position to the local grid.
     var calibrationPairs by mutableStateOf<List<com.appdwg.core.CalibrationPair>>(emptyList())
     var calibrationOn by mutableStateOf(false)
@@ -156,6 +165,23 @@ data class BulletinItem(
     }
 }
 
+/**
+ * One survey state of the works timeline (primitiva, medição 1, 2…): the file read for it ("" for
+ * the project's own drawing), the picture laid over it and the date it was surveyed (dd/mm/aaaa).
+ */
+data class SurveyState(val name: String, val date: String, val file: String, val image: List<String>, val imageName: String = "") {
+    fun toJson(): JSONObject = JSONObject().put("name", name).put("date", date).put("file", file).put("image", JSONArray(image)).put("imageName", imageName)
+
+    /** Date as yyyymmdd for sorting; without a readable date the primitiva comes first, the others last. */
+    val sortKey: String get() = Regex("""(\d{1,2})/(\d{1,2})/(\d{4})""").find(date)?.destructured
+        ?.let { (d, m, y) -> y + m.padStart(2, '0') + d.padStart(2, '0') } ?: if (file.isEmpty()) "00000000" else "99999999"
+
+    companion object {
+        fun fromJson(o: JSONObject) = SurveyState(o.optString("name"), o.optString("date"), o.optString("file"),
+            o.optJSONArray("image")?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty(), o.optString("imageName"))
+    }
+}
+
 /** Everything a saved project (.gromatic, antes .appdwg) holds; files are kept as content URIs, not copied. */
 class ProjectDoc(
     val main: String,
@@ -182,6 +208,9 @@ class ProjectDoc(
     val edited: List<JSONObject> = emptyList(),
     /** Labels of added files switched off. */
     val hiddenFiles: List<String> = emptyList(),
+    /** Survey states of the works timeline, in date order, and the one shown (−1: all). */
+    val states: List<SurveyState> = emptyList(),
+    val activeState: Int = -1,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -215,6 +244,7 @@ class ProjectDoc(
         }))
         if (edited.isNotEmpty()) put("edited", JSONArray(edited))
         if (hiddenFiles.isNotEmpty()) put("hiddenFiles", JSONArray(hiddenFiles))
+        if (states.isNotEmpty()) { put("states", JSONArray(states.map { it.toJson() })); put("activeState", activeState) }
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -274,6 +304,8 @@ class ProjectDoc(
                 o.optString("mainName").ifEmpty { null },
                 edited = o.optJSONArray("edited")?.let { a -> List(a.length()) { a.getJSONObject(it) } }.orEmpty(),
                 hiddenFiles = strings("hiddenFiles"),
+                states = o.optJSONArray("states")?.let { a -> List(a.length()) { SurveyState.fromJson(a.getJSONObject(it)) } }.orEmpty(),
+                activeState = o.optInt("activeState", -1),
             )
         }
 
@@ -284,6 +316,8 @@ class ProjectDoc(
             put("colors", JSONObject(v.colorOverrides as Map<*, *>))
             put("measuring", v.measuring)
             put("measure", JSONArray(v.measurePoints.map { JSONArray().put(it.x).put(it.y) }))
+            put("measures", JSONArray(v.savedMeasures.map { m -> JSONArray(m.map { JSONArray().put(it.x).put(it.y) }) }))
+            put("axisHidden", JSONArray(v.axisHidden.toList()))
             put("showSection", v.showSection)
             put("sectionAlignment", v.sectionAlignment)
             put("sectionStation", v.sectionStation)
@@ -297,12 +331,17 @@ class ProjectDoc(
             put("contourInterval", v.contourInterval)
             put("platformOutline", JSONArray(v.platformOutline.map { JSONArray().put(it.x).put(it.y) }))
             put("platformParams", v.platformParams.toJson())
+            v.basinParams.let { b ->
+                put("basinParams", JSONObject().put("runoff", b.runoff).put("years", b.years).put("k", b.k).put("a", b.a)
+                    .put("b", b.b).put("c", b.c).put("minArea", b.minArea).put("idfPlace", b.idfPlace))
+            }
             v.platformTerrain?.let { put("platformTerrain", it) }
             put("platformBuilt", v.platformBuilt)
             put("roadParams", v.roadParams.toJson())
             put("roadBuilt", v.roadBuilt)
             put("show3d", v.show3d)
             put("exaggeration", v.exaggeration)
+            put("drapeQuality", v.drapeQuality)
             put("calibration", JSONArray(v.calibrationPairs.map { c ->
                 JSONObject().put("name", c.name).put("h", c.useHorizontal).put("v", c.useVertical)
                     .put("m", JSONArray().put(c.measured.x).put(c.measured.y).put(if (c.measured.z.isNaN()) JSONObject.NULL else c.measured.z))
@@ -331,6 +370,10 @@ class ProjectDoc(
             o.optJSONArray("measure")?.let { a ->
                 v.measurePoints = List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } }
             }
+            o.optJSONArray("measures")?.let { all ->
+                v.savedMeasures = List(all.length()) { k -> all.getJSONArray(k).let { a -> List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } } } }
+            }
+            o.optJSONArray("axisHidden")?.let { a -> v.axisHidden = List(a.length()) { a.getString(it) }.toSet() }
             v.showSection = o.optBoolean("showSection")
             v.sectionAlignment = o.optInt("sectionAlignment")
             v.sectionStation = o.optDouble("sectionStation", v.sectionStation)
@@ -346,12 +389,18 @@ class ProjectDoc(
                 v.platformOutline = List(a.length()) { a.getJSONArray(it).let { p -> Point2(p.getDouble(0), p.getDouble(1)) } }
             }
             o.optJSONObject("platformParams")?.let { v.platformParams = PlatformParams.fromJson(it) }
+            o.optJSONObject("basinParams")?.let { b ->
+                val d = BasinParams()
+                v.basinParams = BasinParams(b.optDouble("runoff", d.runoff), b.optDouble("years", d.years), b.optDouble("k", d.k),
+                    b.optDouble("a", d.a), b.optDouble("b", d.b), b.optDouble("c", d.c), b.optDouble("minArea", d.minArea), b.optString("idfPlace", ""))
+            }
             v.platformTerrain = o.optString("platformTerrain").ifEmpty { null }
             v.platformBuilt = o.optBoolean("platformBuilt")
             o.optJSONObject("roadParams")?.let { v.roadParams = RoadParams.fromJson(it) }
             v.roadBuilt = o.optBoolean("roadBuilt")
             v.show3d = o.optBoolean("show3d")
             v.exaggeration = o.optInt("exaggeration", 1)
+            v.drapeQuality = o.optInt("drapeQuality", 0).coerceIn(0, 2)
             o.optJSONArray("calibration")?.let { a ->
                 fun p3(j: JSONArray) = com.appdwg.core.Point3(j.getDouble(0), j.getDouble(1), j.optDouble(2))
                 v.calibrationPairs = List(a.length()) { a.getJSONObject(it) }.map { c ->
@@ -434,6 +483,9 @@ data class RoadParams(
     val regions: List<RoadRegion> = emptyList(),
     val speed: Double = 60.0,
     val emax: Double = 8.0,
+    /** Radius and spiral of each PI (by index, the ends unused) from a suggested route; empty uses [radius] and [spiral]. */
+    val radii: List<Double> = emptyList(),
+    val spirals: List<Double> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("alignmentIndex", alignmentIndex)
@@ -447,6 +499,7 @@ data class RoadParams(
         terrain?.let { put("terrain", it) }
         put("regions", JSONArray(regions.map { it.toJson() }))
         put("speed", speed); put("emax", emax)
+        put("radii", JSONArray(radii)); put("spirals", JSONArray(spirals))
     }
 
     companion object {
@@ -475,6 +528,8 @@ data class RoadParams(
                 o.optString("terrain").ifEmpty { null },
                 o.optJSONArray("regions")?.let { a -> List(a.length()) { RoadRegion.fromJson(a.getJSONObject(it)) } }.orEmpty(),
                 o.optDouble("speed", 60.0), o.optDouble("emax", 8.0),
+                o.optJSONArray("radii")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty(),
+                o.optJSONArray("spirals")?.let { a -> List(a.length()) { a.getDouble(it) } }.orEmpty(),
             )
         }
     }

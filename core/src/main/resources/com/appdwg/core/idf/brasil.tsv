@@ -1,0 +1,133 @@
+# Equações de chuva i = K·T^a / (t + b)^c, i em mm/h, T em anos, t em minutos.
+# Fonte: A. V. Festi, "Coletânea das equações de chuva do Brasil", ABRH; autor de cada equação na última coluna.
+# Equações dadas em mm/min na coletânea estão com K multiplicado por 60.
+# local	UF	K	a	b	c	autor
+Feira de Santana	BA	716	0.241	11	0.761	Novaes
+Sertão Oriental Nordestino	NE	3609.11	0.120	30	0.950	Projeto Sertanejo
+Fortaleza	CE	506.99	0.181	8	0.610	Matos
+Natal	RN	502.47	0.1431	10.8	0.606	—
+Salvador	BA	1065.66	0.163	24	0.743	—
+Belo Horizonte	MG	1447.87	0.100	20	0.840	—
+Campo Grande	MS	1263.26	0.16	11	0.803	Figueiredo
+João Pessoa	PB	369.41	0.150	5	0.568	J. A. Souza
+Alfredo Chaves	ES	1048.92	0.1512	12	0.7594	Soprani et al.
+Anchieta	ES	1071.84	0.1823	14	0.7723	Soprani et al.
+Barra do Itapemirim (Itapemirim)	ES	881.88	0.1807	12	0.7594	Soprani et al.
+Burarama (Cachoeiro de Itapemirim)	ES	1137.9	0.1599	12	0.7594	Soprani et al.
+Castelo	ES	847.98	0.1434	12	0.7594	Soprani et al.
+Conceição do Castelo	ES	895.5	0.1779	12	0.7594	Soprani et al.
+Arecê (Domingos Martins)	ES	880.62	0.1359	12	0.7594	Soprani et al.
+Duas Barras (Iconha)	ES	1290.3	0.19	12	0.7594	Soprani et al.
+Guarapari	ES	1128.84	0.1964	12	0.7594	Soprani et al.
+Iconha-Montante (Iconha)	ES	1257.78	0.1715	12	0.7594	Soprani et al.
+Jaciguá (Cachoeiro de Itapemirim)	ES	1093.14	0.1758	12	0.7594	Soprani et al.
+Marechal Floriano (Domingos Martins)	ES	1050.84	0.1528	14	0.7723	Soprani et al.
+Perobinha (Domingos Martins)	ES	888.48	0.156	12	0.7594	Soprani et al.
+Rio Novo do Sul	ES	1052.88	0.2005	12	0.7594	Soprani et al.
+São Rafael (Domingos Martins)	ES	747.84	0.1933	12	0.7594	Soprani et al.
+Usina Paineiras (Itapemirim)	ES	961.86	0.1907	12	0.7594	Soprani et al.
+Viana	ES	1003.08	0.1587	12	0.7594	Soprani et al.
+Alegre	ES	1497.781	0.258	19.294	0.855	D. D. Silva et al.
+Aracruz	ES	1298.382	0.12	20.981	0.786	D. D. Silva et al.
+Boa Esperança	ES	596.38	0.23	8.534	0.67	D. D. Silva et al.
+Linhares	ES	3647.235	0.223	20.665	1.00	D. D. Silva et al.
+Santa Teresa	ES	632.265	0.247	13.543	0.714	D. D. Silva et al.
+São Gabriel da Palha	ES	1309.205	0.23	15.375	0.821	D. D. Silva et al.
+São Mateus	ES	4999.205	0.191	49.999	0.983	D. D. Silva et al.
+Venda Nova do Imigrante	ES	4147.062	0.205	33.842	1.00	D. D. Silva et al.
+Vitória	ES	4003.611	0.203	49.997	0.931	D. D. Silva et al.
+Antonina	PR	5209.55	0.160	57	0.978	—
+Apucarana	PR	1301.07	0.177	15	0.836	Fendrich
+Araucária	PR	2505.53	0.177	13	0.988	Fendrich
+Bandeirantes	PR	1077.21	0.157	10	0.781	Fendrich
+Cambará	PR	1772.96	0.126	17	0.867	Fendrich
+Cascavel	PR	1062.92	0.141	5	0.776	Fendrich
+Cerro Azul	PR	1625.55	0.138	18	0.860	Fendrich
+Cianorte	PR	2115.18	0.145	22	0.849	Ayres & Lopes
+Clevelândia	PR	2553.88	0.166	24	0.917	Fendrich
+Curitiba (Prado Velho)	PR	5726.64	0.159	41	1.041	Fendrich
+Curitiba (INEMET)	PR	5950	0.217	26	1.150	Souza (1959)
+Curitiba	PR	3221.07	0.258	26	1.010	Fendrich
+Francisco Beltrão	PR	1012.28	0.182	9	0.760	Fendrich
+Guarapuava	PR	1039.68	0.171	10	0.799	Fendrich & Freitas
+Guaraqueçaba	PR	1479.78	0.172	19	0.802	Fendrich
+Ivaiporã	PR	676.71	0.158	1	0.726	Fendrich
+Laranjeiras do Sul	PR	771.97	0.148	8	0.726	Fendrich
+Maringá	PR	2085	0.213	10	1.09	Soares & Soares
+Morretes	PR	2160.23	0.155	24	0.890	Fendrich
+Nova Cantu	PR	2778.43	0.149	24	0.940	Fendrich
+Palmas	PR	1303.47	0.126	12	0.815	Fendrich
+Palmital	PR	1548.46	0.130	16	0.834	Fendrich
+Paranavaí	PR	2808.67	0.104	33	0.930	Fendrich & Freitas
+Pato Branco	PR	879.43	0.152	9	0.732	Fendrich
+Piraquara	PR	1537.80	0.120	17	0.859	Fendrich
+Planalto	PR	1659.59	0.156	14	0.840	Fendrich
+Ponta Grossa	PR	1902.39	0.152	21	0.893	Fendrich
+Porto Amazonas	PR	2543.31	0.196	27	0.952	Fendrich
+Santa Izabel do Ivaí	PR	1824.73	0.166	17	0.892	Fendrich
+São Miguel do Iguaçu	PR	2886.69	0.124	26	0.927	Fendrich
+Teixeira Soares	PR	959.18	0.177	9	0.789	Fendrich
+Telêmaco Borba	PR	3235.19	0.162	24	0.968	Fendrich
+Tibagi	PR	1592.58	0.136	11	0.882	Fendrich
+Tomazina	PR	2676.70	0.149	29	0.931	Fendrich
+Umuarama	PR	1752.27	0.148	17	0.840	Fendrich
+Rio de Janeiro	RJ	1239	0.15	20	0.74	—
+Álcalis (Arraial do Cabo)	RJ	3281.158	0.222	44.204	1.00	D. D. Silva et al.
+Alto da Boa Vista (Rio de Janeiro)	RJ	4378.133	0.227	49.157	0.999	D. D. Silva et al.
+Angra dos Reis	RJ	721.802	0.211	10.566	0.72	D. D. Silva et al.
+Campos dos Goytacazes	RJ	1133.836	0.183	20.667	0.807	D. D. Silva et al.
+Cordeiro	RJ	612.197	0.185	5	0.695	D. D. Silva et al.
+Ilha Guaíba (Mangaratiba)	RJ	1045.123	0.244	49.945	0.679	D. D. Silva et al.
+Itaperuna	RJ	4999.882	0.196	34.462	0.986	D. D. Silva et al.
+Macaé	RJ	444.258	0.263	6.266	0.655	D. D. Silva et al.
+Nova Friburgo	RJ	2629.477	0.236	24.664	0.975	D. D. Silva et al.
+Resende	RJ	1652.972	0.182	21.41	0.767	D. D. Silva et al.
+Santa Cruz (Rio de Janeiro)	RJ	2474.281	0.2113	37.4228	0.9491	D. D. Silva et al.
+Vassouras	RJ	3086.29	0.20	22.081	1.00	D. D. Silva et al.
+Porto Alegre	RS	509.86	0.196	10	0.72	—
+Urussanga	SC	3445.7	0.138	26	1.012	Back (2002)
+Campinas	SP	2524.8	0.143	20	0.948	Vieira
+Limeira	SP	4653.6	0.173	25	1.087	Vieira
+Presidente Prudente	SP	506.91	0.168	8	0.610	Sudo et al.
+São Carlos	SP	1519.8	0.236	16	0.935	Barbassa
+São Paulo	SP	3462.7	0.172	22	1.025	Wilken
+São Paulo (Wilken, 1747)	SP	1747	0.181	15	0.890	Wilken
+Alvorada do Norte	GO	1018.591	0.1354	12	0.7598	Oliveira et al.
+Alto Garças	MT	873.374	0.1328	10	0.7418	Oliveira et al.
+Aporé	GO	1265.319	0.1368	15	0.7853	Oliveira et al.
+Aruanã	GO	1274.09	0.152	12	0.7599	Oliveira et al.
+Caiapônia	GO	1138.151	0.1643	12	0.7599	Oliveira et al.
+Campo Alegre de Goiás	GO	975.439	0.1643	12	0.7598	Oliveira et al.
+Catalão	GO	1018.591	0.1323	12	0.76	Oliveira et al.
+Ceres	GO	959.621	0.1764	12	0.7601	Oliveira et al.
+Goiânia	GO	920.45	0.1422	12	0.7599	Oliveira et al.
+Israelândia	GO	1120.211	0.1598	12	0.7598	Oliveira et al.
+Morrinhos	GO	1003.46	0.1376	10	0.7418	Oliveira et al.
+Niquelândia	GO	972.299	0.1204	10	0.742	Oliveira et al.
+Alvorada	TO	9989.56	0.211	56.638	1.087	Baena et al.
+Araguatins	TO	4732.318	0.229	46.957	0.995	Baena et al.
+Dianópolis	TO	4642.242	0.162	35.878	1.051	Baena et al.
+Formoso do Araguaia	TO	8740.42	0.176	54.663	1.078	Baena et al.
+Guaraí	TO	8650.36	0.178	41.365	1.098	Baena et al.
+Miracema do Tocantins	TO	5958.095	0.173	35.298	1.043	Baena et al.
+Natividade	TO	2113.85	0.206	30.296	0.845	Baena et al.
+Tupiratins	TO	2300.09	0.155	31.686	0.869	Baena et al.
+Tocantinópolis	TO	9862	0.187	69.638	1.072	Baena et al.
+Projeto Rio Formoso	TO	8950.25	0.194	71.072	1.027	Baena et al.
+Barreiras	BA	1525.758	0.178	19.457	0.82	D. D. Silva et al.
+Brotas de Macaúbas	BA	4210.017	0.192	32.453	1.042	D. D. Silva et al.
+Cândido Sales	BA	2828.391	0.204	34.463	0.956	D. D. Silva et al.
+Carinhanha	BA	2718.147	0.214	21.193	0.978	D. D. Silva et al.
+Cocos	BA	2500	0.184	34.478	0.902	D. D. Silva et al.
+Ibipeba	BA	3950	0.222	33.862	1.028	D. D. Silva et al.
+Formosa do Rio Preto	BA	1719.054	0.174	20.021	0.865	D. D. Silva et al.
+Ipiaú	BA	2194.929	0.232	32.891	0.882	D. D. Silva et al.
+Itamaraju	BA	4032.86	0.211	28.605	1.06	D. D. Silva et al.
+Itapebi	BA	3586.593	0.204	39.135	0.987	D. D. Silva et al.
+Ituberá	BA	3228.481	0.207	45.386	0.948	D. D. Silva et al.
+Juazeiro	BA	5592.554	0.242	40.039	1.093	D. D. Silva et al.
+Medeiros Neto	BA	6899.271	0.227	40.913	1.107	D. D. Silva et al.
+Morpará	BA	1121.26	0.233	19.746	0.783	D. D. Silva et al.
+Santa Cruz da Vitória	BA	3450	0.239	34.012	0.989	D. D. Silva et al.
+Santa Maria da Vitória	BA	2873.405	0.216	29.656	0.946	D. D. Silva et al.
+Teodoro Sampaio	BA	5850	0.212	51.82	1.021	D. D. Silva et al.

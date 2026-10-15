@@ -25,7 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,7 +97,7 @@ fun SectionPanel(
                     Text(tr("Seção"), style = MaterialTheme.typography.titleSmall)
                     if (alignmentNames.size > 1) {
                         var open by remember { mutableStateOf(false) }
-                        TextButton(onClick = { open = true }) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
+                        OutlinedButton(onClick = { open = true }) { Text(alignmentNames[alignmentIndex], maxLines = 1) }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             alignmentNames.forEachIndexed { i, n ->
                                 DropdownMenuItem(text = { Text(n) }, onClick = { onAlignment(i); open = false })
@@ -107,15 +107,15 @@ fun SectionPanel(
                         Text(alignmentNames.firstOrNull() ?: "", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
                     }
                     // Steps land on whole 20 m stakes, so a station off a stake goes to the next one.
-                    TextButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }) { Text("−20") }
+                    OutlinedButton(onClick = { onStation(ceil(station / 20 - 1e-6) * 20 - 20) }) { Text("−20") }
                     StationField(station, onStation)
-                    TextButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
+                    OutlinedButton(onClick = { onStation(floor(station / 20 + 1e-6) * 20 + 20) }) { Text("+20") }
                     Text(tr("Largura"), style = MaterialTheme.typography.labelMedium)
                     SECTION_WIDTHS.forEach { w ->
                         FilterChip(selected = w == halfWidth, onClick = { onHalfWidth(w) }, label = { Text("±" + StationFormat.lengthValue(w, 0)) })
                     }
                 }
-                TextButton(onClick = onClose) { Text(tr("Fechar")) }
+                OutlinedButton(onClick = onClose) { Text(tr("Fechar")) }
             }
             if (section == null) {
                 Text(tr("Sem seção nesta estaca."), Modifier.padding(16.dp))

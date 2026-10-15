@@ -28,7 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -171,7 +171,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
                 .clip(RoundedCornerShape(16.dp)).background(g.panel.copy(alpha = 0.94f)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Escolha o local do projeto"), style = MaterialTheme.typography.titleMedium, color = g.text, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text(tr("Cancelar")) }
+                    OutlinedButton(onClick = onDismiss) { Text(tr("Cancelar")) }
                 }
                 Text(tr("Arraste e use a pinça para enquadrar a área. O quadro é a área do projeto."), style = MaterialTheme.typography.bodySmall, color = g.muted)
                 Text(tr("Mapa: © colaboradores do OpenStreetMap"), style = MaterialTheme.typography.labelSmall, color = g.muted)

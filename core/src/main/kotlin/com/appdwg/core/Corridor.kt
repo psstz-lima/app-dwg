@@ -69,6 +69,44 @@ object AlignmentBuilder {
         return Alignment(name, startStation, elements.filter { it.length > 1e-9 }, profile)
     }
 
+    /**
+     * [pis] with each curve shrunk (radius and spirals together) just enough that neighbouring
+     * curves fit on the tangent between them; a radius too large for short tangents would otherwise
+     * loop back. PIs that already fit are returned as they are.
+     */
+    fun fitRadii(pis: List<Pi>): List<Pi> {
+        if (pis.size < 3) return pis
+        // Tangent length of each PI's curve; ends have none.
+        val t = DoubleArray(pis.size)
+        for (i in 1 until pis.size - 1) {
+            val v = pis[i]
+            if (v.radius <= 0) continue
+            val tin = unit(pis[i - 1].position, v.position); val tout = unit(v.position, pis[i + 1].position)
+            val delta = acos((tin.x * tout.x + tin.y * tout.y).coerceIn(-1.0, 1.0))
+            if (delta < 1e-9) continue
+            val r = v.radius
+            var ls = v.spiral.coerceAtLeast(0.0)
+            if (ls / r > delta) ls = delta * r
+            val thS = ls / (2 * r)
+            val xs = ls * (1 - thS * thS / 10 + thS * thS * thS * thS / 216)
+            val ys = ls * (thS / 3 - thS * thS * thS / 42)
+            val p = if (ls > 0) ys - r * (1 - cos(thS)) else 0.0
+            val k = if (ls > 0) xs - r * sin(thS) else 0.0
+            t[i] = (r + p) * tan(delta / 2) + k
+        }
+        // Each leg's room shared by the curves at its two ends; a curve scales by its tighter leg.
+        val f = DoubleArray(pis.size) { 1.0 }
+        for (i in 0 until pis.size - 1) {
+            val need = t[i] + t[i + 1]
+            val room = hypot(pis[i + 1].position.x - pis[i].position.x, pis[i + 1].position.y - pis[i].position.y)
+            if (need > room) {
+                val s = 0.999 * room / need
+                f[i] = min(f[i], s); f[i + 1] = min(f[i + 1], s)
+            }
+        }
+        return pis.mapIndexed { i, v -> if (f[i] < 1.0) v.copy(radius = v.radius * f[i], spiral = v.spiral * f[i]) else v }
+    }
+
     private fun unit(a: Point2, b: Point2): Point2 { val l = hypot(b.x - a.x, b.y - a.y).takeIf { it > 0 } ?: 1.0; return Point2((b.x - a.x) / l, (b.y - a.y) / l) }
     private fun rotate(v: Point2, a: Double) = Point2(v.x * cos(a) - v.y * sin(a), v.x * sin(a) + v.y * cos(a))
 
@@ -77,7 +115,8 @@ object AlignmentBuilder {
         if (i == 0 || i == pvis.size - 1) p else {
             val g1 = (p.elevation - pvis[i - 1].elevation) / (p.station - pvis[i - 1].station) * 100
             val g2 = (pvis[i + 1].elevation - p.elevation) / (pvis[i + 1].station - p.station) * 100
-            p.copy(curveLength = k * abs(g2 - g1))
+            // Never longer than the shorter tangent, so the curve stays on the axis and clear of its neighbours'.
+            p.copy(curveLength = minOf(k * abs(g2 - g1), p.station - pvis[i - 1].station, pvis[i + 1].station - p.station).coerceAtLeast(0.0))
         }
     }
 }
@@ -248,9 +287,10 @@ object Corridor {
         for (p in profile.pvis) { stations += p.station - p.curveLength / 2; stations += p.station + p.curveLength / 2; stations += p.station }
         val stas = stations.filter { it >= alignment.startStation - 1e-6 && it <= alignment.endStation + 1e-6 && profile.elevationAt(it) != null }
 
-        var unresolved = 0
         val sorted = regions.sortedBy { it.from }
-        val sections = stas.mapNotNull { sta ->
+        // Each station is independent: computed on all cores, kept in station order.
+        val built = Parallel.map(stas.size) { k ->
+            val sta = stas[k]
             val ri = sorted.indexOfLast { sta >= it.from - 1e-6 }.coerceAtLeast(0)
             val region = sorted[ri]
             var tpl = region.template
@@ -268,8 +308,10 @@ object Corridor {
                 region.rightTarget?.let { line -> reach(c, right, line)?.let { w -> tpl = tpl.copy(right = tpl.right.copy(laneWidth = w)) } }
             }
             val se = interpolateSe(superelevation, sta)
-            section(alignment, profile, terrain, tpl, sta, se)?.also { if (it.second) unresolved++ }?.first
+            section(alignment, profile, terrain, tpl, sta, se)
         }
+        val unresolved = built.count { it?.second == true }
+        val sections = built.mapNotNull { it?.first }
         require(sections.size >= 2) { tr("o eixo não tem greide em pelo menos duas seções") }
 
         val top = surface(name, sections) { it.top }
