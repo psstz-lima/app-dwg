@@ -78,7 +78,7 @@ fun GpsDialog(
     AlertDialog(
         onDismissRequest = { save(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         confirmButton = { OutlinedButton(onClick = { save(); onDismiss() }) { Text(tr("Fechar")) } },
         dismissButton = { if (gnss.connected) OutlinedButton(onClick = { gnss.disconnect() }) { Text(tr("Desconectar")) } },
         title = { Text("GPS / GNSS") },

@@ -43,7 +43,7 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
         onDismissRequest = onDismiss,
         // Wide, so the matrix fits on a tablet.
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Comparação cruzada")) },
         text = {

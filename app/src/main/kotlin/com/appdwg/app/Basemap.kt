@@ -4,8 +4,9 @@ import com.appdwg.core.tr
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,9 +88,12 @@ class BasemapStore(context: Context) {
     fun changeOpacity(v: Float) { opacity = v; prefs.edit().putFloat("opacity", v).apply() }
     fun allowOnline(v: Boolean) { online = v; prefs.edit().putBoolean("online", v).apply() }
 
+    /** Bitmap plus the Compose wrapper, so the place picker does not allocate one per tile per frame. */
+    private class CachedTile(val bitmap: Bitmap, val image: ImageBitmap)
+
     // Room for a full tablet screen of tiles plus the coarser and finer ones drawn while zooming.
-    private val memory = object : LruCache<String, Bitmap>(minOf(128L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 5).toInt()) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    private val memory = object : LruCache<String, CachedTile>(minOf(128L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 5).toInt()) {
+        override fun sizeOf(key: String, value: CachedTile) = value.bitmap.byteCount
     }
     /**
      * Tiles that could not be fetched: when that last happened and how many times, so they are
@@ -107,7 +111,13 @@ class BasemapStore(context: Context) {
     private fun file(s: BasemapSource, t: TileId) = File(root, "${s.id}/${t.z}/${t.x}/${t.y}")
 
     /** Picture of [t] if loaded; otherwise starts loading it from disk (or the network when [fetch]). */
-    private fun bitmap(t: TileId, fetch: Boolean, s: BasemapSource = source): Bitmap? {
+    private fun bitmap(t: TileId, fetch: Boolean, s: BasemapSource = source): Bitmap? = cached(t, fetch, s)?.bitmap
+
+    private fun putTile(k: String, bmp: Bitmap) {
+        memory.put(k, CachedTile(bmp, bmp.asImageBitmap()))
+    }
+
+    private fun cached(t: TileId, fetch: Boolean, s: BasemapSource = source): CachedTile? {
         val k = key(s, t)
         memory.get(k)?.let { return it }
         synchronized(loading) {
@@ -121,19 +131,19 @@ class BasemapStore(context: Context) {
             var bmp: Bitmap? = null
             // An empty file marks a tile the server has no picture for: a coarser one is drawn instead.
             val known = f.exists()
-            if (known && f.length() > 0) disk.withPermit { bmp = BitmapFactory.decodeFile(f.path) }
+            if (known && f.length() > 0) disk.withPermit { bmp = decodeTile(f) }
             val gate = if (s.id == "osm") osmNet else net
-            if (bmp == null && !known && fetch && online) gate.withPermit { bmp = download(s, t)?.let { BitmapFactory.decodeFile(it.path) } }
+            if (bmp == null && !known && fetch && online) gate.withPermit { bmp = download(s, t)?.let { decodeTile(it) } }
             // A stale tile is drawn at once and fetched again in the background.
             val age = s.maxAgeMs
             if (bmp != null && age != null && fetch && online && System.currentTimeMillis() - f.lastModified() > age) {
-                scope.launch { gate.withPermit { download(s, t)?.let { BitmapFactory.decodeFile(it.path) }?.let { fresh -> memory.put(k, fresh); withContext(Dispatchers.Main) { version++ } } } }
+                scope.launch { gate.withPermit { download(s, t)?.let { decodeTile(it) }?.let { fresh -> putTile(k, fresh); withContext(Dispatchers.Main) { version++ } } } }
             }
             synchronized(loading) {
                 loading -= k
                 if (bmp == null) missing[k] = System.currentTimeMillis() to ((missing[k]?.second ?: 0) + 1) else missing -= k
             }
-            bmp?.let { memory.put(k, it); withContext(Dispatchers.Main) { version++ } }
+            bmp?.let { putTile(k, it); withContext(Dispatchers.Main) { version++ } }
         }
         return null
     }
@@ -156,17 +166,26 @@ class BasemapStore(context: Context) {
         } finally { c.disconnect() }
     }.getOrNull()
 
+    /** Map tiles are opaque JPEG or PNG. RGB_565 halves the cache against the default 32-bit decode. */
+    private fun decodeTile(f: File): Bitmap? = BitmapDecode.decodeFile(f.path, Bitmap.Config.RGB_565)
+
     /** Whether a tile is a flat grey "map data not yet available" picture. */
     private fun isPlaceholder(f: File): Boolean {
         if (f.length() > 12_000) return false
-        val b = BitmapFactory.decodeFile(f.path) ?: return true
+        // A reduced decode is enough to see a flat colour, and it does not allocate a full tile.
+        val b = BitmapDecode.decodeFile(f.path, Bitmap.Config.RGB_565, sampleSize = 8) ?: return true
         try {
-            val ref = b.getPixel(2, 2)
+            if (b.width < 2 || b.height < 2) return true
+            val ref = b.getPixel(b.width / 2, b.height / 2)
             val r = (ref shr 16) and 0xFF; val g = (ref shr 8) and 0xFF; val bl = ref and 0xFF
             if (kotlin.math.abs(r - g) > 6 || kotlin.math.abs(g - bl) > 6) return false
+            val x0 = b.width / 8
+            val y0 = b.height / 8
+            val x1 = (b.width - 1 - x0).coerceAtLeast(x0)
+            val y1 = (b.height - 1 - y0).coerceAtLeast(y0)
             var same = 0
             for (i in 0 until 16) for (j in 0 until 16) {
-                val p = b.getPixel(8 + i * (b.width - 16) / 15, 8 + j * (b.height - 16) / 15)
+                val p = b.getPixel(x0 + i * (x1 - x0) / 15, y0 + j * (y1 - y0) / 15)
                 if (kotlin.math.abs(((p shr 16) and 0xFF) - r) < 6 && kotlin.math.abs((p and 0xFF) - bl) < 6) same++
             }
             return same >= 220
@@ -206,7 +225,7 @@ class BasemapStore(context: Context) {
                 break
             }
             if (!covered && t.z < s.maxZoom) for (c in t.children) {
-                val b = memory.get(key(s, c)) ?: continue
+                val b = memory.get(key(s, c))?.bitmap ?: continue
                 out += BasemapTile(b, android.graphics.Rect(0, 0, b.width, b.height), cornersOf(c, crs))
                 covered = true
             }
@@ -220,19 +239,19 @@ class BasemapStore(context: Context) {
      * OpenStreetMap tile [t] for the place picker, or until it arrives the part of a coarser one at
      * hand (picture and the part of it to draw); null when none is loaded yet.
      */
-    fun pickerTile(t: TileId): Pair<Bitmap, android.graphics.Rect>? {
+    fun pickerTile(t: TileId): Pair<ImageBitmap, android.graphics.Rect>? {
         val s = BASEMAP_SOURCES.first { it.id == "osm" }
-        bitmap(t, fetch = true, s = s)?.let { return it to android.graphics.Rect(0, 0, it.width, it.height) }
+        cached(t, fetch = true, s = s)?.let { return it.image to android.graphics.Rect(0, 0, it.bitmap.width, it.bitmap.height) }
         var p = t
         for (up in 1..8) {
             if (p.z <= 0) break
             p = p.parent
-            val b = bitmap(p, fetch = up == 2, s = s) ?: continue
+            val b = cached(p, fetch = up == 2, s = s) ?: continue
             val n = 1 shl up
-            val cw = b.width / n; val ch = b.height / n
+            val cw = b.bitmap.width / n; val ch = b.bitmap.height / n
             if (cw <= 0 || ch <= 0) return null
             val ox = (t.x - (p.x shl up)) * cw; val oy = (t.y - (p.y shl up)) * ch
-            return b to android.graphics.Rect(ox, oy, ox + cw, oy + ch)
+            return b.image to android.graphics.Rect(ox, oy, ox + cw, oy + ch)
         }
         return null
     }

@@ -58,6 +58,7 @@ fun AreaDialog(vm: ProjectViewModel, viewport: Bounds?, measure: List<Point2>, o
     }
     val busy = vm.tasks.isNotEmpty()
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(tr("Baixar dados da área")) },
         confirmButton = {

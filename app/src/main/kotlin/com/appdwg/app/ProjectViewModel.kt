@@ -1200,8 +1200,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_RASTER) sample *= 2
         task.step(tr("Decodificando imagem"))
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+        val bitmap = resolver.openInputStream(uri)?.use {
+            BitmapDecode.decodeStream(it, BitmapDecode.configForMime(bounds.outMimeType), sample)
+        } ?: return null
         return Picture(bitmap.asImageBitmap(), null, bounds.outWidth, bounds.outHeight)
     }
 
@@ -2186,7 +2187,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 800) sample *= 2
-        return cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) }
+        return cr.openInputStream(uri)?.use {
+            BitmapDecode.decodeStream(it, BitmapDecode.configForMime(bounds.outMimeType), sample)
+        }
     }
 
     fun setSheetLogo(uri: Uri?) {
@@ -3301,7 +3304,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
                 val raster = TiffReader(input, jpeg = { bytes ->
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { b ->
+                    BitmapDecode.decodeBytes(bytes, Bitmap.Config.RGB_565)?.let { b ->
                         val px = IntArray(b.width * b.height)
                         b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
                         Raster(b.width, b.height, px).also { b.recycle() }

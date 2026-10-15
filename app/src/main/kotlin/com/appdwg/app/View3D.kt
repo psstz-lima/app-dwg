@@ -298,22 +298,28 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             drapeTexture = 0
         }
         val d = drape ?: return
-        var bitmap = d.image.asAndroidBitmap()
+        val original = d.image.asAndroidBitmap()
+        var bitmap = original
         val maxSize = IntArray(1).also { GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE, it, 0) }[0].coerceAtLeast(2048)
         if (bitmap.width > maxSize || bitmap.height > maxSize) {
             val f = maxSize.toFloat() / max(bitmap.width, bitmap.height)
             bitmap = Bitmap.createScaledBitmap(bitmap, (bitmap.width * f).toInt().coerceAtLeast(1), (bitmap.height * f).toInt().coerceAtLeast(1), true)
         }
-        val ids = IntArray(1)
-        GLES30.glGenTextures(1, ids, 0)
-        drapeTexture = ids[0]
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
-        GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
-        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+        try {
+            val ids = IntArray(1)
+            GLES30.glGenTextures(1, ids, 0)
+            drapeTexture = ids[0]
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, drapeTexture)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+            GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bitmap, 0)
+            GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+        } finally {
+            // The scaled copy is only the upload buffer. The drape's own bitmap stays with its ImageBitmap.
+            if (bitmap !== original) bitmap.recycle()
+        }
     }
 
     fun update(hidden: Set<String>, layerColor: (String) -> Int?, background: Int, foreground: Int, zScale: Float, styles: Map<String, SurfaceStyle>) {

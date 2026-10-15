@@ -22,6 +22,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = {
             androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

@@ -71,7 +71,7 @@ fun ExportDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.padding(16.dp).widthIn(max = 720.dp).fillMaxWidth(),
+        modifier = Modifier.safeBars().then(Modifier.padding(16.dp).widthIn(max = 720.dp).fillMaxWidth()),
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Exportar")) },
         text = {

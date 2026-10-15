@@ -40,6 +40,7 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
     var editing by remember { mutableStateOf<Int?>(null) }
     val codes = vm.pointCodes
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
@@ -81,6 +82,7 @@ fun CodesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
         var symbol by remember(i) { mutableStateOf(c.symbol) }
         val argb = color.trim().removePrefix("#").toLongOrNull(16)?.takeIf { color.trim().removePrefix("#").length == 6 }?.let { (0xFF000000 or it).toInt() }
         AlertDialog(
+            modifier = Modifier.safeBars(),
             onDismissRequest = { editing = null },
             confirmButton = {
                 OutlinedButton(enabled = code.isNotBlank() && argb != null, onClick = {

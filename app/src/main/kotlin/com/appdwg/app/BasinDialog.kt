@@ -136,7 +136,7 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
     AlertDialog(
         onDismissRequest = { v.basinParams = params(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         confirmButton = { OutlinedButton(onClick = { v.basinParams = params(); onDismiss() }) { Text(tr("Fechar")) } },
         dismissButton = {
             if (vm.basin != null || vm.outlets.isNotEmpty()) OutlinedButton(onClick = { vm.clearBasin() }) { Text(tr("Limpar")) }

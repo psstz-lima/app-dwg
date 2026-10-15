@@ -92,7 +92,7 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.9f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.9f)),
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Cálculos de campo")) },
         text = {

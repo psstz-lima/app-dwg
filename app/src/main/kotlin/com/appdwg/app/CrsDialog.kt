@@ -55,7 +55,7 @@ fun CrsDialog(vm: ProjectViewModel, current: Crs, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.9f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.9f)),
         title = { Text(stringResource(R.string.crs_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
         text = {
@@ -180,7 +180,7 @@ private fun CrsEditor(start: Crs, onSave: (Crs) -> Unit, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.9f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.9f)),
         title = { Text(stringResource(R.string.crs_new)) },
         dismissButton = { OutlinedButton(onClick = onCancel) { Text(stringResource(R.string.crs_cancel)) } },
         confirmButton = { OutlinedButton(enabled = ok, onClick = { onSave(start.copy(name = name.trim(), datum = datum!!, projection = projection!!, custom = true, local = false, epsg = null)) }) {

@@ -68,7 +68,7 @@ fun CalibrationDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         title = { Text(stringResource(R.string.calib_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
         text = {

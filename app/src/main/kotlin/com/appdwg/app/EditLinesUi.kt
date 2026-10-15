@@ -247,7 +247,7 @@ fun LineOpDialog(e: EditState, vm: ProjectViewModel, project: LandXmlProject, on
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         confirmButton = {
             Row {
                 OutlinedButton(onClick = {

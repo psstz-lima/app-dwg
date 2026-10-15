@@ -19,8 +19,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Icon
@@ -41,7 +41,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -112,9 +111,15 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
     }
 
     // The system bars measured in the activity: a dialog window does not always get them.
+    // safeDrawing includes the status bar, navigation bar and display cutout, including the
+    // side insets a phone in landscape or a tablet gets.
     val ld = LocalDensity.current
-    val barTop = with(ld) { WindowInsets.statusBars.getTop(this).toDp() }
-    val barBottom = with(ld) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val layoutDirection = LocalLayoutDirection.current
+    val safe = WindowInsets.safeDrawing
+    val barTop = with(ld) { safe.getTop(this).toDp() }
+    val barBottom = with(ld) { safe.getBottom(this).toDp() }
+    val barStart = with(ld) { safe.getLeft(this, layoutDirection).toDp() }
+    val barEnd = with(ld) { safe.getRight(this, layoutDirection).toDp() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         val g = LocalG.current
         Box(Modifier.fillMaxSize().background(Color(0xFFE8E4DA))) {
@@ -146,7 +151,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
                     val (bmp, src) = basemap.pickerTile(TileId(z, ((tx % n) + n) % n, ty)) ?: continue
                     val left = (ox + tx * tile).roundToInt(); val top = (oy + ty * tile).roundToInt()
                     val right = (ox + (tx + 1) * tile).roundToInt(); val bottom = (oy + (ty + 1) * tile).roundToInt()
-                    drawImage(bmp.asImageBitmap(), IntOffset(src.left, src.top), IntSize(src.width(), src.height()),
+                    drawImage(bmp, IntOffset(src.left, src.top), IntSize(src.width(), src.height()),
                         IntOffset(left, top), IntSize(right - left, bottom - top))
                 }
                 // The project's area: a frame inset from the edges, darkened outside.
@@ -167,7 +172,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
             val mPerPx = WORLD_M * cos(Math.toRadians(lat)) / scale()
             val widthM = f.width * mPerPx; val heightM = f.height * mPerPx
 
-            Column(Modifier.align(Alignment.TopCenter).padding(top = barTop, bottom = barBottom).padding(12.dp).widthIn(max = 640.dp).fillMaxWidth()
+            Column(Modifier.align(Alignment.TopCenter).padding(top = barTop, start = barStart, end = barEnd).padding(12.dp).widthIn(max = 640.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp)).background(g.panel.copy(alpha = 0.94f)).padding(horizontal = 16.dp, vertical = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(tr("Escolha o local do projeto"), style = MaterialTheme.typography.titleMedium, color = g.text, modifier = Modifier.weight(1f))
@@ -178,7 +183,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
             }
 
             // Buttons for zooming without pinching (one hand, gloves).
-            Column(Modifier.align(Alignment.CenterEnd).padding(top = barTop, bottom = barBottom).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.align(Alignment.CenterEnd).padding(top = barTop, bottom = barBottom, end = barEnd).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for ((icon, desc, step) in listOf(Triple(GIcon.PLUS, tr("Aproximar"), 1.0), Triple(GIcon.MINUS, tr("Afastar"), -1.0))) {
                     val vec = remember(icon) { icon.vector(g.iconStroke + 0.4f) }
                     Box(Modifier.size(g.target + 4.dp).clip(RoundedCornerShape(10.dp)).background(g.panel)
@@ -187,7 +192,7 @@ fun PlacePicker(basemap: BasemapStore, onPick: (Double, Double, Double, Double) 
                 }
             }
 
-            Column(Modifier.align(Alignment.BottomCenter).padding(top = barTop, bottom = barBottom).padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 28.dp).widthIn(max = 640.dp).fillMaxWidth()
+            Column(Modifier.align(Alignment.BottomCenter).padding(bottom = barBottom, start = barStart, end = barEnd).padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 28.dp).widthIn(max = 640.dp).fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp)).background(g.panel.copy(alpha = 0.94f)).padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(String.format(java.util.Locale.ROOT, "%.6f, %.6f", lat, lon) + "  ·  " +

@@ -61,7 +61,7 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
     AlertDialog(
         onDismissRequest = { v.sheetParams = keep(); onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         title = { Text(stringResource(R.string.sh_title)) },
         dismissButton = { OutlinedButton(onClick = { v.sheetParams = keep(); onDismiss() }) { Text(stringResource(R.string.close)) } },
         confirmButton = {

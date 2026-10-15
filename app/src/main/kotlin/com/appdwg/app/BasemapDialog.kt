@@ -62,6 +62,7 @@ fun BasemapDialog(
     }
 
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(tr("Mapa de fundo")) },
         text = {

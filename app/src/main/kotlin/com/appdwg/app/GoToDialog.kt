@@ -47,6 +47,7 @@ fun GoToDialog(project: LandXmlProject, onGo: (Point2) -> Unit, onDismiss: () ->
     fun num(s: String) = StationFormat.parseLength(s)
     val hits = remember(project, query) { Search.find(project, query) }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Ir para")) },

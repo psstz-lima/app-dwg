@@ -46,6 +46,7 @@ fun PointsDialog(
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Pontos (camada _POINTS)")) },
@@ -104,6 +105,7 @@ fun PointEditDialog(
     fun num(s: String) = StationFormat.parseLength(s)
     val valid = number.isNotBlank() && num(e) != null && num(n) != null && (z.isBlank() || num(z) != null)
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = {
             OutlinedButton(enabled = valid, onClick = {

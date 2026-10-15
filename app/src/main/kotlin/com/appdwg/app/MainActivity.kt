@@ -8,7 +8,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
@@ -46,11 +45,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,15 +90,21 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Edge-to-edge before the first frame. Icon contrast is updated again once the theme is known.
+        window.enableGromaticEdgeToEdge(lightStatus = false, lightNavigation = false)
         if (savedInstanceState == null) openFromIntent(intent)
         setContent {
             // Number format from the device's language, units from Aparência; the screens are rebuilt when either changes.
             val locale = viewModel.languages.locale(androidx.compose.ui.platform.LocalConfiguration.current.locales[0])
             val system = remember(locale, viewModel.units.choice) { viewModel.units.apply(locale) }
             GromaticTheme(viewModel.themes.choice) { androidx.compose.runtime.key(locale, system) {
+                val g = LocalG.current
                 val full = viewModel.fullScreen && viewModel.state is ProjectState.Loaded
-                LaunchedEffect(full) {
+                // Dark icons on a light bar. SUN's top bar is black even though the plan is light.
+                val lightStatus = g.onTopBar.luminance() < 0.5f
+                val lightNav = g.bg.luminance() > 0.5f
+                LaunchedEffect(full, lightStatus, lightNav) {
+                    window.enableGromaticEdgeToEdge(lightStatus, lightNav)
                     val bars = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                     if (full) {
                         bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -159,7 +167,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     val openFile = { guarded { picker.launch(arrayOf("*/*")) } }
     val openFromDrive = { guarded { inDrive.set(true); picker.launch(arrayOf("*/*")) } }
     fun saveAs(drive: Boolean) { if (!viewModel.pro.isPro) { viewModel.proRequested = true; return }; afterSave = null; inDrive.set(drive); saver.launch(projectName()) }
-    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val activity = androidx.activity.compose.LocalActivity.current
     androidx.activity.compose.BackHandler(enabled = state is ProjectState.Loaded) {
         if (viewModel.fullScreen) viewModel.fullScreen = false else guarded { activity?.finish() }
     }
@@ -168,8 +176,17 @@ private fun AppScreen(viewModel: ProjectViewModel) {
     val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     Scaffold(
         containerColor = g.bg,
+        // safeDrawing covers status bar, navigation bar, display cutout and the keyboard,
+        // on phones and on tablets (where the bars can sit on the side).
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            if (!(viewModel.fullScreen && state is ProjectState.Loaded)) Box(Modifier.background(g.topBar).windowInsetsPadding(WindowInsets.statusBars)) {
+            // The bar's colour runs under the status bar and side cutout; the buttons stay clear.
+            // Padding is not consumed, so the content below still receives the horizontal insets.
+            if (!(viewModel.fullScreen && state is ProjectState.Loaded)) Box(
+                Modifier.background(g.topBar).padding(
+                    WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal).asPaddingValues(),
+                ),
+            ) {
                 GTopBar(
                     when (state) {
                         is ProjectState.Loaded -> state.fileName
@@ -234,6 +251,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         if (viewModel.proRequested) ProDialog(viewModel.pro, onDismiss = { viewModel.proRequested = false })
         if (showRecent) {
             AlertDialog(
+                modifier = Modifier.safeBars(),
                 onDismissRequest = { showRecent = false },
                 confirmButton = { GButton(tr("Fechar"), { showRecent = false }) },
                 title = { Text(tr("Arquivos recentes")) },
@@ -252,6 +270,7 @@ private fun AppScreen(viewModel: ProjectViewModel) {
         }
         confirm?.let { action ->
             AlertDialog(
+                modifier = Modifier.safeBars(),
                 onDismissRequest = { confirm = null },
                 title = { Text(tr("Salvar alterações?")) },
                 text = { Text(tr("O projeto tem alterações que ainda não foram salvas (camadas, pontos, medições, arquivos adicionados…).")) },
@@ -366,6 +385,7 @@ fun CoordinatesDialog(onCreate: (Double, Double) -> Unit, onDismiss: () -> Unit)
     val parts = text.trim().split(separators).filter { it.isNotEmpty() }.map { it.replace(',', '.').toDoubleOrNull() }
     val parsed = parts.takeIf { it.size == 2 && it[0] != null && it[1] != null && it[0]!! in -84.0..84.0 && it[1]!! in -180.0..180.0 }?.let { it[0]!! to it[1]!! }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(tr("Digitar coordenadas")) },
         confirmButton = { OutlinedButton(enabled = parsed != null, onClick = { parsed?.let { (a, b) -> onCreate(a, b) } }) { Text(tr("Ir para o ponto")) } },
@@ -612,7 +632,7 @@ private fun ProjectScreen(
             showExport = true
         }
     }
-    val window = (androidx.compose.ui.platform.LocalContext.current as? android.app.Activity)?.window
+    val window = androidx.activity.compose.LocalActivity.current?.window
     val baseName = fileName.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
     LaunchedEffect(captureFor) {
         val kind = captureFor ?: return@LaunchedEffect
@@ -1579,6 +1599,7 @@ private fun ProjectScreen(
 
     if (showContourDialog) {
         AlertDialog(
+            modifier = Modifier.safeBars(),
             onDismissRequest = { showContourDialog = false },
             confirmButton = { OutlinedButton(onClick = { showContourDialog = false }) { Text(tr("Fechar")) } },
             dismissButton = { OutlinedButton(onClick = { showContours = false; showContourDialog = false }) { Text(tr("Desligar")) } },
@@ -1695,6 +1716,7 @@ private fun ProjectScreen(
 
     if (showWarnings) {
         AlertDialog(
+            modifier = Modifier.safeBars(),
             onDismissRequest = { showWarnings = false },
             confirmButton = { OutlinedButton(onClick = { showWarnings = false }) { Text(tr("Fechar")) } },
             title = { Text(tr("Avisos da leitura")) },
@@ -1712,6 +1734,7 @@ private fun ProjectScreen(
 private fun DrapeDialog(vm: ProjectViewModel, onPick: () -> Unit, onDismiss: () -> Unit) {
     val d = vm.drape
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
@@ -1907,6 +1930,7 @@ private fun LayersDialog(
     fun swatch(argb: Int?) = argb?.let { Color(it) } ?: foreground
 
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {
@@ -1954,6 +1978,7 @@ private fun LayersDialog(
 
     editing?.let { layer ->
         AlertDialog(
+            modifier = Modifier.safeBars(),
             onDismissRequest = { editing = null },
             confirmButton = { OutlinedButton(onClick = { editing = null }) { Text(tr("Fechar")) } },
             dismissButton = {

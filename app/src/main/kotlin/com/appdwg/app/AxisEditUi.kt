@@ -136,7 +136,7 @@ fun AlignmentElementsDialog(alignments: List<com.appdwg.core.Alignment>, onDismi
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.95f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.95f)),
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Elementos do eixo")) },
         text = {
@@ -205,6 +205,7 @@ fun AxisDisplayDialog(v: ViewState, onDismiss: () -> Unit) {
         AxisInfo.LENGTHS to tr("Extensões das linhas entre os PIs"),
     )
     androidx.compose.material3.AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {

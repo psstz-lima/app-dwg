@@ -53,6 +53,7 @@ fun ReferencesDialog(vm: ProjectViewModel, onDismiss: () -> Unit) {
     }
 
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {

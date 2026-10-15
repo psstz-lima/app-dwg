@@ -52,6 +52,7 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
     fun n(v: Double, d: Int = 1) = StationFormat.decimal(v, d)
 
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.vol_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },

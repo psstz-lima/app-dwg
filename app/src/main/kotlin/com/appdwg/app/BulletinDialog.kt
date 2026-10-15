@@ -74,6 +74,8 @@ private fun NumField(value: Double, label: String, width: Dp, onValue: (Double) 
 fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, onDismiss: () -> Unit) {
     val v = vm.view ?: return
     val ctx = LocalContext.current
+    val stagesNone = stringResource(R.string.bm_stages_none)
+    val fillItem = stringResource(R.string.bm_item_fill)
     var note by remember { mutableStateOf<String?>(null) }
     fun set(i: Int, item: BulletinItem) { v.bulletinItems = v.bulletinItems.toMutableList().also { it[i] = item } }
     fun money(x: Double) = StationFormat.decimal(x, 2)
@@ -82,7 +84,7 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.96f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.96f)),
         title = { Text(stringResource(R.string.bm_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
         text = {
@@ -103,10 +105,10 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                     }) { Text(stringResource(R.string.bm_from_road)) }
                     OutlinedButton(onClick = {
                         val p = vm.stageProgress?.periods?.lastOrNull()
-                        if (p == null) note = ctx.getString(R.string.bm_stages_none) else {
+                        if (p == null) note = stagesNone else {
                             note = null
                             // Cut of the period spread over the cut items by their contracted share; fill to the fill item.
-                            val fillName = ctx.getString(R.string.bm_item_fill)
+                            val fillName = fillItem
                             val cutItems = items.filter { it.description != fillName && it.unit.trim() in setOf("m³", "m3", "yd³", "yd3") }
                             val cutTotal = cutItems.sumOf { it.contracted }
                             v.bulletinItems = items.map { it ->

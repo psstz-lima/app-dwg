@@ -45,6 +45,7 @@ fun ProDialog(pro: ProStore, onDismiss: () -> Unit) {
     val activity = context as? android.app.Activity
     LaunchedEffect(Unit) { pro.loadPlans() }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text("Gromatic Pro") },
         text = {

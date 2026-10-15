@@ -81,7 +81,7 @@ fun PlatformDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.94f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.94f)),
         confirmButton = {
             OutlinedButton(enabled = valid && v.platformOutline.size >= 3 && vm.tasks.isEmpty(), onClick = {
                 v.platformParams = params(); vm.designPlatform()

@@ -1,7 +1,6 @@
 package com.appdwg.app
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
@@ -79,8 +78,8 @@ class TiledPicture private constructor(
         }
 
         private fun decodeJpeg(bytes: ByteArray, reduce: Int): Raster? {
-            val o = BitmapFactory.Options().apply { inSampleSize = reduce }
-            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o) ?: return null
+            // JPEG blocks are opaque: RGB_565 is half the temporary buffer of ARGB_8888.
+            val bmp = BitmapDecode.decodeBytes(bytes, Bitmap.Config.RGB_565, reduce) ?: return null
             val px = IntArray(bmp.width * bmp.height)
             bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
             return Raster(bmp.width, bmp.height, px).also { bmp.recycle() }
@@ -103,8 +102,11 @@ class TiledPicture private constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val workers = Dispatchers.Default.limitedParallelism(4)
-    private val memory = object : LruCache<String, Bitmap>(64 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    /** Bitmap plus the Compose wrapper, created once so a pan does not allocate a wrapper per tile per frame. */
+    private class Tile(val bitmap: Bitmap, val image: ImageBitmap)
+
+    private val memory = object : LruCache<String, Tile>(64 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Tile) = value.bitmap.byteCount
     }
     private val loading = HashSet<String>()
     /** JPEG pictures have no transparency: their tiles take half the memory as RGB 565. */
@@ -139,7 +141,7 @@ class TiledPicture private constructor(
         if (x1 < x0 || y1 < y0 || (x1 - x0 + 1) * (y1 - y0 + 1) > 600) return out
         for (ty in y0..y1) for (tx in x0..x1) {
             val own = tile(want, tx, ty, load = true)
-            if (own != null) { out += Piece(own.asImageBitmap(), Rect(0, 0, own.width, own.height), tileBounds(want, tx, ty)); continue }
+            if (own != null) { out += Piece(own.image, Rect(0, 0, own.bitmap.width, own.bitmap.height), tileBounds(want, tx, ty)); continue }
             // A coarser tile, cut to this tile's part of it.
             for (up in 1..6) {
                 val k = want + up
@@ -148,8 +150,8 @@ class TiledPicture private constructor(
                 val n = 1 shl up
                 val cw = TILE / n; val ch = TILE / n
                 val ox = (tx - ((tx shr up) shl up)) * cw; val oy = (ty - ((ty shr up) shl up)) * ch
-                val src = Rect(ox, oy, min(ox + cw, b.width), min(oy + ch, b.height))
-                if (src.width() > 0 && src.height() > 0) out += Piece(b.asImageBitmap(), src, tileBounds(want, tx, ty))
+                val src = Rect(ox, oy, min(ox + cw, b.bitmap.width), min(oy + ch, b.bitmap.height))
+                if (src.width() > 0 && src.height() > 0) out += Piece(b.image, src, tileBounds(want, tx, ty))
                 break
             }
         }
@@ -157,15 +159,18 @@ class TiledPicture private constructor(
     }
 
     /** The tile from memory; otherwise starts loading it when [load] (from the file or the pyramid). */
-    private fun tile(k: Int, tx: Int, ty: Int, load: Boolean): Bitmap? {
+    private fun tile(k: Int, tx: Int, ty: Int, load: Boolean): Tile? {
         val key = "$k/$tx/$ty"
         memory.get(key)?.let { return it }
         if (!load) return null
         synchronized(loading) { if (!loading.add(key)) return null }
         scope.launch(workers) {
-            val bmp = runCatching { if (k <= DIRECT) direct(k, tx, ty) else File(dir, "$k-$tx-$ty.jpg").takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path, BitmapFactory.Options().apply { inPreferredConfig = config }) } }.getOrNull()
+            val bmp = runCatching {
+                if (k <= DIRECT) direct(k, tx, ty)
+                else File(dir, "$k-$tx-$ty.jpg").takeIf { it.exists() }?.let { BitmapDecode.decodeFile(it.path, config) }
+            }.getOrNull()
             synchronized(loading) { loading -= key }
-            if (bmp != null) { memory.put(key, bmp); withContext(Dispatchers.Main) { version++ } }
+            if (bmp != null) { memory.put(key, Tile(bmp, bmp.asImageBitmap())); withContext(Dispatchers.Main) { version++ } }
         }
         return null
     }
@@ -204,7 +209,7 @@ class TiledPicture private constructor(
                 suspend fun build(k: Int, tx: Int, ty: Int): Bitmap? {
                     if (tx >= tilesAcross(k) || ty >= tilesDown(k)) return null
                     val file = File(dir, "$k-$tx-$ty.jpg")
-                    if (file.exists()) return BitmapFactory.decodeFile(file.path)
+                    if (file.exists()) return BitmapDecode.decodeFile(file.path, config)
                     coroutineContext.ensureActive()
                     // The four finer tiles: read from the file in parallel at the bottom, one after the
                     // other above it, so only a handful of tiles are held at a time.
@@ -220,11 +225,13 @@ class TiledPicture private constructor(
                         child ?: return@forEachIndexed
                         val left = (i % 2) * TILE / 2; val top = (i / 2) * TILE / 2
                         c.drawBitmap(child, Rect(0, 0, child.width, child.height), Rect(left, top, left + (child.width + 1) / 2, top + (child.height + 1) / 2), paint)
+                        // direct() tiles are not cached. Coarser ones are stored by their own build() call.
+                        if (k - 1 <= DIRECT) child.recycle()
                     }
                     val tmp = File(dir, "$k-$tx-$ty.tmp")
                     tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
                     tmp.renameTo(file)
-                    memory.put("$k/$tx/$ty", bmp)
+                    memory.put("$k/$tx/$ty", Tile(bmp, bmp.asImageBitmap()))
                     count++
                     if (count % 8 == 0L) withContext(Dispatchers.Main) { built = (count.toFloat() / total).coerceAtMost(0.99f); version++ }
                     return bmp
@@ -242,11 +249,11 @@ class TiledPicture private constructor(
         var k = topLevel
         while (k > DIRECT + 1 && max(width shr (k - 1), height shr (k - 1)) <= maxSize) k--
         val w = (width shr k).coerceAtLeast(1); val h = (height shr k).coerceAtLeast(1)
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(w, h, config)
         val c = Canvas(bmp)
         for (ty in 0 until tilesDown(k)) for (tx in 0 until tilesAcross(k)) {
             val f = File(dir, "$k-$tx-$ty.jpg")
-            val t = BitmapFactory.decodeFile(f.path) ?: continue
+            val t = BitmapDecode.decodeFile(f.path, config) ?: continue
             c.drawBitmap(t, (tx * TILE).toFloat(), (ty * TILE).toFloat(), null)
             t.recycle()
         }
@@ -275,11 +282,14 @@ class TiledPicture private constructor(
         val bmp = Bitmap.createBitmap(wk, hk, config)
         val canvas = Canvas(bmp)
         for (ty in y0 / TILE..(y0 + hk - 1) / TILE) for (tx in x0 / TILE..(x0 + wk - 1) / TILE) {
-            val t = memory.get("$k/$tx/$ty") ?: runCatching {
+            val cached = memory.get("$k/$tx/$ty")?.bitmap
+            val t = cached ?: runCatching {
                 if (k <= DIRECT) direct(k, tx, ty)
-                else File(dir, "$k-$tx-$ty.jpg").takeIf { it.exists() }?.let { BitmapFactory.decodeFile(it.path, BitmapFactory.Options().apply { inPreferredConfig = config }) }
+                else File(dir, "$k-$tx-$ty.jpg").takeIf { it.exists() }?.let { BitmapDecode.decodeFile(it.path, config) }
             }.getOrNull() ?: continue
             canvas.drawBitmap(t, (tx * TILE - x0).toFloat(), (ty * TILE - y0).toFloat(), null)
+            // Tiles decoded only for this composite are not the ones the plan is drawing.
+            if (cached == null) t.recycle()
         }
         val plan = Bounds(
             bounds.minX + (x0.toLong() shl k) * px, bounds.maxY - ((y0 + hk).toLong() shl k) * py,

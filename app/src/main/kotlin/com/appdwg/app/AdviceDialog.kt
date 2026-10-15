@@ -22,6 +22,7 @@ import com.appdwg.core.Advice
 @Composable
 fun AdviceDialog(advice: List<Advice>, onDo: (Advice) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         title = { Text(tr("Sugestões para este projeto")) },

@@ -34,6 +34,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
     val current = vm.analysisSurface?.takeIf { it in names } ?: names.firstOrNull()
     fun start(name: String?) { project.surfaces.firstOrNull { it.name == name }?.let { vm.runAnalysis(it) } }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.ta_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },

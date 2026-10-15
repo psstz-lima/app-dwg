@@ -89,6 +89,7 @@ fun AsBuiltDialog(
     val report = vm.asBuilt
 
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.asbuilt_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },

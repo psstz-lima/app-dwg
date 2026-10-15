@@ -58,6 +58,7 @@ fun SurfaceEditDialog(vm: ProjectViewModel, project: LandXmlProject, st: Surface
         st.surface = vm.editedName(s.name)
     }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.se_title)) },
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },

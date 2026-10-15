@@ -82,6 +82,7 @@ fun StatesSection(vm: ProjectViewModel, onAddState: () -> Unit, onTimeline: () -
         var name by remember(i) { mutableStateOf(s.name) }
         var date by remember(i) { mutableStateOf(s.date) }
         AlertDialog(
+            modifier = Modifier.safeBars(),
             onDismissRequest = { editing = null },
             confirmButton = { OutlinedButton(onClick = { vm.editState(i, name, date); editing = null }) { Text(tr("OK")) } },
             dismissButton = { OutlinedButton(onClick = { editing = null }) { Text(tr("Cancelar")) } },

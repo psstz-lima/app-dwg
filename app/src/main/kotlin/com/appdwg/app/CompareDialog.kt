@@ -58,6 +58,7 @@ fun CompareDialog(
 ) {
     val names = project.surfaces.map { it.name }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = { OutlinedButton(onClick = onDismiss) { Text(tr("Fechar")) } },
         dismissButton = {

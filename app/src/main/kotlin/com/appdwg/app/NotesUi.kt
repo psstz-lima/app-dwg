@@ -42,7 +42,7 @@ fun thumbnail(file: File, maxSide: Int = 800): ImageBitmap? {
     BitmapFactory.decodeFile(file.path, b)
     var s = 1
     while (maxOf(b.outWidth, b.outHeight) / s > maxSide) s *= 2
-    return BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = s })?.asImageBitmap()
+    return BitmapDecode.decodeFile(file.path, BitmapDecode.configForMime(b.outMimeType), s)?.asImageBitmap()
 }
 
 /** Creates or edits a field note: text, elevation and a photo from the camera or the gallery. */
@@ -60,6 +60,7 @@ fun NoteDialog(vm: ProjectViewModel, initial: FieldNote, isNew: Boolean, onDismi
     val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) vm.importPhoto(uri)?.let { photo = it } }
     val thumb = remember(photo) { photo?.let { thumbnail(File(vm.notesDir, it)) } }
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         confirmButton = {
             OutlinedButton(onClick = {

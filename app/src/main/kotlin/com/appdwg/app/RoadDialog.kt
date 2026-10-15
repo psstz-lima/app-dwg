@@ -93,7 +93,7 @@ fun RoadDialog(
     AlertDialog(
         onDismissRequest = { v.roadParams = rp; onDismiss() },
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.fillMaxWidth(0.95f),
+        modifier = Modifier.safeBars().then(Modifier.fillMaxWidth(0.95f)),
         confirmButton = {
             OutlinedButton(enabled = vm.tasks.isEmpty(), onClick = { v.roadParams = rp; vm.designRoad(); tab = RoadTab.RESULT }) { Text(tr("Calcular")) }
         },

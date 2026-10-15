@@ -190,7 +190,7 @@ fun GTopBar(fileName: String?, compact: Boolean = false, actions: @Composable Ro
 
 private fun Modifier.drawBottomBorder(c: Color, w: Dp) = this.then(Modifier.drawBehindLine(c, w, top = false))
 private fun Modifier.drawTopBorder(c: Color, w: Dp) = this.then(Modifier.drawBehindLine(c, w, top = true))
-private fun Modifier.drawBehindLine(c: Color, w: Dp, top: Boolean) = Modifier.drawBehind {
+private fun Modifier.drawBehindLine(c: Color, w: Dp, top: Boolean) = drawBehind {
     val y = if (top) 0f else size.height - w.toPx() / 2
     drawLine(c, Offset(0f, y), Offset(size.width, y), w.toPx())
 }
@@ -480,6 +480,7 @@ fun AppearanceDialog(current: ThemeChoice, onPick: (ThemeChoice) -> Unit, onAbou
                      /** Gromatic Pro: whether it is on, and the screen that explains and sells it. */
                      pro: Boolean = false, onPro: (() -> Unit)? = null) {
     AlertDialog(
+        modifier = Modifier.safeBars(),
         onDismissRequest = onDismiss,
         title = { Text(tr("Configurações")) },
         text = {
