@@ -102,6 +102,8 @@ const val PLATFORM_LABEL = "Plataforma"
 /** Name of the designed road surfaces and the suffix of its axis. */
 const val ROAD_LABEL = "Corredor"
 const val ROAD_SUFFIX = " (projeto)"
+/** Name the section sheets give the axis drawn with PIs (road axis not built yet). */
+const val PIS_AXIS = "\u0001PIs"
 
 /** File laid over the open project; [uri] is null for a surface the app generated. */
 data class AddedFile(val label: String, val project: LandXmlProject, val uri: Uri?)
@@ -2096,17 +2098,60 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         app.getSharedPreferences("sheets", android.content.Context.MODE_PRIVATE).edit()
             .putString("company", p.company).putString("responsible", p.responsible).putString("registration", p.registration).apply()
         val project = (state as? ProjectState.Loaded)?.project ?: return
-        val axis = project.alignments.firstOrNull { it.name == p.alignment } ?: project.alignments.firstOrNull() ?: return
+        val axis = sheetAxis(p.alignment, project) ?: return
         val hidden = hiddenLayers()
-        val surfaces = project.surfaces.filter { it.name !in hidden }
+        // Measurement sheets take every survey state, shown or not, in date order.
+        val measurement = p.measurement && states.size >= 2
+        val surfaces = if (measurement) states.mapNotNull { stateSurface(it) } else project.surfaces.filter { it.name !in hidden }
         val roadSections = road?.takeIf { it.alignment.name == axis.name }?.sections
         val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, com.appdwg.core.Display.locale).format(java.util.Date())
+        val logoUri = p.logo
         writeTo(target, app.getString(R.string.sh_export)) { out ->
+            val logo = logoUri?.let { runCatching { readLogo(Uri.parse(it)) }.getOrNull() }
             val doc = android.graphics.pdf.PdfDocument()
-            val built = SectionSheets.render(doc, p, axis, surfaces, roadSections, title, date)
+            val built = SectionSheets.render(doc, p, axis, surfaces, roadSections, title, date, measurement, logo)
             doc.writeTo(out); doc.close()
             if (built.sections == 0) error(app.getString(R.string.sh_none))
         }
+    }
+
+    /** Logo picture for the title block, decoded small (it is printed a few centimetres wide). */
+    private fun readLogo(uri: Uri): android.graphics.Bitmap? {
+        val cr = getApplication<Application>().contentResolver
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 800) sample *= 2
+        return cr.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) }
+    }
+
+    fun setSheetLogo(uri: Uri?) {
+        val v = view ?: return
+        uri?.let { runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
+        v.sheetParams = v.sheetParams.copy(logo = uri?.toString())
+    }
+
+    /** Axis of the sheets: an alignment of the project by name, or the axis drawn with PIs. */
+    fun sheetAxis(name: String?, project: LandXmlProject): Alignment? {
+        val rp = view?.roadParams
+        if (name == PIS_AXIS) return rp?.takeIf { it.pis.size >= 2 }?.let { roadAxis(it.copy(alignmentIndex = -1), project) }
+        return project.alignments.firstOrNull { it.name == name } ?: project.alignments.firstOrNull()
+            ?: rp?.takeIf { it.pis.size >= 2 }?.let { roadAxis(it.copy(alignmentIndex = -1), project) }
+    }
+
+    /**
+     * Straight axis through the middle of the measured area, along its longest side, laid as the two
+     * PIs of the road axis so it can be edited there. False when there is no surface to follow.
+     */
+    fun generateAutoAxis(): Boolean {
+        val v = view ?: return false
+        val project = (state as? ProjectState.Loaded)?.project ?: return false
+        val surface = states.firstOrNull()?.let { stateSurface(it) }
+            ?: project.surfaces.filter { !it.name.startsWith(ROAD_LABEL) && !it.name.startsWith(PLATFORM_LABEL) }.maxByOrNull { it.triangleCount } ?: return false
+        val axis = com.appdwg.core.SurveySections.autoAxis(surface, tr("Eixo")) ?: return false
+        val line = axis.elements.single()
+        v.roadParams = v.roadParams.copy(alignmentIndex = -1, pis = listOf(line.start, line.end), radii = emptyList(), spirals = emptyList())
+        return true
     }
 
     // ---- Measurement bulletin ----

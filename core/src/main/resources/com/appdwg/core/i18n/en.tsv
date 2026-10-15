@@ -1188,3 +1188,25 @@ Sem superfície em: {0}.	No surface in: {0}.
 {0} e {1} não se sobrepõem.	{0} and {1} do not overlap.
 Raio grande demais para as tangentes; reduzido para caber: {0}.	Radius too large for the tangents; reduced to fit: {0}.
 Só um estado está à vista. Toque em Mostrar todos para comparar superfícies, ou use Volumes entre estados.	Only one state is shown. Tap Show all to compare surfaces, or use Volumes between states.
+Eixo desenhado (PIs)	Drawn axis (PIs)
+O projeto não tem eixo. Desenhe os PIs ou gere um eixo automático pelo meio da área medida.	The project has no axis. Draw the PIs or generate an automatic axis through the middle of the measured area.
+Desenhar eixo	Draw axis
+Gerar eixo automático	Generate automatic axis
+Medição	Measurement
+Perfis dos estados ({0})	State profiles ({0})
+Completar onde a medição não alcança	Complete where the survey does not reach
+Cada seção traz os perfis de {0}, as áreas de corte e aterro entre eles e, no fim, o quadro de volumes.	Each section shows the profiles of {0}, the cut and fill areas between them and, at the end, the volume table.
+Logo escolhido	Logo chosen
+Sem logo	No logo
+Escolher logo	Choose logo
+{0}→{1}: C {2} · A {3} {4}	{0}→{1}: C {2} · F {3} {4}
+Seção completada pelo app (tracejado fino)	Section completed by the app (fine dashes)
+QUADRO DE VOLUMES (média das áreas)	VOLUME TABLE (average end areas)
+Área corte	Cut area
+Área aterro	Fill area
+Vol. corte	Cut vol.
+Vol. aterro	Fill vol.
+Período: {0}	Period: {0}
+Acumulado: {0}	Cumulative: {0}
+SEÇÕES DE MEDIÇÃO	MEASUREMENT SECTIONS
+Trecho completado pelo app (interpolado ou pela primitiva)	Stretch completed by the app (interpolated or from the original ground)

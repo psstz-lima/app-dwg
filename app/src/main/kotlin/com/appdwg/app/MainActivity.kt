@@ -438,6 +438,8 @@ private fun ProjectScreen(
     val statePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) vm.addState(uris)
     }
+    // Company logo for the title block of the section sheets.
+    val logoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.setSheetLogo(uri) }
     val hasDriveApp = remember { CloudDocs.driveInstalled(ctx0) }
     fun addFiles(drive: Boolean) { addDrive.set(drive); filePicker.launch(arrayOf("*/*")) }
     // COGO points: dialog, tapped point, point being edited or created, and the "create" mode.
@@ -1366,8 +1368,10 @@ private fun ProjectScreen(
     if (showSheets) {
         SheetsDialog(vm, project, fileName, onMake = { p ->
             sheetParams = p
-            sheetsSaver.launch("$baseName-secoes-${(p.alignment ?: "eixo").replace(Regex("[^A-Za-z0-9_-]+"), "_")}.pdf")
-        }, onDismiss = { showSheets = false })
+            sheetsSaver.launch("$baseName-secoes-${(p.alignment ?: "eixo").replace(Regex("[^A-Za-z0-9_-]+"), "_").trim('_')}.pdf")
+        }, onDismiss = { showSheets = false },
+            onDrawAxis = { showSheets = false; measuring = false; show3d = false; v.roadParams = v.roadParams.copy(alignmentIndex = -1); drawingRoad = true },
+            onPickLogo = { logoPicker.launch(arrayOf("image/*")) })
     }
 
     if (showSurfaceEdit) {
@@ -1622,7 +1626,7 @@ private fun ProjectScreen(
             },
             toDrive = if (hasDrive) exportToDrive else null,
             onToDrive = { exportToDrive = it },
-            onSheets = if (project.alignments.isNotEmpty()) ({ showExport = false; showSheets = true }) else null,
+            onSheets = { showExport = false; showSheets = true },
             onDismiss = { showExport = false },
         )
     }
