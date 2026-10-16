@@ -548,9 +548,13 @@ fun PlanView(
                 val cx = cam.centerX + origin.x; val cy = cam.centerY + origin.y
                 for (p in tp.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale, imageQuality)) {
                     val tl = toScreen(Point2(p.plan.minX, p.plan.maxY), cam); val br = toScreen(Point2(p.plan.maxX, p.plan.minY), cam)
+                    // Both corners rounded on their own, so a tile ends on the pixel where the next
+                    // one starts. Rounding the size instead left 1 px seams along the tile grid.
+                    val x0 = tl.x.roundToInt(); val y0 = tl.y.roundToInt()
+                    val x1 = br.x.roundToInt(); val y1 = br.y.roundToInt()
                     drawImage(p.image, srcOffset = IntOffset(p.src.left, p.src.top), srcSize = IntSize(p.src.width(), p.src.height()),
-                        dstOffset = IntOffset(tl.x.roundToInt(), tl.y.roundToInt()),
-                        dstSize = IntSize((br.x - tl.x).roundToInt().coerceAtLeast(1), (br.y - tl.y).roundToInt().coerceAtLeast(1)),
+                        dstOffset = IntOffset(x0, y0),
+                        dstSize = IntSize((x1 - x0).coerceAtLeast(1), (y1 - y0).coerceAtLeast(1)),
                         blendMode = BlendMode.SrcAtop)
                 }
             }

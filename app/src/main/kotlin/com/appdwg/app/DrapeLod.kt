@@ -24,8 +24,8 @@ internal object DrapeLod {
      * would delay the first frame, which has to match the old single-texture path.
      */
     const val UPLOADS_PER_FRAME = 2
-    /** Background decodes that may be in flight. The GL thread still uploads fewer. */
-    const val DECODES_IN_FLIGHT = 2
+    /** Background decodes that may be in flight. Three keep a deflate orthophoto refining after an orbit. */
+    const val DECODES_IN_FLIGHT = 3
     /**
      * Refined tiles drawn on top of the base. Each one only draws the mesh chunks under it
      * ([MeshChunks]), so this no longer multiplies the whole TIN. Six left most of a Máxima view

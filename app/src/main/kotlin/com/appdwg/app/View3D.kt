@@ -404,7 +404,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private val ready = ConcurrentLinkedQueue<PendingTile>()
     private val queuedKeys = ConcurrentHashMap.newKeySet<String>()
     private val failedKeys = ConcurrentHashMap.newKeySet<String>()
-    private val decoder = Executors.newFixedThreadPool(DrapeLod.DECODES_IN_FLIGHT) { runnable ->
+    // One more thread than decodes, so rebuilding the plan after an orbit never waits behind them.
+    private val decoder = Executors.newFixedThreadPool(DrapeLod.DECODES_IN_FLIGHT + 1) { runnable ->
         Thread(runnable, "drape-decode").apply { isDaemon = true }
     }
     private var useStamp = 0L
