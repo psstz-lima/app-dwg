@@ -3035,6 +3035,34 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Civil 3D pipe network of the placed drainage. The sweep runs on the export thread. */
+    fun exportPipeNetwork(target: Uri) {
+        val devices = drainage
+        val catalog = drainageCatalog
+        val project = exportProject() ?: return
+        writeTo(target, tr("rede de drenagem")) { out ->
+            val hidden = hiddenLayers()
+            val surfaces = project.surfaces.filter { it.name !in hidden && it.triangleCount > 0 }
+            val terrain: (Double, Double) -> Double? = { x, y -> surfaces.firstNotNullOfOrNull { it.elevationAt(Point2(x, y)) } }
+            val alignmentOf: (String) -> Alignment? = { name -> project.alignments.firstOrNull { it.name == name } }
+            val graph = com.appdwg.core.drainage.DrainageNetwork.analyze(
+                devices,
+                { placed -> catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) } },
+                { false },
+                { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
+                terrain,
+                alignmentOf,
+            )
+            val circular = devices.associate { placed ->
+                val type = catalog.device(placed.code)?.section?.type.orEmpty()
+                placed.id to ("circular" in type || "barrel" in type)
+            }
+            out.writer(Charsets.UTF_8).use { writer ->
+                com.appdwg.core.drainage.PipeNetworkWriter.write("Drenagem", graph, { circular[it] == true }, writer)
+            }
+        }
+    }
+
     /** Points and lines for GIS files: the drawing's, the axes and [extra] (measurement, section…). */
     private fun gisContent(extra: List<ExportLine>): Pair<List<CogoPoint>, List<com.appdwg.core.Polyline>>? {
         val p = exportProject() ?: return null

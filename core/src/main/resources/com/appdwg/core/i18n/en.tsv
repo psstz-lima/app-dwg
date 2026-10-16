@@ -1481,3 +1481,7 @@ Colchão drenante: {0} m³ (espessura {1} m, talude {2} m).	Drainage blanket: {0
 Fase	Phase
 Sem fase	No phase
 Ver até a fase	Show through phase
+Rede de drenagem (LandXML)	Drainage network (LandXML)
+Tubos e estruturas da rede, para o Civil 3D	Pipes and structures of the network, for Civil 3D
+Sem dispositivos de drenagem no projeto	No drainage devices in the project
+rede de drenagem	drainage network

@@ -676,6 +676,7 @@ private fun ProjectScreen(
             when (kind) {
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
+                ExportKind.PIPES -> vm.exportPipeNetwork(uri)
                 ExportKind.POINTS -> vm.exportPoints(uri)
                 ExportKind.KML -> vm.exportKml(uri, line)
                 ExportKind.GEOJSON -> vm.exportGeoJson(uri, line)
@@ -2101,7 +2102,11 @@ private fun ProjectScreen(
             onIncludeModels = { includeModels = it },
             crs = crs,
             onCrs = { showExport = false; showCrs = true },
-            onExport = { kind ->
+            onExport = export@{ kind ->
+                if (kind == ExportKind.PIPES && !proOpen(ProFeature.DRAINAGE)) {
+                    vm.proRequested = true
+                    return@export
+                }
                 showExport = false
                 if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind
                 else { pendingExport = kind; driveNext.set(exportToDrive); exportSaver.launch(baseName + kind.suffix) }

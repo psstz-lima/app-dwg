@@ -35,6 +35,7 @@ import androidx.compose.ui.draw.clip
 enum class ExportKind(private val labelPt: String, val suffix: String) {
     DXF("DXF", ".dxf"),
     LANDXML("LandXML", "-landxml.xml"),
+    PIPES("Rede de drenagem (LandXML)", "-drenagem.xml"),
     POINTS("Pontos PDENZ (TXT)", "-pontos.txt"),
     KML("KML (Google Earth)", ".kml"),
     GEOJSON("GeoJSON", ".geojson"),
@@ -95,6 +96,12 @@ fun ExportDialog(
                     if (vm.models.isNotEmpty()) ExportOption(tr("Modelos 3D como 3DFACE"), includeModels, onIncludeModels)
                 }
                 ExportRow(GIcon.CONTOURS, ExportKind.LANDXML.label, tr("Superfícies, eixos, greide e pontos para o Civil 3D")) { onExport(ExportKind.LANDXML) }
+                ExportRow(
+                    GIcon.DRAINAGE,
+                    ExportKind.PIPES.label,
+                    if (vm.drainage.isEmpty()) tr("Sem dispositivos de drenagem no projeto") else tr("Tubos e estruturas da rede, para o Civil 3D"),
+                    enabled = vm.drainage.isNotEmpty(),
+                ) { onExport(ExportKind.PIPES) }
 
                 ExportGroup(tr("Mapas e SIG"))
                 val geoNote = if (geoOk) null else tr("Indisponível em sistema local")
