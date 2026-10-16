@@ -45,7 +45,7 @@ fun SheetsDialog(vm: ProjectViewModel, project: LandXmlProject, fileName: String
     }) }
     // Measurement sheets by default once the project has survey states.
     LaunchedEffect(Unit) { if (vm.states.size >= 2 && !p.measurement) p = p.copy(measurement = true) }
-    val names = project.alignments.map { it.name } + listOfNotNull(PIS_AXIS.takeIf { v.roadParams.pis.size >= 2 })
+    val names = (project.alignments.map { it.name } + vm.drainageAxes.map { it.name }).distinct() + listOfNotNull(PIS_AXIS.takeIf { v.roadParams.pis.size >= 2 })
     val axisName = p.alignment?.takeIf { it in names } ?: names.firstOrNull()
     val axis = vm.sheetAxis(axisName, project)
     fun axisLabel(n: String) = if (n == PIS_AXIS) tr("Eixo desenhado (PIs)") else n

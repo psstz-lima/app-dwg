@@ -12,6 +12,39 @@ import kotlin.math.min
  * invert follows it (a grade break, still downhill) so the cut stays small. Where the ground
  * rises, the invert holds the minimum grade and the trench gets deeper.
  */
+/**
+ * Ground samples along a path. A hole in the TIN is filled from the samples that do hit it.
+ * A path with no hit at all stays unknown (NaN): it is never treated as elevation 0.
+ */
+object GroundCover {
+    fun fill(raw: Array<Double?>): Pair<DoubleArray, Boolean> {
+        val n = raw.size
+        val known = ArrayList<Int>(n)
+        for (i in 0 until n) if (raw[i]?.isFinite() == true) known += i
+        val out = DoubleArray(n) { Double.NaN }
+        if (known.isEmpty()) return out to true
+        for (i in 0 until n) {
+            val value = raw[i]
+            if (value != null && value.isFinite()) {
+                out[i] = value
+                continue
+            }
+            val prev = known.lastOrNull { it < i }
+            val next = known.firstOrNull { it > i }
+            out[i] = when {
+                prev != null && next != null -> {
+                    val t = (i - prev).toDouble() / (next - prev).toDouble()
+                    raw[prev]!! * (1.0 - t) + raw[next]!! * t
+                }
+                prev != null -> raw[prev]!!
+                next != null -> raw[next]!!
+                else -> Double.NaN
+            }
+        }
+        return out to (known.size != n)
+    }
+}
+
 object HydraulicGrade {
     const val DEFAULT_MIN_SLOPE = 0.005
     const val SHORING_DEPTH = 1.25
@@ -55,6 +88,10 @@ object HydraulicGrade {
         val invertUpstream: Double,
         val invertDownstream: Double,
         val maxCut: Double,
+        /** True when part of the path missed the TIN and was filled from the samples that hit it. */
+        val offSurface: Boolean = false,
+        /** Mean downhill grade, rise over run. Not the minimum the designer asked for. */
+        val actualSlope: Double = minSlope,
     )
 
     fun design(
@@ -74,8 +111,8 @@ object HydraulicGrade {
         downstreamAtStart: Boolean? = null,
     ): Result {
         val n = min(distances.size, terrain.size)
-        if (n < 2) {
-            return Result(emptyList(), false, 0.0, 0.0, 0.0, 0.0, 0.0, false, false, 0.0, minSlope, 0.0, 0.0, 0.0)
+        if (n < 2 || (0 until n).any { !terrain[it].isFinite() }) {
+            return Result(emptyList(), false, 0.0, 0.0, 0.0, 0.0, 0.0, false, false, 0.0, minSlope, 0.0, 0.0, 0.0, offSurface = true)
         }
         val height = deviceHeight.coerceAtLeast(0.05)
         val width = deviceWidth.coerceAtLeast(0.05)
@@ -149,10 +186,20 @@ object HydraulicGrade {
         val length = abs(distances[n - 1] - distances[0])
         val upIndex = order.first()
         val downIndex = order.last()
-        return Result(
-            samples, downStart, cut, back, bedVol, spoil, fill, tooDeep, shoring, length, slopeMin,
-            invert[upIndex], invert[downIndex], maxCut,
-        )
+        val drop = invert[upIndex] - invert[downIndex]
+        val actual = if (length > 1e-9) max(0.0, drop / length) else slopeMin
+        // A surface device is the catalog section. It is not a trench, so it has no backfill or shoring.
+        return if (buried) {
+            Result(
+                samples, downStart, cut, back, bedVol, spoil, fill, tooDeep, shoring, length, slopeMin,
+                invert[upIndex], invert[downIndex], maxCut, actualSlope = actual,
+            )
+        } else {
+            Result(
+                samples, downStart, 0.0, 0.0, 0.0, 0.0, 0.0, false, false, length, slopeMin,
+                invert[upIndex], invert[downIndex], 0.0, actualSlope = actual,
+            )
+        }
     }
 }
 

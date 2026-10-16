@@ -25,6 +25,7 @@ internal object DownloadNames {
         "json", "geojson" -> "application/json"
         "zip" -> "application/zip"
         "pdf" -> "application/pdf"
+        "ifc" -> "application/x-step"
         "gmt" -> "application/octet-stream"
         else -> "application/octet-stream"
     }

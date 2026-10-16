@@ -17,8 +17,17 @@ object Display {
     @Volatile var locale: Locale = Locale.forLanguageTag("pt-BR")
     @Volatile var units: UnitSystem = UnitSystem.METRIC
 
-    /** Imperial by default only in the United States. */
-    fun defaultUnits(locale: Locale) = if (locale.country.equals("US", true)) UnitSystem.IMPERIAL else UnitSystem.METRIC
+    /**
+     * Imperial only for English in the United States.
+     * Portuguese is metric even when a global ROM leaves the region as US (pt-US).
+     */
+    fun defaultUnits(locale: Locale): UnitSystem {
+        val language = locale.language.lowercase(Locale.ROOT)
+        val country = locale.country.uppercase(Locale.ROOT)
+        if (language == "pt" || country == "BR") return UnitSystem.METRIC
+        if (language == "en" && country == "US") return UnitSystem.IMPERIAL
+        return UnitSystem.METRIC
+    }
 
     val imperial get() = units == UnitSystem.IMPERIAL
     /** Portuguese uses E/D for left/right of the axis; other languages L/R. */

@@ -60,9 +60,14 @@
     <string name="vol_elevation">Cota (%1$s)</string>
     <string name="vol_base_hint">Pilha: plano pela borda (terreno inclinado) ou menor cota. Volume até a cota: material acima da cota (corte) e espaço abaixo dela (aterro).</string>
     <string name="vol_compute">Calcular</string>
-    <string name="vol_above">Acima da base (material / corte): %1$s em %2$s</string>
-    <string name="vol_below">Abaixo da base (vazio / aterro): %1$s em %2$s</string>
-    <string name="vol_net">Saldo %1$s · área %2$s · cotas da superfície %3$s a %4$s · malha %5$s</string>
+    <string name="vol_result">Resultado</string>
+    <string name="vol_cut">Corte</string>
+    <string name="vol_cut_area">Área de corte</string>
+    <string name="vol_fill_row">Aterro</string>
+    <string name="vol_fill_area">Área de aterro</string>
+    <string name="vol_balance">Saldo</string>
+    <string name="vol_elevations">Cotas da superfície</string>
+    <string name="vol_cell">Malha</string>
     <string name="vol_base_flat">Base horizontal na cota %1$s</string>
     <string name="vol_base_inclined">Base inclinada: %1$s %% em E, %2$s %% em N</string>
     <string name="vol_base_surface">Base: superfície %1$s</string>

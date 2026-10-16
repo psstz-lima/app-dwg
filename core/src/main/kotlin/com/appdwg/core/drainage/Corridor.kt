@@ -27,6 +27,23 @@ object Corridor {
     ): Layers {
         val used = stride(frames)
         if (used.size < 2) return empty()
+        if (!buried) {
+            val water = Soup()
+            val half = innerHalfWidth.coerceAtLeast(0.0)
+            if (half > 0.02) {
+                for (i in 0 until used.size - 1) {
+                    val a = used[i]
+                    val b = used[i + 1]
+                    val zA = a.invertZ + 0.02
+                    val zB = b.invertZ + 0.02
+                    water.quad(
+                        at(a, -half, zA), at(b, -half, zB),
+                        at(b, half, zB), at(a, half, zA),
+                    )
+                }
+            }
+            return Layers(DoubleArray(0), DoubleArray(0), DoubleArray(0), DoubleArray(0), water.pack())
+        }
         val trench = Soup()
         val bed = Soup()
         val back = Soup()

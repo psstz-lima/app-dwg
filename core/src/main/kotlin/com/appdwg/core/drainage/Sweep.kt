@@ -305,6 +305,7 @@ object Sweep {
         val frames = ArrayList<SweepFrame>(dense.size)
         val frameMinZ = ArrayList<Double>(dense.size)
         val grounds = ArrayList<Pair<Double, Double>>(dense.size)
+        var held = Double.NaN
         for (i in dense.indices) {
             val node = dense[i]
             val tangent = tangentAt(dense, i)
@@ -313,8 +314,10 @@ object Sweep {
             val rightY = -tangent.first
             val cx = node.x + rightX * signedOffset * miter
             val cy = node.y + rightY * signedOffset * miter
-            val reference = hydraulics?.samples?.getOrNull(i)?.invert
+            val sampled = hydraulics?.samples?.getOrNull(i)?.invert
                 ?: referenceZ(grade, node.distance - dense.first().distance, length, node.station, terrain(cx, cy), profileAt(node.station))
+            val reference = if (sampled.isFinite()) sampled.also { held = it } else held
+            if (!reference.isFinite()) continue
             val refY = when (grade.mode) {
                 GradeMode.SURFACE_TOP -> maxY
                 GradeMode.PROFILE -> 0.0
@@ -337,6 +340,7 @@ object Sweep {
                 topZ = reference + (maxY - refY),
             )
         }
+        if (outerPlaced.size < 2) return null
         val raw = if (innerPlaced.isEmpty()) loft(outerPlaced) else loftShell(outerPlaced, innerPlaced, openMouth)
         val lift = if (grade.mode == GradeMode.HYDRAULIC) {
             if (grade.buried) 0.0 else HydraulicGrade.SURFACE_SEAT
@@ -457,7 +461,9 @@ object Sweep {
         val dy = abs(b.y - a.y)
         val top = ring.maxOf { it.y }
         val mid = (a.y + b.y) / 2.0
-        return mid >= top - 1e-4 && dx > 1e-3 && dx >= dy * 2
+        val height = top - ring.minOf { it.y }
+        val nearTop = mid >= top - 0.02 || mid >= top - height * 0.15
+        return nearTop && dx > 1e-3 && dx >= dy
     }
 
     private fun local(ox: Double, oy: Double, lx: Double, ly: Double, dx: Double, dy: Double, skew: Double): Point2 {
@@ -466,7 +472,8 @@ object Sweep {
     }
 
     private fun referenceZ(grade: GradeSpec, distance: Double, length: Double, station: Double, terrainZ: Double?, profileZ: Double?): Double {
-        val ground = terrainZ ?: 0.0
+        // Missing ground stays unknown. Callers hold the last real sample instead of dropping to 0.
+        val ground = terrainZ ?: Double.NaN
         return when (grade.mode) {
             GradeMode.SURFACE_TOP -> ground
             GradeMode.SURFACE_INVERT -> ground - grade.depth
@@ -489,7 +496,7 @@ object Sweep {
     ): HydraulicGrade.Result? {
         if (grade.mode != GradeMode.HYDRAULIC || dense.size < 2) return null
         val distances = DoubleArray(dense.size)
-        val grounds = DoubleArray(dense.size)
+        val raw = arrayOfNulls<Double>(dense.size)
         val origin = dense.first().distance
         for (i in dense.indices) {
             val node = dense[i]
@@ -500,14 +507,16 @@ object Sweep {
             distances[i] = node.distance - origin
             val cx = node.x + rightX * signedOffset * miter
             val cy = node.y + rightY * signedOffset * miter
-            grounds[i] = terrain(cx, cy) ?: 0.0
+            raw[i] = terrain(cx, cy)
         }
+        val (grounds, offSurface) = GroundCover.fill(raw)
+        if (grounds.any { !it.isFinite() }) return null
         return HydraulicGrade.design(
             distances, grounds, height, width, area, grade.buried,
             minSlope = grade.minSlope, minCover = if (grade.buried) grade.minCover else 0.0,
             maxDepth = grade.maxDepth,
             downstreamAtStart = if (grade.flowAuto) null else grade.flowToStart,
-        )
+        ).copy(offSurface = offSurface)
     }
 
     private fun ringArea(ring: List<SectionPoint>): Double {
@@ -758,12 +767,16 @@ data class DeviceTakeoff(
     val invertDown: Double = Double.NaN,
     val gradeSlope: Double = Double.NaN,
     val cutDepth: Double = Double.NaN,
+    /** Triangles kept for this device after its own budget. */
+    val drawnTriangles: Int = 0,
 ) {
     operator fun plus(other: DeviceTakeoff) = DeviceTakeoff(
         "", "", length + other.length, concrete + other.concrete, excavation + other.excavation,
         formwork + other.formwork, formworkKnown || other.formworkKnown,
         backfill + other.backfill, bedding + other.bedding, spoil + other.spoil, fill + other.fill,
         trench + other.trench, shoring || other.shoring, tooDeep || other.tooDeep,
+        cutDepth = listOf(cutDepth, other.cutDepth).filter { it.isFinite() }.maxOrNull() ?: Double.NaN,
+        drawnTriangles = drawnTriangles + other.drawnTriangles,
     )
 }
 

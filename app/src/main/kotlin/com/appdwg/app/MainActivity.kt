@@ -17,7 +17,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -587,6 +590,12 @@ private fun ProjectScreen(
     var outletSoil by remember(fileName) { mutableStateOf(com.appdwg.core.drainage.OutletSoil.CLAY) }
     var drainagePhaseThrough by remember(fileName) { mutableIntStateOf(0) }
     var drainageMore by remember(fileName) { mutableStateOf(false) }
+    var dockAt by remember(fileName) { mutableStateOf(androidx.compose.ui.geometry.Offset(Float.NaN, Float.NaN)) }
+    var dockW by remember(fileName) { mutableStateOf(1) }
+    var dockH by remember(fileName) { mutableStateOf(1) }
+    var chipsAt by remember(fileName) { mutableStateOf(androidx.compose.ui.geometry.Offset(16f, 200f)) }
+    var chipsOpen by remember(fileName) { mutableStateOf(false) }
+    var suggestNote by remember(fileName) { mutableStateOf<String?>(null) }
     var showDrainDevice by remember(fileName) { mutableStateOf(true) }
     var showDrainCut by remember(fileName) { mutableStateOf(true) }
     var showDrainBackfill by remember(fileName) { mutableStateOf(true) }
@@ -699,6 +708,10 @@ private fun ProjectScreen(
             showExport = true
         }
     }
+    val ifcSaver = rememberLauncherForActivityResult(CreateDocumentAt("application/x-step", ::driveStart)) { uri ->
+        pendingExport = null
+        if (uri != null) vm.exportDrainIfc(uri)
+    }
     val window = androidx.activity.compose.LocalActivity.current?.window
     val baseName = fileName.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
     LaunchedEffect(captureFor) {
@@ -753,14 +766,15 @@ private fun ProjectScreen(
     }
     val gpsInfo = remember(project, gpsPoint, frozenLayers) { gpsPoint?.let { PointQuery.at(project, it, frozenLayers.toSet()) } }
     LaunchedEffect(gpsPoint, gpsFollow) { if (gpsFollow && gpsPoint != null) { focus = gpsPoint; focusKey++ } }
-    val sectionAxis = project.alignments.getOrNull(sectionAlignment)
+    val axes = project.alignments + vm.drainageAxes
+    val sectionAxis = axes.getOrNull(sectionAlignment)
     val section = remember(project, sectionAxis, sectionStation, sectionHalfWidth, frozenLayers, showSection) {
         if (!showSection || sectionAxis == null) null
         else CrossSection.at(sectionAxis, sectionStation, project.surfaces.filter { it.name !in frozenLayers }, sectionHalfWidth)
     }
     // On the road's own axis, the profile shows (and edits) the PVIs typed for the road.
     val roadPvis = v.roadParams.pvis.sortedBy { it.station }.takeIf { it.size >= 2 && sectionAxis?.name?.endsWith(ROAD_SUFFIX) == true }
-    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile, roadPvis, v.roadParams.kValue) {
+    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile, roadPvis, v.roadParams.kValue, vm.drainageAxes) {
         if (!showProfile || sectionAxis == null) null
         else {
             val axis = if (roadPvis == null) sectionAxis else com.appdwg.core.Alignment(sectionAxis.name, sectionAxis.startStation, sectionAxis.elements,
@@ -768,6 +782,29 @@ private fun ProjectScreen(
                     roadPvis[i].takeIf { it.curveLength > 0 } ?: pv
                 }))
             LongProfile.of(axis, project.surfaces.filter { it.name !in frozenLayers && !it.name.startsWith(ROAD_LABEL) })
+        }
+    }
+    val profileCrown = remember(longProfile, drainageBuilt) {
+        val drawn = longProfile ?: return@remember null
+        val run = drainageBuilt?.runProfiles?.find { it.name == drawn.alignment } ?: return@remember null
+        val samples = run.samples
+        if (samples.size < 2) return@remember null
+        DoubleArray(drawn.stations.size) { index ->
+            val station = drawn.stations[index]
+            val nextAt = samples.indexOfFirst { it.station >= station }.let { if (it < 0) samples.lastIndex else it }
+            val prevAt = (nextAt - 1).coerceAtLeast(0)
+            val a = samples[prevAt]
+            val b = samples[nextAt]
+            val t = if (b.station == a.station) 0.0 else ((station - a.station) / (b.station - a.station)).coerceIn(0.0, 1.0)
+            a.top + (b.top - a.top) * t
+        }
+    }
+    val drainSection = remember(sectionAxis, sectionStation, drainageBuilt, showSection) {
+        val built = drainageBuilt
+        if (!showSection || sectionAxis == null || built == null) null
+        else {
+            val run = built.runs.find { it.name == sectionAxis.name } ?: return@remember null
+            built.sections.filter { it.alignmentId == run.id }.minByOrNull { kotlin.math.abs(it.station - sectionStation) }
         }
     }
     val profileMark = remember(sectionAxis, profileCursor, showProfile) {
@@ -852,6 +889,9 @@ private fun ProjectScreen(
         drainageBuilt = built.first
         drainageNetwork = built.second
         drainageFlows = built.third
+        vm.drainageAxes = built.first.runs.mapNotNull { run ->
+            com.appdwg.core.drainage.DrainAlignments.axis(run, built.first.runProfiles.find { it.alignmentId == run.id })
+        }
         if (com.appdwg.app.BuildConfig.DEBUG) {
             val scene = built.first
             android.util.Log.i(
@@ -859,13 +899,24 @@ private fun ProjectScreen(
                 "scene objects=${scene.glyphs.size} deviceTris=${scene.triangles.size / 9} trenchTris=${scene.trench.size / 9} " +
                     "backfillTris=${scene.backfillMesh.size / 9} beddingTris=${scene.beddingMesh.size / 9} fillTris=${scene.fillMesh.size / 9} waterTris=${scene.water.size / 9}",
             )
+            for (row in scene.takeoff) {
+                val perM = if (row.length > 1e-6) (if (row.trench > 0.0) row.trench else row.excavation) / row.length else row.excavation
+                android.util.Log.i(
+                    "GromaticDrain",
+                    "device ${row.code} tris=${row.drawnTriangles} L=${"%.2f".format(java.util.Locale.US, row.length)} " +
+                        "earthM3=${"%.3f".format(java.util.Locale.US, if (row.trench > 0.0) row.trench else row.excavation)} " +
+                        "earthPerM=${"%.4f".format(java.util.Locale.US, perM)} slope=${"%.4f".format(java.util.Locale.US, row.gradeSlope)}",
+                )
+            }
             for (profile in scene.profiles) {
                 val grade = profile.hydraulic
+                val perM = if (grade.length > 1e-6) grade.excavation / grade.length else 0.0
                 android.util.Log.i(
                     "GromaticDrain",
                     "profile ${profile.code} L=${"%.2f".format(java.util.Locale.US, grade.length)} up=${"%.3f".format(java.util.Locale.US, grade.invertUpstream)} " +
-                        "down=${"%.3f".format(java.util.Locale.US, grade.invertDownstream)} minSlope=${"%.4f".format(java.util.Locale.US, grade.minSlope)} " +
-                        "tooDeep=${grade.tooDeep} cut=${"%.2f".format(java.util.Locale.US, grade.excavation)} backfill=${"%.2f".format(java.util.Locale.US, grade.backfill)} " +
+                        "down=${"%.3f".format(java.util.Locale.US, grade.invertDownstream)} grade=${"%.4f".format(java.util.Locale.US, grade.actualSlope)} " +
+                        "minSlope=${"%.4f".format(java.util.Locale.US, grade.minSlope)} offSurface=${grade.offSurface} " +
+                        "tooDeep=${grade.tooDeep} cut=${"%.2f".format(java.util.Locale.US, grade.excavation)} earthPerM=${"%.4f".format(java.util.Locale.US, perM)} " +
                         "deviceTris=${profile.deviceTriangles} trenchTris=${profile.trenchTriangles}",
                 )
             }
@@ -888,6 +939,7 @@ private fun ProjectScreen(
     )
     var planZoom by remember { mutableStateOf<ZoomRequest?>(null) }
     var planWidthPx by remember { mutableStateOf(0) }
+    var planHeightPx by remember { mutableStateOf(0) }
     val xdpi = androidx.compose.ui.platform.LocalResources.current.displayMetrics.xdpi
 
     var show3d by v::show3d
@@ -943,7 +995,7 @@ private fun ProjectScreen(
         if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões"), feature = ProFeature.ADVICE) { showAdvice = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet, feature = ProFeature.BASIN) { showBasin = true })
         add(RailTool(GIcon.DRAINAGE, tr("Drenagem"), showDrainage, feature = ProFeature.DRAINAGE) { showDrainage = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null, feature = ProFeature.VOLUME) { showVolume = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, showVolume, feature = ProFeature.VOLUME) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null, feature = ProFeature.AS_BUILT) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, tr("Modelos"), feature = ProFeature.MODELS) { showModels = true })
         add(RailTool(GIcon.NOTE, tr("Anotar"), addingNote, feature = ProFeature.NOTES) { addingNote = true; measuring = false; show3d = false })
@@ -1147,7 +1199,7 @@ private fun ProjectScreen(
             Modifier.weight(1f).fillMaxHeight()
                 .then(if (g.floating) Modifier.padding(start = 12.dp, end = if (wide) 12.dp else 12.dp, bottom = 12.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
                 .background(g.planBg)
-                .onSizeChanged { planWidthPx = it.width },
+                .onSizeChanged { planWidthPx = it.width; planHeightPx = it.height },
         ) {
                 val pickingArea = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
                 val placingDrainage = drainageMoving || drainageDraft?.let { draft ->
@@ -1177,7 +1229,7 @@ private fun ProjectScreen(
                         userPoints = vm.userPoints,
                         overlayLines = drapeLines,
                         overlayTris = if (areaClosed && areaPoly.size >= 3) drapeTris else DoubleArray(0),
-                        solidTris = if (showDrainDevice) drainageBuilt?.triangles ?: DoubleArray(0) else DoubleArray(0),
+                        coloredSolids = if (showDrainDevice) drainageBuilt?.colored.orEmpty() else emptyList(),
                         extraSolids = drainageLayers(drainageBuilt, showDrainCut, showDrainBackfill, showDrainFill, showDrainDevice),
                         terrainAlpha = if (drainGroundClear) 0.35f else 1f,
                         onDrapeFailed = {
@@ -1296,7 +1348,7 @@ private fun ProjectScreen(
                     val views = buildList {
                         add(tr("Planta") to (!show3d && !showSection && !showProfile))
                         if (has3d) add("3D" to show3d)
-                        if (project.alignments.isNotEmpty()) { add(tr("Seção") to (showSection && !show3d)); add(tr("Perfil") to (showProfile && !show3d)) }
+                        if (axes.isNotEmpty()) { add(tr("Seção") to (showSection && !show3d)); add(tr("Perfil") to (showProfile && !show3d)) }
                     }
                     fun viewFeature(label: String): ProFeature? = when (label) {
                         "3D" -> ProFeature.VIEW_3D
@@ -1376,18 +1428,47 @@ private fun ProjectScreen(
                     )
                 }
                 if (show3d && drainageBuilt?.glyphs?.isNotEmpty() == true && drainageDraft == null) {
-                    DrainLayerBar(
-                        showDrainCut, showDrainDevice, showDrainBackfill, showDrainFill, drainGroundClear,
-                        { showDrainCut = it }, { showDrainDevice = it }, { showDrainBackfill = it }, { showDrainFill = it }, { drainGroundClear = it },
-                        Modifier.align(Alignment.TopCenter).padding(top = if (compact) 88.dp else 56.dp),
-                    )
+                    DraggableCard(chipsAt, { chipsAt = it }, planWidthPx.toFloat(), planHeightPx.toFloat()) {
+                        if (!chipsOpen) {
+                            GButton(tr("Camadas"), { chipsOpen = true }, outlined = true)
+                        } else {
+                            Column {
+                                DrainLayerBar(
+                                    showDrainCut, showDrainDevice, showDrainBackfill, showDrainFill, drainGroundClear,
+                                    { showDrainCut = it }, { showDrainDevice = it }, { showDrainBackfill = it }, { showDrainFill = it }, { drainGroundClear = it },
+                                    Modifier,
+                                )
+                                GButton(tr("Recolher"), { chipsOpen = false }, outlined = true)
+                            }
+                        }
+                    }
                 }
                 val sideDock = wide && androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-                val dock = (if (sideDock) {
-                    Modifier.align(Alignment.CenterEnd).padding(8.dp).width(if (drainageMore) 320.dp else 280.dp).heightIn(max = 520.dp)
-                } else {
-                    Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 480.dp).fillMaxWidth().heightIn(max = if (drainageMore) 300.dp else 112.dp)
-                }).pointerInput(Unit) { detectTapGestures { } }
+                val dock = Modifier
+                    .onSizeChanged { dockW = it.width; dockH = it.height }
+                    .offset {
+                        val maxX = (planWidthPx - dockW).toFloat().coerceAtLeast(0f)
+                        val maxY = (planHeightPx - dockH).toFloat().coerceAtLeast(0f)
+                        val cur = dockAt
+                        val x = (if (cur.x.isNaN()) maxX / 2f else cur.x).coerceIn(0f, maxX)
+                        val y = (if (cur.y.isNaN()) maxY else cur.y).coerceIn(0f, maxY)
+                        androidx.compose.ui.unit.IntOffset(kotlin.math.round(x).toInt(), kotlin.math.round(y).toInt())
+                    }
+                    .pointerInput(planWidthPx, planHeightPx) {
+                        detectDragGestures { change, drag ->
+                            change.consume()
+                            val maxX = (planWidthPx - size.width).toFloat().coerceAtLeast(0f)
+                            val maxY = (planHeightPx - size.height).toFloat().coerceAtLeast(0f)
+                            val cur = dockAt
+                            val x0 = if (cur.x.isNaN()) maxX / 2f else cur.x
+                            val y0 = if (cur.y.isNaN()) maxY else cur.y
+                            dockAt = androidx.compose.ui.geometry.Offset((x0 + drag.x).coerceIn(0f, maxX), (y0 + drag.y).coerceIn(0f, maxY))
+                        }
+                    }
+                    .widthIn(max = if (sideDock) 360.dp else 480.dp)
+                    .then(if (sideDock) Modifier.width(320.dp) else Modifier.fillMaxWidth())
+                    .heightIn(max = if (drainageMore) 340.dp else 128.dp)
+                    .pointerInput(Unit) { detectTapGestures { } }
                 if (drainageDraft != null) {
                     val draft = drainageDraft!!
                     val device = vm.drainageCatalog.device(draft.code)
@@ -1418,7 +1499,7 @@ private fun ProjectScreen(
                                 onMore = { drainageMore = true },
                             )
                         } else {
-                            Column {
+                            Column(Modifier.verticalScroll(rememberScrollState())) {
                                 GButton(tr("Recolher"), { drainageMore = false }, outlined = true, modifier = Modifier.padding(8.dp))
                                 DrainagePlaceCard(
                                     draft = draft,
@@ -1453,8 +1534,9 @@ private fun ProjectScreen(
                                 onFinish = { drainageSelected = null; drainageMoving = false },
                                 onCancel = { drainageSelected = null; drainageMoving = false },
                                 onMore = { drainageMore = true },
+                                finishLabel = tr("Fechar"),
                             )
-                        } else Column {
+                        } else Column(Modifier.verticalScroll(rememberScrollState())) {
                             GButton(tr("Recolher"), { drainageMore = false }, outlined = true, modifier = Modifier.padding(8.dp))
                         DrainageSelectionCard(
                             code = placed?.code ?: "",
@@ -1532,7 +1614,34 @@ private fun ProjectScreen(
                                 else {
                                     pendingExport = exportKind
                                     driveNext.set(exportToDrive)
-                                    exportSaver.launch(baseName + exportKind.suffix)
+                                    if (exportKind == ExportKind.DRAIN_IFC) ifcSaver.launch(baseName + exportKind.suffix)
+                                    else exportSaver.launch(baseName + exportKind.suffix)
+                                }
+                            },
+                            onOpenProfile = run?.let { alignment ->
+                                {
+                                    val index = axes.indexOfFirst { it.name == alignment.name }
+                                    if (index >= 0) {
+                                        sectionAlignment = index
+                                        profileCursor = 0.0
+                                        showProfile = true
+                                        showSection = false
+                                        show3d = false
+                                        drainageMore = false
+                                    }
+                                }
+                            },
+                            onOpenSection = run?.let { alignment ->
+                                {
+                                    val index = axes.indexOfFirst { it.name == alignment.name }
+                                    if (index >= 0) {
+                                        sectionAlignment = index
+                                        sectionStation = 0.0
+                                        showSection = true
+                                        showProfile = false
+                                        show3d = false
+                                        drainageMore = false
+                                    }
                                 }
                             },
                         )
@@ -1649,26 +1758,29 @@ private fun ProjectScreen(
                         editPvis = roadPvis,
                         onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list); vm.redesignSoon() },
                         onRecalc = { vm.designRoad() },
+                        crown = profileCrown,
                     )
                 } else if (showSection && sectionAxis != null) {
                     SectionPanel(
                         section = section,
-                        alignmentNames = project.alignments.map { it.name },
+                        alignmentNames = axes.map { it.name },
                         alignmentIndex = sectionAlignment,
-                        onAlignment = { sectionAlignment = it; sectionStation = project.alignments[it].startStation },
+                        onAlignment = { sectionAlignment = it; sectionStation = axes[it].startStation },
                         station = section?.station ?: sectionStation,
                         onStation = { sectionStation = it.coerceIn(sectionAxis.startStation, sectionAxis.endStation) },
                         halfWidth = sectionHalfWidth,
                         onHalfWidth = { sectionHalfWidth = it },
                         onClose = { showSection = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
+                        deviceRing = drainSection?.device.orEmpty(),
+                        trenchRing = drainSection?.trench.orEmpty(),
                     )
                 } else if (!wide || full || !vm.themes.panelOpen) {
                     NarrowCards()
                 }
 
             if (vm.timelineShown && vm.states.size > 1) TimelineBar(vm, Modifier.align(Alignment.TopCenter).padding(top = 80.dp, start = 8.dp, end = 8.dp).widthIn(max = 900.dp))
-            else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
+            else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 72.dp).widthIn(max = 360.dp)) {
                 // The text on top and the buttons on their own line, with room to the card's edges.
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(tr("Sugestão: {0}", advice.first().title), style = MaterialTheme.typography.bodyMedium)
@@ -1990,21 +2102,33 @@ private fun ProjectScreen(
             drainageMoving = false
             drainageSelected = null
             drainageDraft = draftFor(device)
+            drainageMore = false
             showDrainage = false
         }
-    }, onSuggestCulverts = {
-        val line = project.alignments.firstOrNull()?.vertices.orEmpty()
+    }, suggestNote = suggestNote, onSuggestCulverts = {
+        val axis = project.alignments.firstOrNull { it.name.endsWith(ROAD_SUFFIX) && it.vertices.size >= 2 }
+            ?: project.alignments.firstOrNull { it.vertices.size >= 2 }
+        val line = axis?.vertices.orEmpty()
         val rain = v.basinParams
         val idf = rain.idf
+        val gutter = vm.drainageCatalog.devices.firstOrNull { device ->
+            val text = (device.code + " " + device.name).lowercase()
+            "grama" in text && ("valeta" in text || "sarjeta" in text)
+        }?.code
         when {
             !proOpen(ProFeature.DRAINAGE) -> vm.proRequested = true
-            line.size < 2 -> vm.report(tr("Nenhum eixo no projeto."))
-            idf == null -> vm.report(tr("Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão."))
+            line.size < 2 -> suggestNote = tr("Não há eixo no projeto. Trace uma estrada para sugerir a drenagem.")
+            idf == null -> suggestNote = tr("Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão.")
             else -> {
-                vm.placeThalwegCulverts(line, rain.minArea, rain.runoff, idf, rain.years, com.appdwg.core.Hydrology.MIN_TC_MINUTES) {
-                    vm.report(tr("Nenhum talvegue cruza o eixo. Rode as bacias antes."))
+                suggestNote = tr("Procurando talvegues em {0}…", axis?.name ?: "")
+                vm.placeThalwegCulverts(line, rain.minArea, rain.runoff, idf, rain.years, com.appdwg.core.Hydrology.MIN_TC_MINUTES, gutter) { count ->
+                    suggestNote = if (count == 0) {
+                        tr("Nenhum talvegue cruza {0}. Rode as bacias ou toque o ponto de lançamento.", axis?.name ?: "")
+                    } else {
+                        tr("{0} dispositivos sugeridos em {1}.", count, axis?.name ?: "")
+                    }
+                    if (count > 0) showDrainage = false
                 }
-                showDrainage = false
             }
         }
     })
@@ -2218,7 +2342,12 @@ private fun ProjectScreen(
                 }
                 showExport = false
                 if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind
-                else { pendingExport = kind; driveNext.set(exportToDrive); exportSaver.launch(baseName + kind.suffix) }
+                else {
+                    pendingExport = kind
+                    driveNext.set(exportToDrive)
+                    if (kind == ExportKind.DRAIN_IFC) ifcSaver.launch(baseName + kind.suffix)
+                    else exportSaver.launch(baseName + kind.suffix)
+                }
             },
             toDrive = if (hasDrive) exportToDrive else null,
             onToDrive = { exportToDrive = it },
@@ -2525,10 +2654,10 @@ private fun drainageLayers(
 ): List<Pair<DoubleArray, Int>> {
     built ?: return emptyList()
     val layers = ArrayList<Pair<DoubleArray, Int>>()
-    if (cut && built.trench.isNotEmpty()) layers += built.trench to 0x8A6240
-    if (cut && built.beddingMesh.isNotEmpty()) layers += built.beddingMesh to 0xC4A46A
-    if (backfill && built.backfillMesh.isNotEmpty()) layers += built.backfillMesh to 0x6E5340
-    if (fill && built.fillMesh.isNotEmpty()) layers += built.fillMesh to 0xA08A55
+    if (cut && built.trench.isNotEmpty()) layers += built.trench to 0x668A6240
+    if (cut && built.beddingMesh.isNotEmpty()) layers += built.beddingMesh to 0x66C4A46A
+    if (backfill && built.backfillMesh.isNotEmpty()) layers += built.backfillMesh to 0x666E5340
+    if (fill && built.fillMesh.isNotEmpty()) layers += built.fillMesh to 0x66A08A55
     if (device && built.water.isNotEmpty()) layers += built.water to 0x3A7FBF
     return layers
 }
@@ -2558,13 +2687,13 @@ private fun DrainLayerBar(
 }
 
 @Composable
-private fun LayerChip(label: String, on: Boolean, onClick: () -> Unit) {
+internal fun LayerChip(label: String, on: Boolean, onClick: () -> Unit) {
     val g = LocalG.current
     Text(
         label,
         modifier = Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(20.dp))
             .background(if (on) g.accent else g.card)
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .toggleable(value = on, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = { onClick() })
             .padding(horizontal = 14.dp, vertical = 12.dp),
         color = if (on) g.onAccent else g.text,
         style = MaterialTheme.typography.labelLarge,

@@ -80,7 +80,12 @@ fun View3D(
     overlayTris: DoubleArray = DoubleArray(0),
     /** Placed drainage solids, world xyz, nine doubles per triangle. Drawn opaque in the draped view. */
     solidTris: DoubleArray = DoubleArray(0),
-    /** More drainage layers, each with an opaque RGB colour. Drawn with the device. */
+    /** Device triangles already split by finish colour (0xRRGGBB). Used instead of [solidTris] when present. */
+    coloredSolids: List<Pair<Int, DoubleArray>> = emptyList(),
+    /**
+     * More drainage layers. Colour is 0xRRGGBB (opaque, drawn with the device) or 0xAARRGGBB
+     * with alpha 1–254 (earthwork, drawn see-through so the device stays visible).
+     */
     extraSolids: List<Pair<DoubleArray, Int>> = emptyList(),
     /** Terrain fill opacity. Below 1 the ground is a cutaway so buried devices stay visible. */
     terrainAlpha: Float = 1f,
@@ -123,17 +128,27 @@ fun View3D(
         renderer.setOverlay(sceneFloats(overlayLines, scene), sceneFloats(overlayTris, scene))
         holder[0]?.requestRender()
     }
-    LaunchedEffect(solidTris, extraSolids) {
-        val lit = withContext(Dispatchers.Default) {
-            val parts = ArrayList<FloatArray>()
-            if (solidTris.size >= 9) parts += litSolid(solidTris, scene, 0.62f, 0.62f, 0.58f)
+    LaunchedEffect(solidTris, coloredSolids, extraSolids) {
+        val packed = withContext(Dispatchers.Default) {
+            val opaque = ArrayList<FloatArray>()
+            val earth = ArrayList<FloatArray>()
+            if (coloredSolids.isNotEmpty()) {
+                for ((rgb, tris) in coloredSolids) {
+                    if (tris.size < 9) continue
+                    opaque += litSolid(tris, scene, ((rgb shr 16) and 0xFF) / 255f, ((rgb shr 8) and 0xFF) / 255f, (rgb and 0xFF) / 255f)
+                }
+            } else if (solidTris.size >= 9) {
+                opaque += litSolid(solidTris, scene, 0.62f, 0.62f, 0.58f)
+            }
             for ((tris, rgb) in extraSolids) {
                 if (tris.size < 9) continue
-                parts += litSolid(tris, scene, ((rgb shr 16) and 0xFF) / 255f, ((rgb shr 8) and 0xFF) / 255f, (rgb and 0xFF) / 255f)
+                val mesh = litSolid(tris, scene, ((rgb shr 16) and 0xFF) / 255f, ((rgb shr 8) and 0xFF) / 255f, (rgb and 0xFF) / 255f)
+                val alpha = (rgb ushr 24) and 0xFF
+                if (alpha in 1..254) earth += mesh else opaque += mesh
             }
-            joinFloats(parts)
+            joinFloats(opaque) to joinFloats(earth)
         }
-        renderer.setSolid(lit)
+        renderer.setSolid(packed.first, packed.second)
         holder[0]?.requestRender()
     }
     LaunchedEffect(terrainAlpha) {
@@ -457,6 +472,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var pendingLines = FloatArray(0)
     @Volatile private var pendingTris = FloatArray(0)
     @Volatile private var pendingSolid = FloatArray(0)
+    @Volatile private var pendingEarth = FloatArray(0)
     @Volatile var terrainAlpha = 1f
     @Volatile private var overlayDirty = false
     @Volatile private var solidDirty = false
@@ -466,6 +482,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private var overlayTriCount = 0
     private var solidBuf = 0
     private var solidCount = 0
+    private var earthBuf = 0
+    private var earthCount = 0
 
     /** Stops background decodes and planning. Safe to call again after the view is already gone. */
     fun close() {
@@ -1099,8 +1117,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         overlayDirty = true
     }
 
-    fun setSolid(tris: FloatArray) {
+    fun setSolid(tris: FloatArray, earth: FloatArray = FloatArray(0)) {
         pendingSolid = tris
+        pendingEarth = earth
         solidDirty = true
     }
 
@@ -1201,6 +1220,8 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glEnable(GLES30.GL_POLYGON_OFFSET_FILL)
         GLES30.glPolygonOffset(1f, 1f)
         GLES30.glUniform1i(uLit, 1)
+        val uSun = GLES30.glGetUniformLocation(program, "uSun")
+        GLES30.glUniform1i(uSun, if (sunContrast(background, foreground)) 1 else 0)
         val uDrape = GLES30.glGetUniformLocation(program, "uDrape")
         val uTex = GLES30.glGetUniformLocation(program, "uTex")
         val uRect = GLES30.glGetUniformLocation(program, "uDrapeRect")
@@ -1365,33 +1386,54 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         if (pendingLines === lines && pendingTris === tris) overlayDirty = false
     }
 
-    /** Opaque drainage solid. Normals and a concrete colour so the walls read as a solid, not a flat line. */
+    /** Drainage solids. Earthwork is drawn first, see-through, so the device colour stays on top. */
     private fun drawSolid(uAlpha: Int, uBias: Int, uColor: Int, uLit: Int, uDrape: Int) {
-        if (solidCount == 0) return
+        if (solidCount == 0 && earthCount == 0) return
         GLES30.glUniform1i(uLit, 1)
         GLES30.glUniform1i(uDrape, 0)
         GLES30.glUniform3f(uColor, 0.62f, 0.62f, 0.58f)
+        if (earthCount > 0) {
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glDepthMask(false)
+            GLES30.glUniform1f(uAlpha, 0.40f)
+            GLES30.glUniform1f(uBias, 0.0016f)
+            bindSolid(earthBuf)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, earthCount)
+            GLES30.glDepthMask(true)
+            GLES30.glDisable(GLES30.GL_BLEND)
+        }
+        if (solidCount > 0) {
+            GLES30.glUniform1f(uAlpha, 1f)
+            GLES30.glUniform1f(uBias, 0.0008f)
+            bindSolid(solidBuf)
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, solidCount)
+        }
+        GLES30.glDisableVertexAttribArray(1)
+        GLES30.glDisableVertexAttribArray(2)
+        GLES30.glUniform1i(uLit, 0)
         GLES30.glUniform1f(uAlpha, 1f)
-        GLES30.glUniform1f(uBias, 0.0008f)
-        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, solidBuf)
+        GLES30.glUniform1f(uBias, 0f)
+    }
+
+    private fun bindSolid(buffer: Int) {
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buffer)
         GLES30.glEnableVertexAttribArray(0)
         GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
         GLES30.glEnableVertexAttribArray(1)
         GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
         GLES30.glEnableVertexAttribArray(2)
         GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, solidCount)
-        GLES30.glDisableVertexAttribArray(1)
-        GLES30.glDisableVertexAttribArray(2)
-        GLES30.glUniform1i(uLit, 0)
-        GLES30.glUniform1f(uBias, 0f)
     }
 
     private fun uploadSolid() {
         val tris = pendingSolid
+        val earth = pendingEarth
         solidBuf = replaceBuffer(solidBuf, tris)
         solidCount = tris.size / 9
-        if (pendingSolid === tris) solidDirty = false
+        earthBuf = replaceBuffer(earthBuf, earth)
+        earthCount = earth.size / 9
+        if (pendingSolid === tris && pendingEarth === earth) solidDirty = false
     }
 
     private fun replaceBuffer(old: Int, data: FloatArray): Int {
@@ -1430,6 +1472,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             uniform float uDepthBias;
             uniform int uLit;
             uniform int uGray;
+            uniform int uSun;
             uniform vec3 uColor;
             // Picture over the surface: left x, top y, width and height, relative to the scene origin.
             uniform vec4 uDrapeRect;
@@ -1447,8 +1490,15 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     vec3 n = normalize(vec3(aNormal.xy * uZScale, aNormal.z));
                     // Two-sided: model faces may be wound either way, so both sides take the light.
                     float light = abs(dot(n, normalize(vec3(-0.5, 0.5, 0.7))));
-                    vColor = uGray == 1 ? vec3(0.82) : aColor;
-                    vShade = 0.45 + 0.65 * light;
+                    vec3 tint = aColor;
+                    // Alto contraste is black on white. A dark green ramp reads as a flat black sheet,
+                    // so those faces are lifted to a warm tan and the light is stretched.
+                    if (uSun == 1) {
+                        float y = dot(tint, vec3(0.30, 0.59, 0.11));
+                        tint = mix(vec3(0.78, 0.66, 0.42), tint, clamp(y * 2.2, 0.2, 1.0));
+                    }
+                    vColor = uGray == 1 ? (uSun == 1 ? vec3(0.86, 0.78, 0.58) : vec3(0.82)) : tint;
+                    vShade = (uSun == 1 ? 0.25 : 0.45) + (uSun == 1 ? 0.95 : 0.65) * light;
                 } else {
                     vColor = uColor;
                     vShade = 1.0;
@@ -1567,6 +1617,20 @@ private fun litSolid(world: DoubleArray, scene: Scene3D, red: Float, green: Floa
         t += 9
     }
     return out
+}
+
+/**
+ * Alto contraste is pure black ink on a white sheet. Other light themes (Engineering, Earth)
+ * use a dark navy or olive, which stays on the normal ramp.
+ */
+internal fun sunContrast(background: Int, foreground: Int): Boolean {
+    fun lum(rgb: Int): Float {
+        val r = ((rgb shr 16) and 0xFF) / 255f
+        val g = ((rgb shr 8) and 0xFF) / 255f
+        val b = (rgb and 0xFF) / 255f
+        return 0.30f * r + 0.59f * g + 0.11f * b
+    }
+    return lum(background) > 0.90f && lum(foreground) < 0.05f
 }
 
 /** World coordinates shifted to the scene origin, so the GPU floats keep their precision. */

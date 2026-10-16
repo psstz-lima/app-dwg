@@ -109,13 +109,18 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                 vm.volumeMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (r != null) {
                     HorizontalDivider()
-                    SpecHeader(stringResource(R.string.vol_compute))
-                    FactLine(stringResource(R.string.vol_above, StationFormat.volume(r.above), StationFormat.area(r.aboveArea)))
-                    FactLine(stringResource(R.string.vol_below, StationFormat.volume(r.below), StationFormat.area(r.belowArea)))
-                    FactLine(stringResource(R.string.vol_net, StationFormat.volume(r.net), StationFormat.area(r.area), StationFormat.lengthValue(r.minSurface), StationFormat.length(r.maxSurface, 3), StationFormat.length(r.cellSize, 2)))
+                    SpecHeader(stringResource(R.string.vol_result))
+                    SpecRow(stringResource(R.string.vol_cut), StationFormat.volume(r.above))
+                    SpecRow(stringResource(R.string.vol_cut_area), StationFormat.area(r.aboveArea))
+                    SpecRow(stringResource(R.string.vol_fill_row), StationFormat.volume(r.below))
+                    SpecRow(stringResource(R.string.vol_fill_area), StationFormat.area(r.belowArea))
+                    SpecRow(stringResource(R.string.vol_balance), StationFormat.volume(r.net))
+                    SpecRow(stringResource(R.string.vol_elevations), StationFormat.length(r.minSurface, 3) + " – " + StationFormat.length(r.maxSurface, 3))
+                    SpecRow(stringResource(R.string.vol_cell), StationFormat.length(r.cellSize, 2))
                     val flat = r.baseZ
                     val plane = r.plane
-                    FactLine(
+                    SpecRow(
+                        stringResource(R.string.vol_base),
                         when {
                             flat != null -> stringResource(R.string.vol_base_flat, StationFormat.length(flat, 3))
                             plane != null -> stringResource(R.string.vol_base_inclined, n(plane[1] * 100, 2), n(plane[2] * 100, 2))

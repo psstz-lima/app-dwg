@@ -1193,15 +1193,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         idf: com.appdwg.core.Idf,
         years: Double,
         minutes: Double,
-        onEmpty: () -> Unit,
+        gutterCode: String? = null,
+        onDone: (Int) -> Unit,
     ) {
         val grid = basinFlow?.second ?: flowGrid
-        if (grid == null || line.size < 2) {
-            onEmpty()
+        if (line.size < 2) {
+            onDone(0)
             return
         }
         viewModelScope.launch {
-            val devices = withContext(Dispatchers.Default) {
+            val culverts = if (grid == null) emptyList() else withContext(Dispatchers.Default) {
                 com.appdwg.core.drainage.ThalwegCulverts.suggest(
                     com.appdwg.core.Hydrology.crossings(grid, line, minArea),
                     runoff, idf, years, minutes,
@@ -1216,12 +1217,30 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                         listOf(start.y, end.y),
                         com.appdwg.core.drainage.DeviceSide.AXIS,
                         0.0, null, null,
-                        com.appdwg.core.drainage.GradeSpec(com.appdwg.core.drainage.GradeMode.SLOPE, z0 = 0.0, slope = -0.01),
+                        com.appdwg.core.drainage.GradeSpec(com.appdwg.core.drainage.GradeMode.HYDRAULIC, buried = true),
                         null,
                     )
                 }
             }
-            if (devices.isEmpty()) onEmpty() else pushDrainage(drainage + devices)
+            val gutter = gutterCode?.let { code ->
+                com.appdwg.core.drainage.PlacedDevice.Linear(
+                    java.util.UUID.randomUUID().toString(),
+                    code,
+                    com.appdwg.core.drainage.PathSource.POLYLINE,
+                    null,
+                    line.map { it.x },
+                    line.map { it.y },
+                    com.appdwg.core.drainage.DeviceSide.RIGHT,
+                    3.0, null, null,
+                    com.appdwg.core.drainage.GradeSpec(com.appdwg.core.drainage.GradeMode.HYDRAULIC, buried = false),
+                    null,
+                )
+            }
+            val devices = culverts + listOfNotNull(gutter)
+            if (devices.isEmpty()) onDone(0) else {
+                pushDrainage(drainage + devices)
+                onDone(devices.size)
+            }
         }
     }
 
@@ -2476,7 +2495,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val exits = area?.let { com.appdwg.core.Hydrology.exits(f, it, minArea) }.orEmpty()
                 (crossings + exits + com.appdwg.core.Hydrology.terrainOutlets(f).filter { it.area >= minArea }).take(30)
             }
-            basinMessage = if (outlets.isEmpty()) tr("Nenhum talvegue com essa área cruza os eixos ou sai da área.") else null
+            val axes = lines.count { it.size >= 2 }
+            basinMessage = when {
+                outlets.isNotEmpty() -> null
+                axes == 0 && area == null -> tr("Não há eixo no projeto. Trace uma estrada ou toque o ponto de lançamento.")
+                axes == 0 -> tr("Não há eixo de estrada. Os pontos, se houver, são onde a água sai da plataforma ou do terreno.")
+                else -> tr("Nenhum talvegue com essa área cruza os eixos ou sai da área.")
+            }
         }
     }
 
@@ -2540,10 +2565,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Axis of the sheets: an alignment of the project by name, or the axis drawn with PIs. */
+    /** Drainage alignments currently on screen, so profile, section and sheets can draw them. */
+    var drainageAxes by mutableStateOf<List<Alignment>>(emptyList())
+
     fun sheetAxis(name: String?, project: LandXmlProject): Alignment? {
         val rp = view?.roadParams
         if (name == PIS_AXIS) return rp?.takeIf { it.pis.size >= 2 }?.let { roadAxis(it.copy(alignmentIndex = -1), project) }
-        return project.alignments.firstOrNull { it.name == name } ?: project.alignments.firstOrNull()
+        return project.alignments.firstOrNull { it.name == name }
+            ?: drainageAxes.firstOrNull { it.name == name }
+            ?: project.alignments.firstOrNull()
+            ?: drainageAxes.firstOrNull()
             ?: rp?.takeIf { it.pis.size >= 2 }?.let { roadAxis(it.copy(alignmentIndex = -1), project) }
     }
 

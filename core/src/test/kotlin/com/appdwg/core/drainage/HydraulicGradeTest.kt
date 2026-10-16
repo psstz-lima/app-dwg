@@ -44,7 +44,7 @@ class HydraulicGradeTest {
         val grade = HydraulicGrade.design(
             doubleArrayOf(0.0, 10.0), doubleArrayOf(100.0, 100.0),
             deviceHeight = 0.3, deviceWidth = 1.0, deviceArea = 0.3,
-            buried = false, minSlope = 0.005, bedding = 0.0, clearance = 0.30,
+            buried = true, minSlope = 0.005, bedding = 0.0, clearance = 0.30, minCover = 0.0,
         )
         assertEquals(5.2, grade.excavation, 1e-6)
         assertEquals(2.2, grade.backfill, 1e-6)
@@ -52,6 +52,23 @@ class HydraulicGradeTest {
         assertEquals(3.0, grade.spoil, 1e-6)
         assertEquals(false, grade.shoring)
         assertEquals(false, grade.tooDeep)
+    }
+
+    @Test
+    fun aSurfaceDeviceHasNoTrench() {
+        val grade = HydraulicGrade.design(
+            doubleArrayOf(0.0, 10.0), doubleArrayOf(100.0, 90.0),
+            deviceHeight = 0.3, deviceWidth = 1.0, deviceArea = 0.3,
+            buried = false, minSlope = 0.005, bedding = 0.0, clearance = 0.30,
+        )
+        assertEquals(0.0, grade.excavation, 1e-9)
+        assertEquals(0.0, grade.backfill, 1e-9)
+        assertEquals(0.0, grade.spoil, 1e-9)
+        assertEquals(0.0, grade.maxCut, 1e-9)
+        assertEquals(false, grade.shoring)
+        assertEquals(false, grade.tooDeep)
+        assertTrue(grade.actualSlope > 0.2, "actual ${grade.actualSlope}")
+        assertTrue(grade.samples.last().invert < grade.samples.first().invert)
     }
 
     @Test

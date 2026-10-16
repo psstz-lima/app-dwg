@@ -30,7 +30,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -333,6 +337,49 @@ fun ToolBar(tools: List<RailTool>, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * A card the finger can drag, kept inside [modifier]'s box. [at] is remembered by the caller.
+ * NaN means "not placed yet": the card starts centred on the bottom edge.
+ */
+@Composable
+fun DraggableCard(
+    at: androidx.compose.ui.geometry.Offset,
+    onAt: (androidx.compose.ui.geometry.Offset) -> Unit,
+    parentW: Float,
+    parentH: Float,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var widthPx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(1) }
+    var heightPx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(1) }
+    Box(
+        modifier
+            .onSizeChanged { widthPx = it.width; heightPx = it.height }
+            .offset {
+                val maxX = (parentW - widthPx).coerceAtLeast(0f)
+                val maxY = (parentH - heightPx).coerceAtLeast(0f)
+                val x = (if (at.x.isNaN()) maxX / 2f else at.x).coerceIn(0f, maxX)
+                val y = (if (at.y.isNaN()) maxY else at.y).coerceIn(0f, maxY)
+                androidx.compose.ui.unit.IntOffset(x.roundToInt(), y.roundToInt())
+            }
+            .pointerInput(parentW, parentH) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    val maxX = (parentW - size.width).coerceAtLeast(0f)
+                    val maxY = (parentH - size.height).coerceAtLeast(0f)
+                    val x0 = if (at.x.isNaN()) maxX / 2f else at.x
+                    val y0 = if (at.y.isNaN()) maxY else at.y
+                    onAt(
+                        androidx.compose.ui.geometry.Offset(
+                            (x0 + drag.x).coerceIn(0f, maxX),
+                            (y0 + drag.y).coerceIn(0f, maxY),
+                        ),
+                    )
+                }
+            },
+    ) { content() }
+}
+
 /** Vertical tool rail with icon and label, scrolling when the tools do not fit. */
 @Composable
 fun ToolRail(tools: List<RailTool>, modifier: Modifier = Modifier) {
@@ -351,7 +398,7 @@ fun ToolRail(tools: List<RailTool>, modifier: Modifier = Modifier) {
                     Offset(0f, size.height - h), Size(size.width, h))
                 if (scroll.canScrollBackward) drawRect(Brush.verticalGradient(listOf(g.rail, Color.Transparent), 0f, h), Offset.Zero, Size(size.width, h))
             }
-            .verticalScroll(scroll).padding(vertical = 8.dp),
+            .verticalScroll(scroll).padding(top = 48.dp, bottom = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {

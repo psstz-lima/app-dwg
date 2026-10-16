@@ -142,15 +142,16 @@ object DrainAlignments {
             val start = alignment.nodes.firstOrNull { it.deviceId == id && !it.structure }?.station ?: 0.0
             val dense = densify(path, 5.0)
             val distances = DoubleArray(dense.size)
-            val grounds = DoubleArray(dense.size)
+            val raw = arrayOfNulls<Double>(dense.size)
             var walked = 0.0
             for (i in dense.indices) {
                 if (i > 0) walked += hypot(dense[i].x - dense[i - 1].x, dense[i].y - dense[i - 1].y)
                 distances[i] = walked
-                grounds[i] = terrain(dense[i].x, dense[i].y) ?: 0.0
+                raw[i] = terrain(dense[i].x, dense[i].y)
             }
+            val (grounds, _) = GroundCover.fill(raw)
             val metrics = metricsOf(id)
-            val designed = if (device.grade.mode == GradeMode.HYDRAULIC) {
+            val designed = if (device.grade.mode == GradeMode.HYDRAULIC && grounds.all { it.isFinite() }) {
                 HydraulicGrade.design(
                     distances, grounds, metrics.height, metrics.width, metrics.area, device.grade.buried,
                     minSlope = device.grade.minSlope, minCover = if (device.grade.buried) device.grade.minCover else 0.0,
@@ -162,6 +163,7 @@ object DrainAlignments {
             }
             for (i in dense.indices) {
                 val ground = grounds[i]
+                if (!ground.isFinite()) continue
                 val invert = designed?.get(i)?.invert ?: ground - if (metrics.buried) metrics.height + 0.6 else metrics.height
                 val next = if (i + 1 < dense.size) designed?.get(i)?.slopeDown ?: 0.0 else 0.0
                 samples += DrainProfileSample(
@@ -212,14 +214,18 @@ object DrainAlignments {
         val sample = profile.samples.minByOrNull { abs(it.station - station) } ?: profile.samples.first()
         val metrics = metricsOf(sample.deviceId)
         val (x, y, rightX, rightY) = pose(alignment.nodes, sample.station)
+        val raw = Array(OFFSETS.size) { index ->
+            val offset = OFFSETS[index]
+            terrain(x + rightX * offset, y + rightY * offset)
+        }
+        val (filled, _) = GroundCover.fill(raw)
         val groundLine = ArrayList<SectionPoint>()
-        for (offset in OFFSETS) {
-            val px = x + rightX * offset
-            val py = y + rightY * offset
-            groundLine += SectionPoint(offset, terrain(px, py) ?: sample.terrain)
+        for (index in OFFSETS.indices) {
+            val z = filled[index].takeIf { it.isFinite() } ?: sample.terrain
+            if (z.isFinite()) groundLine += SectionPoint(OFFSETS[index], z)
         }
         val device = deviceRing(metrics, sample.invert)
-        val trench = trenchRing(metrics, sample.invert, sample.terrain)
+        val trench = if (metrics.buried) trenchRing(metrics, sample.invert, sample.terrain) else emptyList()
         return DrainCrossSection(alignment.id, sample.station, groundLine, device, trench, sample.deviceId)
     }
 
@@ -338,6 +344,29 @@ object DrainAlignments {
         return if (downStart) pts.asReversed() else pts
     }
 
+    /**
+     * The same alignment the road profile and the section sheets already know how to draw.
+     * The design grade is the drain invert.
+     */
+    fun axis(alignment: DrainAlignment, profile: DrainProfile?): com.appdwg.core.Alignment? {
+        val nodes = alignment.nodes
+        if (nodes.size < 2) return null
+        val elements = ArrayList<com.appdwg.core.AlignmentElement>()
+        for (i in 0 until nodes.size - 1) {
+            val a = nodes[i]
+            val b = nodes[i + 1]
+            if (hypot(b.x - a.x, b.y - a.y) < 1e-4) continue
+            elements += com.appdwg.core.AlignmentElement.Line(Point2(a.x, a.y), Point2(b.x, b.y))
+        }
+        if (elements.isEmpty()) return null
+        val grade = profile?.samples?.takeIf { it.size >= 2 }?.let { samples ->
+            val step = (samples.size / 40).coerceAtLeast(1)
+            val picked = samples.filterIndexed { index, _ -> index % step == 0 || index == samples.lastIndex }
+            com.appdwg.core.Profile(alignment.name, picked.map { com.appdwg.core.Profile.Pvi(it.station, it.invert) })
+        }
+        return com.appdwg.core.Alignment(alignment.name, 0.0, elements, grade)
+    }
+
     private fun densify(points: List<Point2>, step: Double): List<Point2> {
         val out = ArrayList<Point2>()
         for (i in 0 until points.size - 1) {
@@ -365,7 +394,8 @@ object DrainAlignments {
             DeviceSide.AXIS -> "Eixo"
         }
         val family = device.code.substringBefore(' ').ifBlank { device.code }
-        return "ED-%02d %s %s".format(Locale.US, index, family, side)
+        val where = if (device.side == DeviceSide.AXIS) "" else " $side"
+        return "ED-%02d %s%s".format(Locale.US, index, family, where)
     }
 
     private data class Tip(val x: Double, val y: Double) {

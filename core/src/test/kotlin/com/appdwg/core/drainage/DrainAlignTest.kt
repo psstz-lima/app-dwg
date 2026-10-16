@@ -86,11 +86,15 @@ class DrainAlignTest {
             }
         }
         val section = DrainAlignments.sectionAt(runs.single(), profile, 10.0, terrain, metrics)
-        val deviceWidth = section.device.maxOf { it.x } - section.device.minOf { it.x }
-        val trenchWidth = section.trench.maxOf { it.x } - section.trench.minOf { it.x }
-        assertTrue(trenchWidth > deviceWidth + 0.4, "trench $trenchWidth device $deviceWidth")
+        assertTrue(section.trench.isEmpty(), "a surface device has no trench")
         assertTrue(section.terrain.any { abs(it.x) < 1e-6 })
         assertTrue(section.device.minOf { it.y } <= section.terrain.first { abs(it.x) < 1e-6 }.y)
+        val dug = DrainAlignments.sectionAt(runs.single(), profile, 10.0, terrain) {
+            DrainMetrics(0.30, 1.0, 0.30, buried = true)
+        }
+        val deviceWidth = dug.device.maxOf { it.x } - dug.device.minOf { it.x }
+        val trenchWidth = dug.trench.maxOf { it.x } - dug.trench.minOf { it.x }
+        assertTrue(trenchWidth > deviceWidth + 0.4, "trench $trenchWidth device $deviceWidth")
     }
 
     private fun line(

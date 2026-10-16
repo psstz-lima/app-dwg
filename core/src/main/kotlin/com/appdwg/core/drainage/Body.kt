@@ -163,7 +163,53 @@ object DeviceBody {
             val floorTop = bottom + wall.coerceAtMost(depth * 0.45)
             val floor = Sweep.extrude(outer, emptyList(), x, y, rotationDeg, skewDeg, bottom, floorTop, widthM, heightM, innerWidthM)
             val walls = Sweep.extrude(outer, inner, x, y, rotationDeg, skewDeg, floorTop, bottom + depth, widthM, heightM, innerWidthM)
-            return joinExtrusions(listOfNotNull(floor, walls), widthM, heightM, innerWidthM)
+            val grate = grate(inner, x, y, rotationDeg, skewDeg, bottom + depth, widthM, heightM, innerWidthM)
+            return joinExtrusions(listOfNotNull(floor, walls, grate), widthM, heightM, innerWidthM)
+        }
+
+        /** Bars across the opening, sitting on the rim, so a catch basin reads as a grate. */
+        private fun grate(
+            opening: List<SectionPoint>,
+            x: Double,
+            y: Double,
+            rotationDeg: Double,
+            skewDeg: Double,
+            top: Double,
+            widthM: Double,
+            heightM: Double,
+            innerWidthM: Double,
+        ): SweepMesh? {
+            if (opening.size < 3) return null
+            val minX = opening.minOf { it.x }
+            val maxX = opening.maxOf { it.x }
+            val minY = opening.minOf { it.y }
+            val maxY = opening.maxOf { it.y }
+            val spanX = maxX - minX
+            val spanY = maxY - minY
+            if (spanX < 0.2 || spanY < 0.2) return null
+            val across = spanY < spanX
+            val span = if (across) spanY else spanX
+            val bars = (span / 0.18).toInt().coerceIn(3, 8)
+            val parts = ArrayList<SweepMesh>()
+            for (i in 0 until bars) {
+                val center = (i + 0.5) / bars
+                val ring = if (across) {
+                    val cy = minY + spanY * center
+                    listOf(
+                        SectionPoint(minX, cy - 0.035), SectionPoint(maxX, cy - 0.035),
+                        SectionPoint(maxX, cy + 0.035), SectionPoint(minX, cy + 0.035),
+                    )
+                } else {
+                    val cx = minX + spanX * center
+                    listOf(
+                        SectionPoint(cx - 0.035, minY), SectionPoint(cx + 0.035, minY),
+                        SectionPoint(cx + 0.035, maxY), SectionPoint(cx - 0.035, maxY),
+                    )
+                }
+                val bar = Sweep.extrude(ring, emptyList(), x, y, rotationDeg, skewDeg, top - 0.04, top + 0.06, widthM, heightM, innerWidthM)
+                if (bar != null) parts += bar
+            }
+            return joinExtrusions(parts, widthM, heightM, innerWidthM)
         }
     }
 
@@ -245,12 +291,18 @@ object DeviceBody {
     }
 
     private fun channel(device: DeviceDef, params: Map<String, Double>, ring: List<SectionPoint>): Shape? {
-        val thick = lining(device, params, dn = null)
-        val outer = offsetRing(ring, thick)
+        val open = DeviceLook.openMouth(device)
+        val mouth = if (open) DeviceLook.withMouth(ring) else ring
+        val finish = DeviceLook.finish(device)
+        val thick = when {
+            open && (finish == DeviceFinish.GRASS || finish == DeviceFinish.EARTH) -> 0.015
+            else -> lining(device, params, dn = null)
+        }
+        val outer = if (thick <= 1e-4) mouth else offsetRing(mouth, thick)
         val width = spanX(outer)
         val height = spanY(outer)
         if (width < 0.02 || height < 0.02) return null
-        return Channel(outer, ring, width, height, spanX(ring))
+        return Channel(outer, mouth, width, height, spanX(mouth))
     }
 
     private fun curb(): Channel {
@@ -280,9 +332,12 @@ object DeviceBody {
     }
 
     private fun box(device: DeviceDef, params: Map<String, Double>): Shape? {
-        val depth = metres(device, params, "profundidade_cm") ?: 1.5
-        val along = metres(device, params, "A_cm") ?: metres(device, params, "comprimento_cm") ?: 1.0
-        val across = metres(device, params, "largura_interna_cm") ?: metres(device, params, "largura_cm") ?: 1.0
+        val fromCode = Regex("""(\d{2,4})\D+(\d{2,4})""").find(device.code)?.groupValues
+        val depth = metres(device, params, "profundidade_cm") ?: fromCode?.get(1)?.toDouble()?.div(100.0) ?: 1.5
+        val along = metres(device, params, "A_cm") ?: metres(device, params, "comprimento_cm")
+            ?: fromCode?.get(1)?.toDouble()?.div(100.0) ?: 1.0
+        val across = metres(device, params, "largura_interna_cm") ?: metres(device, params, "largura_cm")
+            ?: fromCode?.get(2)?.toDouble()?.div(100.0) ?: 1.0
         val wall = (metres(device, params, "paredes_cm") ?: 0.20).coerceIn(0.05, min(along, across) * 0.45)
         if (depth < 0.2 || along < 0.2 || across < 0.2) return null
         val outerL = along + 2 * wall
@@ -454,11 +509,22 @@ private class Soup {
 
 private fun joinExtrusions(parts: List<SweepMesh>, widthM: Double, heightM: Double, innerWidthM: Double): SweepMesh? {
     if (parts.isEmpty()) return null
-    val host = parts.last()
+    // A grate bar is the last piece and is only a few centimetres wide. The plan is the largest ring.
+    val host = parts.maxBy { planSpan(it.footprint) }
+    val opening = parts.filter { it.channel.size >= 4 }.maxByOrNull { planSpan(it.channel) }
+    val channels = parts.map { it.channel }.filter { it.size >= 3 }
     return SweepMesh(
         host.frames, joinArrays(parts.map { it.triangles }), 0.0, host.length, host.footprint, host.invert, false,
-        host.channel, host.channels, widthM, heightM, innerWidthM,
+        opening?.channel ?: host.channel, if (channels.isEmpty()) host.channels else channels,
+        widthM, heightM, innerWidthM,
     )
+}
+
+private fun planSpan(points: List<Point2>): Double {
+    if (points.isEmpty()) return 0.0
+    val dx = points.maxOf { it.x } - points.minOf { it.x }
+    val dy = points.maxOf { it.y } - points.minOf { it.y }
+    return max(dx, dy)
 }
 
 private fun merge(parts: List<SweepMesh>, widthM: Double, heightM: Double, innerWidthM: Double): SweepMesh? {
@@ -595,6 +661,71 @@ private fun metres(device: DeviceDef, overrides: Map<String, Double>, key: Strin
         key.endsWith("_mm") -> value / 1000.0
         key.endsWith("_cm") -> value / 100.0
         else -> value
+    }
+}
+
+/** How a catalog device is drawn: open or closed, and the colour of its lining. */
+enum class DeviceFinish { GRASS, CONCRETE, STONE, EARTH, METAL }
+
+object DeviceLook {
+    fun finish(device: DeviceDef): DeviceFinish {
+        val text = buildString {
+            append(device.code.lowercase()).append(' ')
+            append(device.name.lowercase()).append(' ')
+            append(device.subtype.lowercase()).append(' ')
+            append(device.family.lowercase()).append(' ')
+            for (material in device.materials) append(material.name.lowercase()).append(' ')
+        }
+        val id = (device.code + " " + device.name).lowercase()
+        val grass = "grama" in text || "veget" in text
+        val concrete = "concreto" in text
+        if (grass && ("grama" in id || !concrete)) return DeviceFinish.GRASS
+        if ("pedra" in text && "concreto" !in id) return DeviceFinish.STONE
+        if ("solo" in text && !concrete) return DeviceFinish.EARTH
+        if (concrete) return DeviceFinish.CONCRETE
+        if (device.outlineType.endsWith("_open")) return DeviceFinish.EARTH
+        return DeviceFinish.CONCRETE
+    }
+
+    fun rgb(finish: DeviceFinish): Int = when (finish) {
+        DeviceFinish.GRASS -> 0x3E8F45
+        DeviceFinish.CONCRETE -> 0xC2C2BA
+        DeviceFinish.STONE -> 0x8D7B6A
+        DeviceFinish.EARTH -> 0xA67C52
+        DeviceFinish.METAL -> 0x8A9096
+    }
+
+    /** Open channel (ditch, gutter). Pipes, slabs and boxes stay closed. */
+    fun openMouth(device: DeviceDef): Boolean {
+        val type = device.outlineType
+        if (type.isEmpty()) return false
+        if (type.startsWith("slab") || type == "circular_barrels" || type == "box" || type == "flared_apron") return false
+        return type.endsWith("_open") || type.endsWith("_lined") || "triangle" in type || "trapezoid" in type
+    }
+
+    /** Turns the ring so the free water surface is the edge that closes it. */
+    fun withMouth(ring: List<SectionPoint>): List<SectionPoint> {
+        if (ring.size < 3) return ring
+        val top = ring.maxOf { it.y }
+        val height = top - ring.minOf { it.y }
+        var best = -1
+        var score = 0.0
+        for (i in ring.indices) {
+            val a = ring[i]
+            val b = ring[(i + 1) % ring.size]
+            val mid = (a.y + b.y) / 2.0
+            if (mid < top - 0.02 && mid < top - height * 0.2) continue
+            val dx = abs(b.x - a.x)
+            val dy = abs(b.y - a.y)
+            val next = dx - dy * 3.0
+            if (next > score) {
+                score = next
+                best = i
+            }
+        }
+        if (best < 0 || score < 0.02) return ring
+        val start = (best + 1) % ring.size
+        return List(ring.size) { ring[(start + it) % ring.size] }
     }
 }
 

@@ -73,6 +73,8 @@ fun ProfilePanel(
     editPvis: List<com.appdwg.core.Profile.Pvi>? = null,
     onPvis: (List<com.appdwg.core.Profile.Pvi>) -> Unit = {},
     onRecalc: () -> Unit = {},
+    /** Invert's crown, or another line in the same stations as [profile]. */
+    crown: DoubleArray? = null,
 ) {
     var selected by remember { mutableStateOf<Int?>(null) }
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
@@ -117,7 +119,7 @@ fun ProfilePanel(
                 }
                 OutlinedButton(onClick = onRecalc, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Recalcular estrada")) }
             }
-            ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected) { selected = it }
+            ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected, { selected = it }, crown)
         }
     }
 }
@@ -133,6 +135,7 @@ private fun ProfileChart(
     onPvis: (List<com.appdwg.core.Profile.Pvi>) -> Unit = {},
     selected: Int? = null,
     onSelect: (Int?) -> Unit = {},
+    crown: DoubleArray? = null,
 ) {
     // Mapping of the last drawing (left, right, top, bottom, zMin, zMax), so gestures can turn
     // touches into station and elevation; frozen while a PVI is dragged.
@@ -206,6 +209,7 @@ private fun ProfileChart(
         for (i in i0..i1) {
             p.lines.forEach { l -> l.elevations[i].takeIf { !it.isNaN() }?.let(values::add) }
             p.design?.get(i)?.takeIf { !it.isNaN() }?.let(values::add)
+            crown?.getOrNull(i)?.takeIf { !it.isNaN() }?.let(values::add)
         }
         if (values.isEmpty()) {
             text(tr("Sem superfície nem greide neste trecho."), left, (top + bottom) / 2, fg)
@@ -256,6 +260,7 @@ private fun ProfileChart(
         }
         p.lines.forEachIndexed { k, l -> drawSeries(l.elevations, TERRAIN_COLORS[k % TERRAIN_COLORS.size], 3f) }
         p.design?.let { drawSeries(it, GRADE_COLOR, 3.5f) }
+        crown?.let { drawSeries(it, Color(0xFF1565C0), 2.5f) }
         // PVIs with their station and, between them, the grade in percent.
         p.pvis.forEachIndexed { k, v ->
             if (v.station in s0..s1) {

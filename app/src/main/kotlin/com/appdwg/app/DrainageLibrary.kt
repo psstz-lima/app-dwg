@@ -74,6 +74,7 @@ fun DrainageLibraryDialog(
     catalogNote: String?,
     onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
     onSuggestCulverts: (() -> Unit)? = null,
+    suggestNote: String? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -88,7 +89,8 @@ fun DrainageLibraryDialog(
         },
         confirmButton = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onSuggestCulverts != null) GButton(tr("Sugerir bueiros"), onSuggestCulverts, outlined = true, modifier = Modifier.fillMaxWidth())
+                suggestNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis) }
+                if (onSuggestCulverts != null) GButton(tr("Sugerir drenagem"), onSuggestCulverts, outlined = true, modifier = Modifier.fillMaxWidth())
                 GButton(tr("Fechar"), onDismiss, modifier = Modifier.fillMaxWidth())
             }
         },
@@ -194,7 +196,10 @@ private fun DeviceBrowser(
             )
         }
         item {
+            var open by remember { mutableStateOf(false) }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                GButton(if (open) tr("Recolher filtros") else tr("Filtros"), { open = !open }, outlined = true, modifier = Modifier.fillMaxWidth())
+                if (!open) return@Column
                 Text(tr("Capítulo"), style = MaterialTheme.typography.titleSmall)
                 ChoiceRow {
                     Choice(chapter == null, tr("Todos")) { onChapter(null) }

@@ -63,6 +63,8 @@ data class DrainageBuilt(
     val runs: List<DrainAlignment> = emptyList(),
     val runProfiles: List<DrainProfile> = emptyList(),
     val sections: List<DrainCrossSection> = emptyList(),
+    /** Device triangles split by finish colour (0xRRGGBB), so grass is not drawn as concrete. */
+    val colored: List<Pair<Int, DoubleArray>> = emptyList(),
 )
 
 object DrainageScene {
@@ -76,6 +78,8 @@ object DrainageScene {
         terrain: (Double, Double) -> Double?,
         alignmentOf: (String) -> Alignment?,
         names: Map<String, String> = emptyMap(),
+        /** Triangles kept for each device. A long device cannot spend the next one's budget. */
+        triangleBudget: Int = Sweep.MAX_TRIANGLES,
     ): DrainageBuilt {
         val glyphs = ArrayList<DrainageGlyph>()
         val triangles = ArrayList<Double>()
@@ -86,7 +90,12 @@ object DrainageScene {
         val backParts = ArrayList<DoubleArray>()
         val fillParts = ArrayList<DoubleArray>()
         val waterParts = ArrayList<DoubleArray>()
-        var budget = Sweep.MAX_TRIANGLES
+        val colored = LinkedHashMap<Int, ArrayList<Double>>()
+        fun paint(rgb: Int, kept: DoubleArray) {
+            if (kept.isEmpty()) return
+            val bucket = colored.getOrPut(rgb) { ArrayList(kept.size) }
+            for (value in kept) bucket += value
+        }
         for (placedDevice in placed) {
             val device = deviceOf(placedDevice.code) ?: continue
             val section = resolveSection(device, placedDevice.params)
@@ -102,17 +111,27 @@ object DrainageScene {
                     } else {
                         Sweep.sweep(section, nodes, signed, placedDevice.grade, terrain, profileAt)
                     }
-                    if (mesh == null) continue
-                    val kept = keep(mesh.triangles, budget)
-                    budget -= kept.size / 9
+                    val line = nodes.map { Point2(it.x, it.y) }
+                    if (mesh == null) {
+                        glyphs += DrainageGlyph(placedDevice.id, line, line, emptyList(), placedDevice.code, true)
+                        takeoff += DrainageTakeoff.of(placedDevice.id, device, lineLength(nodes), section, point = false)
+                        continue
+                    }
+                    // Each device keeps its own triangle budget, so a long run cannot blank the next one.
+                    val kept = keep(mesh.triangles, triangleBudget)
                     for (value in kept) triangles += value
-                    val layers = Corridor.along(
-                        mesh.frames, terrain,
-                        (mesh.widthM / 2.0).takeIf { it > 0.05 } ?: 0.3,
-                        mesh.innerWidthM / 2.0,
-                        placedDevice.grade.buried,
-                        if (placedDevice.grade.buried) HydraulicGrade.DEFAULT_BEDDING else 0.0,
-                    )
+                    paint(DeviceLook.rgb(DeviceLook.finish(device)), kept)
+                    val layers = if (placedDevice.grade.buried) {
+                        Corridor.along(
+                            mesh.frames, terrain,
+                            (mesh.widthM / 2.0).takeIf { it > 0.05 } ?: 0.3,
+                            mesh.innerWidthM / 2.0,
+                            true,
+                            HydraulicGrade.DEFAULT_BEDDING,
+                        )
+                    } else {
+                        Corridor.along(mesh.frames, terrain, mesh.innerWidthM / 2.0, mesh.innerWidthM / 2.0, false, 0.0)
+                    }
                     trenchParts += layers.trench
                     bedParts += layers.bedding
                     backParts += layers.backfill
@@ -123,7 +142,9 @@ object DrainageScene {
                         placedDevice.id, mesh.footprint, mesh.invert, flowArrows(flow, mesh.length),
                         null, mesh.simplified, mesh.channel, mesh.channels, mesh.widthM,
                     )
-                    takeoff += DrainageTakeoff.of(placedDevice.id, device, mesh.length, section, point = false).earth(mesh.hydraulic)
+                    takeoff += DrainageTakeoff.of(placedDevice.id, device, mesh.length, section, point = false)
+                        .copy(drawnTriangles = kept.size / 9)
+                        .earth(mesh.hydraulic)
                     mesh.hydraulic?.let { hydraulic ->
                         profiles += DeviceProfile(
                             placedDevice.id, device.code, hydraulic, kept.size / 9,
@@ -146,11 +167,19 @@ object DrainageScene {
                     } else {
                         Sweep.point(section, placedDevice.x, placedDevice.y, placedDevice.rotationDeg, placedDevice.skewDeg, placedDevice.grade, ground, profileZ)
                     }
-                    if (mesh == null) continue
-                    val kept = keep(mesh.triangles, budget)
-                    budget -= kept.size / 9
+                    if (mesh == null) {
+                        glyphs += DrainageGlyph(
+                            placedDevice.id, listOf(Point2(placedDevice.x, placedDevice.y)),
+                            listOf(Point2(placedDevice.x, placedDevice.y)), emptyList(), placedDevice.code, true,
+                        )
+                        takeoff += DrainageTakeoff.of(placedDevice.id, device, 1.0, section, point = true)
+                        continue
+                    }
+                    val kept = keep(mesh.triangles, triangleBudget)
                     for (value in kept) triangles += value
-                    if (placedDevice.grade.mode == GradeMode.HYDRAULIC && mesh.footprint.size >= 3 && ground != null) {
+                    paint(DeviceLook.rgb(DeviceLook.finish(device)), kept)
+                    val pitVolume = pitVolume(mesh.footprint, ground, mesh)
+                    if (placedDevice.grade.mode == GradeMode.HYDRAULIC && mesh.footprint.size >= 3 && ground != null && placedDevice.grade.buried) {
                         val invert = mesh.frames.minOfOrNull { it.invertZ } ?: (ground - if (placedDevice.grade.buried) placedDevice.grade.minCover else 0.0)
                         val pit = Corridor.pit(mesh.footprint, ground, invert - if (placedDevice.grade.buried) HydraulicGrade.DEFAULT_BEDDING else 0.0)
                         trenchParts += pit.trench
@@ -160,10 +189,14 @@ object DrainageScene {
                         placedDevice.id, mesh.footprint, mesh.invert, emptyList(), label, mesh.simplified,
                         mesh.channel, mesh.channels, mesh.widthM,
                     )
-                    takeoff += DrainageTakeoff.of(placedDevice.id, device, 1.0, section, point = true)
+                    val row = DrainageTakeoff.of(placedDevice.id, device, 1.0, section, point = true)
+                    takeoff += if (row.excavation <= 1e-9 && pitVolume > 0.0) {
+                        row.copy(excavation = pitVolume, trench = pitVolume, drawnTriangles = kept.size / 9)
+                    } else {
+                        row.copy(drawnTriangles = kept.size / 9, trench = if (placedDevice.grade.buried) pitVolume else 0.0)
+                    }
                 }
             }
-            if (budget <= 0) break
         }
         val runs = DrainAlignments.build(placed, names, terrain)
         val metrics = { id: String -> metricsOf(placed, id, deviceOf) }
@@ -176,6 +209,7 @@ object DrainageScene {
             glyphs, triangles.toDoubleArray(), takeoff,
             joinDoubles(trenchParts), joinDoubles(bedParts), joinDoubles(backParts), joinDoubles(fillParts), joinDoubles(waterParts),
             profiles, runs, runProfiles, sections,
+            colored.map { (rgb, values) -> rgb to values.toDoubleArray() },
         )
     }
 
@@ -238,13 +272,39 @@ object DrainageScene {
     }
 
     private fun DeviceTakeoff.earth(hydraulic: HydraulicGrade.Result?): DeviceTakeoff {
-        if (hydraulic == null) return this
-        return copy(
-            backfill = hydraulic.backfill, bedding = hydraulic.bedding, spoil = hydraulic.spoil, fill = hydraulic.fill,
-            trench = hydraulic.excavation, shoring = hydraulic.shoring, tooDeep = hydraulic.tooDeep,
-            invertUp = hydraulic.invertUpstream, invertDown = hydraulic.invertDownstream,
-            gradeSlope = hydraulic.minSlope, cutDepth = hydraulic.maxCut,
-        )
+        if (hydraulic == null || hydraulic.samples.isEmpty()) return this
+        return if (hydraulic.backfill == 0.0 && hydraulic.excavation == 0.0 && !hydraulic.shoring) {
+            // Surface device: catalog excavation stays. The grade is only the invert.
+            copy(
+                invertUp = hydraulic.invertUpstream, invertDown = hydraulic.invertDownstream,
+                gradeSlope = hydraulic.actualSlope, shoring = false, tooDeep = false,
+            )
+        } else {
+            copy(
+                backfill = hydraulic.backfill, bedding = hydraulic.bedding, spoil = hydraulic.spoil, fill = hydraulic.fill,
+                trench = hydraulic.excavation, shoring = hydraulic.shoring, tooDeep = hydraulic.tooDeep,
+                invertUp = hydraulic.invertUpstream, invertDown = hydraulic.invertDownstream,
+                gradeSlope = hydraulic.actualSlope, cutDepth = hydraulic.maxCut,
+            )
+        }
+    }
+
+    private fun lineLength(nodes: List<PathNode>): Double {
+        if (nodes.size < 2) return 0.0
+        return nodes.last().distance - nodes.first().distance
+    }
+
+    private fun pitVolume(footprint: List<Point2>, ground: Double?, mesh: SweepMesh): Double {
+        if (ground == null || footprint.size < 3) return 0.0
+        var area = 0.0
+        for (i in footprint.indices) {
+            val a = footprint[i]
+            val b = footprint[(i + 1) % footprint.size]
+            area += a.x * b.y - b.x * a.y
+        }
+        val depth = (ground - mesh.frames.minOfOrNull { it.invertZ }.let { it ?: (ground - mesh.heightM) }).coerceAtLeast(0.0)
+        val height = if (depth > 0.05) depth else mesh.heightM
+        return kotlin.math.abs(area) / 2.0 * height
     }
 
     private fun joinDoubles(parts: List<DoubleArray>): DoubleArray {

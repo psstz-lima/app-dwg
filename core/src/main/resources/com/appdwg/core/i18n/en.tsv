@@ -1549,3 +1549,19 @@ CSV de quantidades	quantity CSV
 Quantidades de drenagem (CSV)	Drainage quantities (CSV)
 Quantidades de drenagem (PDF)	Drainage quantities (PDF)
 Drenagem (IFC)	Drainage (IFC)
+Recolher filtros	Collapse filters
+Filtros	Filters
+Escavação por metro	Excavation per metre
+A vala passa de {0}: prever bombeamento ou queda.	The trench exceeds {0}: plan pumping or a drop structure.
+Declividade {0} %	Grade {0} %
+Mínima do trecho {0} %	Minimum of the reach {0} %
+Fora da superfície: o trecho foi interpolado. Confira o terreno.	Off the surface: the reach was interpolated. Check the ground.
+Não há eixo no projeto. Trace uma estrada para sugerir a drenagem.	There is no alignment in the project. Draw a road to suggest the drainage.
+Não há eixo no projeto. Trace uma estrada ou toque o ponto de lançamento.	There is no alignment in the project. Draw a road or tap the outlet point.
+Não há eixo de estrada. Os pontos, se houver, são onde a água sai da plataforma ou do terreno.	There is no road alignment. Any points are where water leaves the platform or the ground.
+Procurando talvegues em {0}…	Looking for thalwegs on {0}…
+Nenhum talvegue cruza {0}. Rode as bacias ou toque o ponto de lançamento.	No thalweg crosses {0}. Run the basins or tap the outlet point.
+{0} dispositivos sugeridos em {1}.	{0} devices suggested on {1}.
+Sugerir drenagem	Suggest drainage
+Métrico em português; imperial só em inglês dos EUA	Metric in Portuguese; imperial only for US English
+Montante {0} · jusante {1}	Upstream {0} · downstream {1}

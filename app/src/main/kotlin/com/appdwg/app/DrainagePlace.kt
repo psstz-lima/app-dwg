@@ -374,6 +374,7 @@ fun DrainagePickBar(
     onCancel: () -> Unit,
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
+    finishLabel: String = tr("Concluir"),
 ) {
     Column(modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -384,7 +385,7 @@ fun DrainagePickBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (canUndo) Choice(false, tr("Desfazer")) { onUndo() }
-            Choice(true, tr("Concluir")) { onFinish() }
+            Choice(true, finishLabel) { onFinish() }
             Choice(false, tr("Cancelar")) { onCancel() }
             Choice(false, tr("Mais")) { onMore() }
         }
@@ -426,6 +427,8 @@ fun DrainageSelectionCard(
     onRename: ((String) -> Unit)? = null,
     onReverse: (() -> Unit)? = null,
     onExport: ((String) -> Unit)? = null,
+    onOpenProfile: (() -> Unit)? = null,
+    onOpenSection: (() -> Unit)? = null,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -442,7 +445,7 @@ fun DrainageSelectionCard(
         }
         row?.let { TakeoffLines(tr("Este dispositivo"), it) }
         total?.let { TakeoffLines(tr("Total do projeto"), it) }
-        profile?.let { HydraulicBlock(it, run, section, connected, onRename, onReverse, onExport) }
+        profile?.let { HydraulicBlock(it, run, section, connected, onRename, onReverse, onExport, onOpenProfile, onOpenSection) }
         if (profile == null && row != null) {
             Text(tr("Este lançamento acompanha o terreno. O greide hidráulico faz a água descer."), maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
@@ -499,17 +502,23 @@ private fun BasinLink(onLink: (String, String) -> Unit) {
 @Composable
 private fun TakeoffLines(title: String, row: DeviceTakeoff) {
     SpecHeader(title)
-    SpecRow(tr("Comprimento"), StationFormat.length(row.length, 2))
-    SpecRow(tr("Concreto"), StationFormat.volume(row.concrete, 3))
-    if (row.trench > 0.0) SpecRow(tr("Escavação"), StationFormat.volume(row.trench, 3))
-    else SpecRow(tr("Escavação"), StationFormat.volume(row.excavation, 3))
+    if (row.length > 0.05) SpecRow(tr("Comprimento"), StationFormat.length(row.length, 2))
+    else SpecRow(tr("Unidades"), "1")
+    if (row.concrete > 0.0) SpecRow(tr("Concreto"), StationFormat.volume(row.concrete, 3))
+    val dig = if (row.trench > 0.0) row.trench else row.excavation
+    if (dig > 0.0) SpecRow(tr("Escavação"), StationFormat.volume(dig, 3))
     if (row.backfill > 0.0) SpecRow(tr("Reaterro"), StationFormat.volume(row.backfill, 3))
     if (row.bedding > 0.0) SpecRow(tr("Berço"), StationFormat.volume(row.bedding, 3))
     if (row.spoil > 0.0) SpecRow(tr("Bota-fora"), StationFormat.volume(row.spoil, 3))
     if (row.fill > 0.0) SpecRow(tr("Aterro"), StationFormat.volume(row.fill, 3))
     if (row.formworkKnown) SpecRow(tr("Formas"), StationFormat.area(row.formwork, 3))
+    if (row.length > 0.05 && row.trench > 0.0) {
+        SpecRow(tr("Escavação por metro"), StationFormat.volume(row.trench / row.length, 3))
+    }
     if (row.shoring) FactLine(tr("Escoramento acima de 1,25 m"))
-    if (row.tooDeep) FactLine(tr("A vala passa de {0} m: prever bombeamento ou queda.", StationFormat.decimal(row.cutDepth, 2)))
+    if (row.tooDeep && row.cutDepth.isFinite()) {
+        FactLine(tr("A vala passa de {0}: prever bombeamento ou queda.", StationFormat.length(row.cutDepth, 2)))
+    }
 }
 
 @Composable
@@ -521,20 +530,32 @@ private fun HydraulicBlock(
     onRename: ((String) -> Unit)?,
     onReverse: (() -> Unit)?,
     onExport: ((String) -> Unit)?,
+    onOpenProfile: (() -> Unit)?,
+    onOpenSection: (() -> Unit)?,
 ) {
     val grade = profile.hydraulic
     Text(tr("Perfil hidráulico"), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     Text(
-        tr("Montante {0} m · jusante {1} m", StationFormat.decimal(grade.invertUpstream, 3), StationFormat.decimal(grade.invertDownstream, 3)),
+        tr("Montante {0} · jusante {1}", StationFormat.length(grade.invertUpstream, 3), StationFormat.length(grade.invertDownstream, 3)),
         maxLines = 2, overflow = TextOverflow.Ellipsis,
     )
-    Text(tr("Declividade mínima do trecho {0} %", StationFormat.decimal(grade.minSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Text(tr("Declividade {0} %", StationFormat.decimal(grade.actualSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Text(tr("Mínima do trecho {0} %", StationFormat.decimal(grade.minSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    if (grade.offSurface) {
+        Text(tr("Fora da superfície: o trecho foi interpolado. Confira o terreno."), maxLines = 3, overflow = TextOverflow.Ellipsis)
+    }
     ProfileChart(grade.samples.map { it.distance to it.terrain to it.invert })
-    if (grade.tooDeep) {
-        Text(tr("A vala passa de {0} m: prever bombeamento ou queda.", StationFormat.decimal(grade.maxCut, 2)), maxLines = 3, overflow = TextOverflow.Ellipsis)
+    if (grade.tooDeep && grade.maxCut.isFinite()) {
+        Text(tr("A vala passa de {0}: prever bombeamento ou queda.", StationFormat.length(grade.maxCut, 2)), maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
     run?.let { alignment ->
-        Text(tr("Eixo {0}", alignment.name), style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(alignment.name, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (onOpenProfile != null || onOpenSection != null) {
+            ChoiceRow {
+                if (onOpenProfile != null) Choice(false, tr("Perfil")) { onOpenProfile() }
+                if (onOpenSection != null) Choice(false, tr("Seção")) { onOpenSection() }
+            }
+        }
         if (onRename != null) {
             var name by remember(alignment.id) { mutableStateOf(alignment.name) }
             OutlinedTextField(
