@@ -583,6 +583,7 @@ private fun ProjectScreen(
     var drainageBuilt by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageBuilt?>(null) }
     var drainageNetwork by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageGraph?>(null) }
     var drainageFlows by remember(fileName) { mutableStateOf<Map<String, com.appdwg.core.drainage.ReachFlow>>(emptyMap()) }
+    var outletSoil by remember(fileName) { mutableStateOf(com.appdwg.core.drainage.OutletSoil.CLAY) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
@@ -1423,6 +1424,9 @@ private fun ProjectScreen(
                                     else -> vm.setDrainageBasin(id, size, v.basinParams.runoff, tc)
                                 }
                             },
+                            soil = outletSoil,
+                            onSoil = if (proOpen(ProFeature.DRAINAGE) && (drainageFlows[drainageSelected]?.accumulated ?: 0.0) > 0.0) ({ outletSoil = it }) else null,
+                            protection = protectionLine(placed, vm.drainageCatalog, drainageFlows[drainageSelected]?.accumulated ?: 0.0, outletSoil),
                         )
                     }
                 } else if (show3d && !measuring && !drawingPlatform && genPick == null) {

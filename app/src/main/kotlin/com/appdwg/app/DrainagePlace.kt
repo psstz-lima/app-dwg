@@ -8,10 +8,14 @@ import com.appdwg.core.drainage.DeviceTakeoff
 import com.appdwg.core.drainage.DrainageGraph
 import com.appdwg.core.drainage.GradeMode
 import com.appdwg.core.drainage.GradeSpec
+import com.appdwg.core.drainage.DrainageNetwork
 import com.appdwg.core.drainage.NetworkCheck
+import com.appdwg.core.drainage.OutletProtection
+import com.appdwg.core.drainage.OutletSoil
 import com.appdwg.core.drainage.Parameter
 import com.appdwg.core.drainage.PathSource
 import com.appdwg.core.drainage.PlacedDevice
+import com.appdwg.core.drainage.resolveSection
 import com.appdwg.core.tr
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -173,6 +177,21 @@ fun culvertLine(device: PlacedDevice?, flow: Double): String? {
     return if (head.overtopped) line + " " + tr("Transbordamento da rodovia.") else line
 }
 
+/** Outlet velocity against the soil limit, and the dumped-rock size when the water is moving. */
+fun protectionLine(device: PlacedDevice?, catalog: com.appdwg.core.drainage.DeviceCatalog, flow: Double, soil: OutletSoil): String? {
+    if (device == null || flow <= 0.0) return null
+    val section = catalog.device(device.code)?.let { resolveSection(it, device.params) } ?: return null
+    val area = DrainageNetwork.waterway(section)?.area ?: return null
+    val advice = OutletProtection.advise(flow, area, soil)
+    val line = tr(
+        "Velocidade {0} m/s, limite do solo {1} m/s. Enrocamento D50 {2} m.",
+        StationFormat.decimal(advice.velocity, 2),
+        StationFormat.decimal(advice.limit, 2),
+        StationFormat.decimal(advice.d50, 3),
+    )
+    return if (advice.dissipator) line + " " + tr("Velocidade acima do limite: sugerir dissipador DES.") else line
+}
+
 @Composable
 fun DrainagePlaceCard(
     draft: PlaceDraft,
@@ -297,6 +316,9 @@ fun DrainageSelectionCard(
     notes: List<String> = emptyList(),
     basinSummary: String? = null,
     onLinkBasin: ((String, String) -> Unit)? = null,
+    soil: OutletSoil? = null,
+    onSoil: ((OutletSoil) -> Unit)? = null,
+    protection: String? = null,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -316,6 +338,17 @@ fun DrainageSelectionCard(
         for (note in notes) Text(note, maxLines = 3, overflow = TextOverflow.Ellipsis)
         basinSummary?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
         if (onLinkBasin != null) BasinLink(onLinkBasin)
+        if (onSoil != null && soil != null) {
+            Text(tr("Solo da saída"), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ChoiceRow {
+                Choice(soil == OutletSoil.SILT, tr("Silte")) { onSoil(OutletSoil.SILT) }
+                Choice(soil == OutletSoil.SAND, tr("Areia")) { onSoil(OutletSoil.SAND) }
+                Choice(soil == OutletSoil.CLAY, tr("Argila")) { onSoil(OutletSoil.CLAY) }
+                Choice(soil == OutletSoil.GRAVEL, tr("Pedregulho")) { onSoil(OutletSoil.GRAVEL) }
+                Choice(soil == OutletSoil.ROCK, tr("Rocha")) { onSoil(OutletSoil.ROCK) }
+            }
+        }
+        protection?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
         ChoiceRow {
             Choice(false, tr("Editar")) { onEdit() }
             Choice(moving, tr("Mover")) { onMove() }

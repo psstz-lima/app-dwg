@@ -1468,3 +1468,11 @@ Bueiro {0} m × {1} m, {2}: lâmina {3} m.	Culvert {0} m × {1} m, {2}: headwate
 Transbordamento da rodovia.	The road overtops.
 Sugerir bueiros	Suggest culverts
 Nenhum talvegue cruza o eixo. Rode as bacias antes.	No thalweg crosses the alignment. Run the basins first.
+Solo da saída	Outlet soil
+Silte	Silt
+Areia	Sand
+Argila	Clay
+Pedregulho	Gravel
+Rocha	Rock
+Velocidade {0} m/s, limite do solo {1} m/s. Enrocamento D50 {2} m.	Velocity {0} m/s, soil limit {1} m/s. Riprap D50 {2} m.
+Velocidade acima do limite: sugerir dissipador DES.	Velocity above the limit: suggest a DES dissipator.
