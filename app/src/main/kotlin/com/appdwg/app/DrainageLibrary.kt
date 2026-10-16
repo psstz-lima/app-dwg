@@ -61,6 +61,7 @@ fun DrainageLibraryDialog(
     onPro: () -> Unit,
     onDismiss: () -> Unit,
     onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
+    onSuggestCulverts: (() -> Unit)? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -68,7 +69,12 @@ fun DrainageLibraryDialog(
         modifier = Modifier.safeBars().fillMaxWidth(0.96f),
         title = { Text(tr("Biblioteca de dispositivos"), maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = { DrainageLibraryBody(isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp), onPlace) },
-        confirmButton = { GButton(tr("Fechar"), onDismiss) },
+        confirmButton = {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onSuggestCulverts != null) GButton(tr("Sugerir bueiros"), onSuggestCulverts, outlined = true, modifier = Modifier.fillMaxWidth())
+                GButton(tr("Fechar"), onDismiss, modifier = Modifier.fillMaxWidth())
+            }
+        },
     )
 }
 

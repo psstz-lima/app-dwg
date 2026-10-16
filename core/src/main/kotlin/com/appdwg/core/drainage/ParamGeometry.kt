@@ -70,7 +70,21 @@ internal fun crossSection(geometry: Jv.Obj?, env: Map<String, Double>): CrossSec
         val ring = ring(texts, env, units) ?: continue
         if (ring.size >= 3) rings += ring
     }
+    if (rings.isEmpty() && type == "circular_barrels") {
+        val dn = env["DN_cm"] ?: env["DN"]
+        if (dn != null && dn > 0.0) rings += circle(toMetres(dn, units))
+    }
     return CrossSection(type, units, rings)
+}
+
+/** Closed pipe, invert on y = 0, so a barrel without catalog vertices can still be swept. */
+internal fun circle(diameter: Double): List<SectionPoint> {
+    val radius = diameter / 2.0
+    val count = 24
+    return List(count) { i ->
+        val angle = -Math.PI / 2.0 + 2.0 * Math.PI * i / count
+        SectionPoint(radius * kotlin.math.cos(angle), radius * kotlin.math.sin(angle) + radius)
+    }
 }
 
 /** Section of [device] after numeric parameter edits. An empty override map keeps the catalog section. */

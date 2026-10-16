@@ -1466,3 +1466,5 @@ Bacia grande para o método racional.	Basin is large for the rational method.
 Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão.	Enter the rainfall equation (K, a, b, c) in Basins before linking the flow.
 Bueiro {0} m × {1} m, {2}: lâmina {3} m.	Culvert {0} m × {1} m, {2}: headwater {3} m.
 Transbordamento da rodovia.	The road overtops.
+Sugerir bueiros	Suggest culverts
+Nenhum talvegue cruza o eixo. Rode as bacias antes.	No thalweg crosses the alignment. Run the basins first.

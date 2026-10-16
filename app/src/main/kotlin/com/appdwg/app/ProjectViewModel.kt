@@ -1142,6 +1142,50 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         pushDrainage(drainage.filter { it.id != id }, drainageBasins.filter { it.deviceId != id })
     }
 
+    /**
+     * Places a catalog culvert on every thalweg that crosses [line].
+     * Does nothing and calls [onEmpty] when the flow grid is missing or no stream crosses.
+     * The grid walk runs off the UI thread.
+     */
+    fun placeThalwegCulverts(
+        line: List<com.appdwg.core.Point2>,
+        minArea: Double,
+        runoff: Double,
+        idf: com.appdwg.core.Idf,
+        years: Double,
+        minutes: Double,
+        onEmpty: () -> Unit,
+    ) {
+        val grid = flowGrid
+        if (grid == null || line.size < 2) {
+            onEmpty()
+            return
+        }
+        viewModelScope.launch {
+            val devices = withContext(Dispatchers.Default) {
+                com.appdwg.core.drainage.ThalwegCulverts.suggest(
+                    com.appdwg.core.Hydrology.crossings(grid, line, minArea),
+                    runoff, idf, years, minutes,
+                ).map { crossing ->
+                    val half = 7.5
+                    com.appdwg.core.drainage.PlacedDevice.Linear(
+                        java.util.UUID.randomUUID().toString(),
+                        bstcCode(crossing.barrel.rise),
+                        com.appdwg.core.drainage.PathSource.POLYLINE,
+                        null,
+                        listOf(crossing.x - half, crossing.x + half),
+                        listOf(crossing.y, crossing.y),
+                        com.appdwg.core.drainage.DeviceSide.AXIS,
+                        0.0, null, null,
+                        com.appdwg.core.drainage.GradeSpec(com.appdwg.core.drainage.GradeMode.SLOPE, z0 = 0.0, slope = -0.01),
+                        null,
+                    )
+                }
+            }
+            if (devices.isEmpty()) onEmpty() else pushDrainage(drainage + devices)
+        }
+    }
+
     fun setDrainageBasin(id: String, areaM2: Double, runoff: Double, minutes: Double) {
         val next = drainageBasins.filter { it.deviceId != id } + com.appdwg.core.drainage.DeviceBasin(id, areaM2, runoff, minutes)
         pushDrainage(drainage, next)
@@ -1165,6 +1209,13 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drainage = prev.first
         drainageBasins = prev.second
         canUndoDrainage = drainageUndo.isNotEmpty()
+    }
+
+    private fun bstcCode(rise: Double): String {
+        val cm = (rise * 100.0).toInt()
+        val sizes = intArrayOf(60, 80, 100, 120, 150)
+        val nearest = sizes.minBy { kotlin.math.abs(it - cm) }
+        return "BSTC $nearest"
     }
 
     private fun pushDrainage(

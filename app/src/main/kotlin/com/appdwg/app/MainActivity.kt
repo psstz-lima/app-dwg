@@ -1869,6 +1869,21 @@ private fun ProjectScreen(
             drainageDraft = draftFor(device)
             showDrainage = false
         }
+    }, onSuggestCulverts = {
+        val line = project.alignments.firstOrNull()?.vertices.orEmpty()
+        val rain = v.basinParams
+        val idf = rain.idf
+        when {
+            !proOpen(ProFeature.DRAINAGE) -> vm.proRequested = true
+            line.size < 2 -> vm.report(tr("Nenhum eixo no projeto."))
+            idf == null -> vm.report(tr("Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão."))
+            else -> {
+                vm.placeThalwegCulverts(line, rain.minArea, rain.runoff, idf, rain.years, com.appdwg.core.Hydrology.MIN_TC_MINUTES) {
+                    vm.report(tr("Nenhum talvegue cruza o eixo. Rode as bacias antes."))
+                }
+                showDrainage = false
+            }
+        }
     })
 
     if (showBasin) BasinDialog(vm, project, onPick = {
