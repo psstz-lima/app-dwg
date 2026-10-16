@@ -1125,7 +1125,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var drainageBasins by mutableStateOf<List<com.appdwg.core.drainage.DeviceBasin>>(emptyList())
         private set
-    private val drainageUndo = ArrayDeque<Pair<List<com.appdwg.core.drainage.PlacedDevice>, List<com.appdwg.core.drainage.DeviceBasin>>>()
+    var drainagePhases by mutableStateOf<List<com.appdwg.core.drainage.DevicePhase>>(emptyList())
+        private set
+    private val drainageUndo = ArrayDeque<DrainageHistory>()
     var canUndoDrainage by mutableStateOf(false)
         private set
 
@@ -1139,7 +1141,18 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteDrainage(id: String) {
-        pushDrainage(drainage.filter { it.id != id }, drainageBasins.filter { it.deviceId != id })
+        pushDrainage(
+            drainage.filter { it.id != id },
+            drainageBasins.filter { it.deviceId != id },
+            drainagePhases.filter { it.deviceId != id },
+        )
+    }
+
+    /** Assigns [phase] to a device. Phase 0 clears it, so the device stays visible in every stage. */
+    fun setDrainagePhase(id: String, phase: Int) {
+        val next = drainagePhases.filter { it.deviceId != id }
+        val stored = if (phase <= 0) next else next + com.appdwg.core.drainage.DevicePhase(id, phase)
+        pushDrainage(drainage, drainageBasins, stored)
     }
 
     /**
@@ -1206,8 +1219,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun undoDrainage() {
         val prev = drainageUndo.removeLastOrNull() ?: return
-        drainage = prev.first
-        drainageBasins = prev.second
+        drainage = prev.devices
+        drainageBasins = prev.basins
+        drainagePhases = prev.phases
         canUndoDrainage = drainageUndo.isNotEmpty()
     }
 
@@ -1221,13 +1235,21 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private fun pushDrainage(
         next: List<com.appdwg.core.drainage.PlacedDevice>,
         basins: List<com.appdwg.core.drainage.DeviceBasin> = drainageBasins,
+        phases: List<com.appdwg.core.drainage.DevicePhase> = drainagePhases,
     ) {
-        drainageUndo.addLast(drainage to drainageBasins)
+        drainageUndo.addLast(DrainageHistory(drainage, drainageBasins, drainagePhases))
         if (drainageUndo.size > 50) drainageUndo.removeFirst()
         drainage = next
         drainageBasins = basins
+        drainagePhases = phases
         canUndoDrainage = true
     }
+
+    private class DrainageHistory(
+        val devices: List<com.appdwg.core.drainage.PlacedDevice>,
+        val basins: List<com.appdwg.core.drainage.DeviceBasin>,
+        val phases: List<com.appdwg.core.drainage.DevicePhase>,
+    )
 
     /** Shown line at [index] (as [LineRef.Drawing] numbers them). */
     fun shownLine(index: Int): Polyline? = (state as? ProjectState.Loaded)?.project?.polylines?.getOrNull(index)
@@ -3158,6 +3180,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             notes = notes,
             drainage = drainage,
             drainageBasins = drainageBasins,
+            drainagePhases = drainagePhases,
             edited = addedFiles.filter { it.uri == null && it.label.endsWith(EDITED_SUFFIX) }
                 .flatMap { f -> f.project.surfaces }.map { s -> synchronized(encodedSurfaces) { encodedSurfaces.getOrPut(s) { SurfaceCodec.encode(s) } } },
         )
@@ -3186,6 +3209,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         encodedSurfaces.clear()
         drainage = emptyList()
         drainageBasins = emptyList()
+        drainagePhases = emptyList()
         drainageUndo.clear()
         canUndoDrainage = false
     }
@@ -3523,6 +3547,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         hiddenOriginals = doc.hiddenLines.toSet()
         drainage = doc.drainage
         drainageBasins = doc.drainageBasins
+        drainagePhases = doc.drainagePhases
         drainageUndo.clear()
         canUndoDrainage = false
         if (doc.pointsSurface) surfaceFromPointsNow()
@@ -3619,6 +3644,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     hiddenOriginals = emptySet()
                     drainage = emptyList()
                     drainageBasins = emptyList()
+                    drainagePhases = emptyList()
                     drainageUndo.clear()
                     canUndoDrainage = false
                     keptOriginals = project.polylines.indices.toList()

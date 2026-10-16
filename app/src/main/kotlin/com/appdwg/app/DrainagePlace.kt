@@ -346,6 +346,10 @@ fun DrainageSelectionCard(
     onSoil: ((OutletSoil) -> Unit)? = null,
     protection: String? = null,
     subsurface: String? = null,
+    phase: Int = 0,
+    phaseThrough: Int = 0,
+    onPhase: ((Int) -> Unit)? = null,
+    onPhaseThrough: ((Int) -> Unit)? = null,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -377,6 +381,20 @@ fun DrainageSelectionCard(
         }
         protection?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
         subsurface?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+        if (onPhase != null) {
+            Text(tr("Fase"), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ChoiceRow {
+                Choice(phase <= 0, tr("Sem fase")) { onPhase(0) }
+                for (n in 1..4) Choice(phase == n, n.toString()) { onPhase(n) }
+            }
+        }
+        if (onPhaseThrough != null) {
+            Text(tr("Ver até a fase"), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ChoiceRow {
+                Choice(phaseThrough <= 0, tr("Todas")) { onPhaseThrough(0) }
+                for (n in 1..4) Choice(phaseThrough == n, n.toString()) { onPhaseThrough(n) }
+            }
+        }
         ChoiceRow {
             Choice(false, tr("Editar")) { onEdit() }
             Choice(moving, tr("Mover")) { onMove() }
