@@ -220,6 +220,11 @@ fun PlanView(
     surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
     /** Area to show while the project has nothing in it yet. */
     fallbackBounds: Bounds? = null,
+    /** Placed drainage: plan footprint, invert and flow arrows. */
+    drainage: List<com.appdwg.core.drainage.DrainageGlyph> = emptyList(),
+    selectedDrainage: String? = null,
+    /** Devices whose network check failed. Drawn in red. */
+    drainageAlerts: Set<String> = emptySet(),
 ) {
     val bounds = project.bounds ?: fallbackBounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -259,11 +264,15 @@ fun PlanView(
     var frame by remember { mutableStateOf(0) }
     // A picture that is already one bitmap (no tiles) is scaled here for Alta and Normal.
     // Máxima, and any tiled picture, keeps the bitmap it was opened with.
-    val drapePicture = remember(drape?.image, drape?.tiles, imageQuality) {
+    // Scaling a 16 MP picture took long enough on the UI thread to freeze a quality change.
+    val drapePicture by androidx.compose.runtime.produceState(drape?.image, drape?.image, drape?.tiles, imageQuality) {
         val base = drape?.image
         val src = base?.asAndroidBitmap()
-        if (base == null || drape?.tiles != null || src == null || src.isRecycled) base
-        else scaledForQuality(src, imageQuality)?.asImageBitmap() ?: base
+        value = base
+        if (base == null || drape?.tiles != null || src == null || src.isRecycled) return@produceState
+        value = withContext(Dispatchers.Default) {
+            runCatching { scaledForQuality(src, imageQuality)?.asImageBitmap() }.getOrNull()
+        } ?: base
     }
 
     // Sharper terrain for the visible area once zoomed past the overview image's resolution.
@@ -544,9 +553,13 @@ fun PlanView(
                 val cx = cam.centerX + origin.x; val cy = cam.centerY + origin.y
                 for (p in tp.visible(Bounds(cx - halfW, cy - halfH, cx + halfW, cy + halfH), 1 / cam.scale, imageQuality)) {
                     val tl = toScreen(Point2(p.plan.minX, p.plan.maxY), cam); val br = toScreen(Point2(p.plan.maxX, p.plan.minY), cam)
+                    // Both corners rounded on their own, so a tile ends on the pixel where the next
+                    // one starts. Rounding the size instead left 1 px seams along the tile grid.
+                    val x0 = tl.x.roundToInt(); val y0 = tl.y.roundToInt()
+                    val x1 = br.x.roundToInt(); val y1 = br.y.roundToInt()
                     drawImage(p.image, srcOffset = IntOffset(p.src.left, p.src.top), srcSize = IntSize(p.src.width(), p.src.height()),
-                        dstOffset = IntOffset(tl.x.roundToInt(), tl.y.roundToInt()),
-                        dstSize = IntSize((br.x - tl.x).roundToInt().coerceAtLeast(1), (br.y - tl.y).roundToInt().coerceAtLeast(1)),
+                        dstOffset = IntOffset(x0, y0),
+                        dstSize = IntSize((x1 - x0).coerceAtLeast(1), (y1 - y0).coerceAtLeast(1)),
                         blendMode = BlendMode.SrcAtop)
                 }
             }
@@ -666,6 +679,7 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
+        if (drainage.isNotEmpty()) drawDrainage(drainage, selectedDrainage, drainageAlerts, cam.scale) { toScreen(it, cam) }
         if (measure.isNotEmpty()) {
             if (measureIsAxis) drawMeasure(measure, false, lines = AxisInfo.TANGENTS !in axisHidden, lengths = AxisInfo.LENGTHS !in axisHidden,
                 vertices = AxisInfo.PIS !in axisHidden) { toScreen(it, cam) }
@@ -1130,6 +1144,114 @@ private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2
     }
     for (a in project.alignments) for (v in a.vertices) consider(v.x, v.y)
     return best
+}
+
+private val DRAINAGE_COLOR = Color(0xFF1565C0)
+
+/** Footprint, concrete, inner channel and flow arrows. A device under 3 px wide keeps the centerline. */
+private fun DrawScope.drawDrainage(
+    glyphs: List<com.appdwg.core.drainage.DrainageGlyph>,
+    selected: String?,
+    alerts: Set<String>,
+    scale: Double,
+    toScreen: (Point2) -> Offset,
+) {
+    val label = Paint().apply {
+        isAntiAlias = true
+        textSize = 12.sp.toPx()
+        color = DRAINAGE_COLOR.toArgb()
+        setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK)
+    }
+    for (glyph in glyphs) {
+        val on = glyph.id == selected
+        val bad = glyph.id in alerts
+        val stroke = when {
+            on -> Color(0xFFFF6D00)
+            bad -> Color(0xFFC62828)
+            else -> DRAINAGE_COLOR
+        }
+        val concrete = when {
+            on -> Color(0xFFFF8A50)
+            bad -> Color(0xFFEF9A9A)
+            else -> Color(0xFF90A4AE)
+        }
+        val px = glyph.widthM * scale
+        val showBody = glyph.footprint.size >= 3 && (glyph.widthM <= 0.0 || px >= 3.0)
+        val invert = glyph.invert.map(toScreen)
+        if (showBody) {
+            val fill = screenPath(glyph.footprint, toScreen)
+            drawPath(fill, concrete.copy(alpha = if (on) 0.82f else 0.78f))
+            if (px >= 8.0) {
+                val clip = android.graphics.Path()
+                val first = toScreen(glyph.footprint.first())
+                clip.moveTo(first.x, first.y)
+                var left = first.x
+                var top = first.y
+                var right = first.x
+                var bottom = first.y
+                for (point in glyph.footprint.drop(1)) {
+                    val sp = toScreen(point)
+                    clip.lineTo(sp.x, sp.y)
+                    if (sp.x < left) left = sp.x
+                    if (sp.y < top) top = sp.y
+                    if (sp.x > right) right = sp.x
+                    if (sp.y > bottom) bottom = sp.y
+                }
+                clip.close()
+                val hatch = Paint().apply {
+                    isAntiAlias = true
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1f
+                    color = stroke.copy(alpha = 0.28f).toArgb()
+                }
+                drawContext.canvas.nativeCanvas.withClip(clip) {
+                    var y = top
+                    while (y < bottom + (right - left)) {
+                        drawLine(left, y, right, y - (right - left) * 0.35f, hatch)
+                        y += 7f
+                    }
+                }
+            }
+            val holes = glyph.channels.ifEmpty { if (glyph.channel.size >= 3) listOf(glyph.channel) else emptyList() }
+            for (hole in holes) {
+                val water = screenPath(hole, toScreen)
+                drawPath(water, Color(0xFF1565C0).copy(alpha = if (bad) 0.55f else 0.42f))
+                drawPath(water, stroke.copy(alpha = 0.9f), style = Stroke(width = 1.5f))
+            }
+            drawPath(fill, stroke, style = Stroke(width = if (on || bad) 3f else 1.5f))
+        } else if (invert.size >= 2) {
+            val line = if (bad && !on) Color(0xFFC62828) else if (on) Color(0xFFFF6D00) else Color(0xFF0D47A1)
+            for (i in 1 until invert.size) drawLine(line, invert[i - 1], invert[i], strokeWidth = 2.5f)
+        } else if (invert.isNotEmpty()) {
+            drawCircle(stroke, radius = 4f, center = invert.first())
+        }
+        val len = 8.sp.toPx()
+        for ((point, angle) in glyph.arrows) {
+            val c = toScreen(point)
+            val d = Offset(kotlin.math.cos(angle).toFloat(), -kotlin.math.sin(angle).toFloat())
+            val tip = c + d * len
+            val n = Offset(-d.y, d.x) * (len * 0.4f)
+            val back = tip - d * (len * 0.7f)
+            drawLine(DRAINAGE_COLOR, c - d * len, tip, strokeWidth = 2f)
+            drawLine(DRAINAGE_COLOR, tip, back + n, strokeWidth = 2f)
+            drawLine(DRAINAGE_COLOR, tip, back - n, strokeWidth = 2f)
+        }
+        if (glyph.simplified && glyph.label != null && invert.isNotEmpty()) {
+            val sp = invert.first()
+            drawContext.canvas.nativeCanvas.drawText(tr("{0} (simplificado)", glyph.label), sp.x + 6f, sp.y - 6f, label)
+        }
+    }
+}
+
+private fun screenPath(points: List<Point2>, toScreen: (Point2) -> Offset): Path = Path().apply {
+    if (points.isEmpty()) return@apply
+    val first = toScreen(points.first())
+    moveTo(first.x, first.y)
+    for (point in points.drop(1)) {
+        val sp = toScreen(point)
+        lineTo(sp.x, sp.y)
+    }
+    close()
 }
 
 /** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */

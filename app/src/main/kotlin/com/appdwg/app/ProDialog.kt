@@ -34,6 +34,7 @@ private val proFeatures get() = listOf(
     tr("Camadas, superfícies e curvas de nível"),
     tr("Pontos, linhas, anotações e medições"),
     tr("Estrada, plataforma, volumes, as-built e boletim de medição"),
+    tr("Drenagem IPR-736: lançamento e cálculos"),
     tr("GPS/RTK, calibração e sistemas de coordenadas"),
     tr("Exportar (DXF, KML, CSV, PDF…) e salvar projetos"),
 )
@@ -59,6 +60,7 @@ fun ProDialog(pro: ProStore, onDismiss: () -> Unit) {
                     },
                     fontWeight = FontWeight.Bold,
                 )
+                if (!pro.isPro) Text(tr("A biblioteca de drenagem pode ser consultada; o lançamento e os cálculos são do Pro."))
                 Text(tr("O Pro libera:"), style = MaterialTheme.typography.titleSmall)
                 for (f in proFeatures) Text("•  $f")
                 HorizontalDivider()

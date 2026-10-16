@@ -116,6 +116,7 @@ class ProAccessTest {
         "analysis" to "Análise e declividade",
         "advice" to "Sugestões",
         "basin" to "Bacias",
+        "drainage" to "Drenagem",
         "volume" to "Volume",
         "as_built" to "As-built",
         "models" to "Modelos",

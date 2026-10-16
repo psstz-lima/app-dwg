@@ -78,6 +78,8 @@ fun View3D(
     overlayLines: DoubleArray = DoubleArray(0),
     /** World xyz of the highlighted polygon facets, nine doubles per triangle. */
     overlayTris: DoubleArray = DoubleArray(0),
+    /** Placed drainage solids, world xyz, nine doubles per triangle. Drawn opaque in the draped view. */
+    solidTris: DoubleArray = DoubleArray(0),
     /** The GPU refused the picture. The caller steps the quality down and tries again. */
     onDrapeFailed: () -> Unit = {},
     /** True while tiles sharper than the overview are still loading. */
@@ -115,6 +117,11 @@ fun View3D(
     }
     LaunchedEffect(overlayLines, overlayTris) {
         renderer.setOverlay(sceneFloats(overlayLines, scene), sceneFloats(overlayTris, scene))
+        holder[0]?.requestRender()
+    }
+    LaunchedEffect(solidTris) {
+        val lit = withContext(Dispatchers.Default) { litSolid(solidTris, scene) }
+        renderer.setSolid(lit)
         holder[0]?.requestRender()
     }
     val failState = rememberUpdatedState(onDrapeFailed)
@@ -375,6 +382,10 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var height = 1
     private var program = 0
     private val meshBuffers = ArrayList<IntArray>()
+    /** Surface triangles by plan cell, so each picture tile draws only what lies under it. */
+    private val surfaceChunks: List<MeshChunks> by lazy {
+        scene.surfaces.map { MeshChunks.build(it.vertices, 9, it.indices) }
+    }
     private val lineBuffers = ArrayList<Int>()
     /** Per surface: element buffers of its edges and of its border. */
     private val edgeBuffers = ArrayList<IntArray>()
@@ -391,17 +402,17 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     var onNeedsFrame: (() -> Unit)? = null
     @Volatile private var streaming = false
     private var streamingPicture: TiledPicture? = null
-    private var uploadsBlocked = false
+    @Volatile private var uploadsBlocked = false
     @Volatile private var streamGeneration = 0
     @Volatile private var gpuTileSide = DrapeLod.STREAM_TILE
-    @Volatile private var decodeFailedGeneration = -1
     private val residents = HashMap<String, Resident>()
     /** The overview texture. It is drawn on the first frame and stays under the refined tiles. */
     private val baseTiles = ArrayList<GpuTile>()
     private val ready = ConcurrentLinkedQueue<PendingTile>()
     private val queuedKeys = ConcurrentHashMap.newKeySet<String>()
     private val failedKeys = ConcurrentHashMap.newKeySet<String>()
-    private val decoder = Executors.newFixedThreadPool(DrapeLod.DECODES_IN_FLIGHT) { runnable ->
+    // One more thread than decodes, so rebuilding the plan after an orbit never waits behind them.
+    private val decoder = Executors.newFixedThreadPool(DrapeLod.DECODES_IN_FLIGHT + 1) { runnable ->
         Thread(runnable, "drape-decode").apply { isDaemon = true }
     }
     private var useStamp = 0L
@@ -429,11 +440,15 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     )
     @Volatile private var pendingLines = FloatArray(0)
     @Volatile private var pendingTris = FloatArray(0)
+    @Volatile private var pendingSolid = FloatArray(0)
     @Volatile private var overlayDirty = false
+    @Volatile private var solidDirty = false
     private var overlayLineBuf = 0
     private var overlayTriBuf = 0
     private var overlayLineCount = 0
     private var overlayTriCount = 0
+    private var solidBuf = 0
+    private var solidCount = 0
 
     /** Stops background decodes and planning. Safe to call again after the view is already gone. */
     fun close() {
@@ -456,6 +471,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         if (sameTiles && !sameView) {
             planCache = null
             planStamp = FloatArray(6) { Float.NaN }
+            // A new quality starts clean: a texture refused at Máxima must not stop Alta from refining.
+            uploadsBlocked = false
+            failedKeys.clear()
         }
     }
 
@@ -659,19 +677,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val snapshot = drape
         val picture = snapshot?.tiles ?: return
         val generation = streamGeneration
+        // A plan whose near tiles do not all fit is still drawn: the budget keeps the farther ones
+        // coarser. Only the GPU refusing a texture steps the quality down, never the plan alone.
         val plan = planCache
-        if (plan != null && !plan.nearFits && steppedQuality != snapshot.quality) {
-            steppedQuality = snapshot.quality
-            onDrapeFailed?.invoke()
-        }
-        if (decodeFailedGeneration == generation) {
-            decodeFailedGeneration = -1
-            uploadsBlocked = true
-            if (steppedQuality != snapshot.quality) {
-                steppedQuality = snapshot.quality
-                onDrapeFailed?.invoke()
-            }
-        }
         var uploaded = 0
         var failed = false
         try {
@@ -737,7 +745,12 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val refined = if (plan == null) {
             residents.values.sortedBy { it.node.level }.take(DrapeLod.DRAW_REFINEMENTS).map { it.tile }
         } else {
-            plan.tiles.mapNotNull { residents[it.key] }.take(DrapeLod.DRAW_REFINEMENTS).map { it.tile }
+            // The plan's tiles, then any older tile still on the GPU (the previous quality, or
+            // the view before this one), finest first, so a change never drops back to the overview.
+            val planKeys = plan.tiles.mapTo(HashSet()) { it.key }
+            val current = plan.tiles.mapNotNull { residents[it.key] }
+            val older = residents.values.filter { it.node.key !in planKeys }.sortedBy { it.node.level }
+            (current + older).take(DrapeLod.DRAW_REFINEMENTS).map { it.tile }
         }
         // Finer tiles first. The base overview fills everything they do not cover.
         gpuTiles = refined + baseTiles
@@ -753,7 +766,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         )
         publishRefining(plan != null && tick.refining)
         if (!uploadsBlocked && plan != null) {
-            enqueueDecodes(picture, tick.request, generation, DrapeQuality.pyramidLevel(snapshot.quality))
+            enqueueDecodes(picture, tick.request, generation)
         }
         schedulePlan(snapshot, picture)
         if (!uploadsBlocked && (tick.refining || ready.isNotEmpty())) onNeedsFrame?.invoke()
@@ -935,7 +948,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     }
 
     /** Asks the decode thread for the nearest missing tiles. File reads stay off this thread. */
-    private fun enqueueDecodes(picture: TiledPicture, nodes: List<DrapeLod.Node>, generation: Int, finest: Int) {
+    private fun enqueueDecodes(picture: TiledPicture, nodes: List<DrapeLod.Node>, generation: Int) {
         val residentNodeKeys = residents.values.map { it.node.key }.toSet()
         val waiting = ready.map { it.node.key }.toSet()
         val planKeys = (planCache?.tiles ?: nodes).mapTo(HashSet()) { it.key }
@@ -962,10 +975,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                         if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
                         if (generation == streamGeneration) {
                             queuedKeys.remove(node.key)
+                            // A window that cannot be read stays on the coarser picture under it. It
+                            // is not asked again, and it no longer lowers the quality of the whole view.
                             if (bitmap == null) failedKeys.add(node.key)
-                            // Levels 0–3 are read from the file. A miss there is a real failure.
-                            // A coarser miss is a pyramid tile that is not written yet; the base stays.
-                            if (bitmap == null && node.level <= finest && node.level <= 3) decodeFailedGeneration = generation
                         }
                         onNeedsFrame?.invoke()
                         return@execute
@@ -977,7 +989,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     if (part == null) {
                         if (!bitmap.isRecycled) bitmap.recycle()
                         if (generation == streamGeneration) queuedKeys.remove(node.key)
-                        if (node.level <= finest) decodeFailedGeneration = generation
+                        failedKeys.add(node.key)
                         onNeedsFrame?.invoke()
                         return@execute
                     }
@@ -987,7 +999,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                         if (piece != null && !piece.isRecycled) piece.recycle()
                         if (generation == streamGeneration) {
                             queuedKeys.remove(node.key)
-                            if (piece == null && node.level <= finest) decodeFailedGeneration = generation
+                            if (piece == null) failedKeys.add(node.key)
                         }
                         onNeedsFrame?.invoke()
                         return@execute
@@ -1005,7 +1017,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                 } catch (_: Throwable) {
                     if (generation == streamGeneration) {
                         queuedKeys.remove(node.key)
-                        if (node.level <= finest) decodeFailedGeneration = generation
+                        failedKeys.add(node.key)
                     }
                     onNeedsFrame?.invoke()
                 }
@@ -1070,17 +1082,25 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         overlayDirty = true
     }
 
+    fun setSolid(tris: FloatArray) {
+        pendingSolid = tris
+        solidDirty = true
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         program = buildProgram()
         meshBuffers.clear()
         lineBuffers.clear()
-        for (m in scene.surfaces + scene.models) {
+        val chunks = surfaceChunks
+        for ((i, m) in (scene.surfaces + scene.models).withIndex()) {
+            // Surfaces upload their triangles in cell order; the set of triangles is the same.
+            val order = if (i < chunks.size) chunks[i].indices else m.indices
             val ids = IntArray(2)
             GLES30.glGenBuffers(2, ids, 0)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
             GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, m.vertices.size * 4, floats(m.vertices), GLES30.GL_STATIC_DRAW)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
-            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, m.indices.size * 4, ints(m.indices), GLES30.GL_STATIC_DRAW)
+            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, order.size * 4, ints(order), GLES30.GL_STATIC_DRAW)
             meshBuffers += ids
         }
         edgeBuffers.clear()
@@ -1113,7 +1133,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         drapeDirty = true
         overlayLineBuf = 0
         overlayTriBuf = 0
+        solidBuf = 0
         overlayDirty = true
+        solidDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -1141,6 +1163,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         if (drapeDirty) uploadDrape()
         streamDrape()
         if (overlayDirty) uploadOverlay()
+        if (solidDirty) uploadSolid()
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uZScale"), zScale)
@@ -1182,23 +1205,32 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glUniform1i(uTex, 0)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glPolygonOffset(-1f, -1f)
-            for (tile in tiles) {
-                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tile.id)
-                GLES30.glUniform4f(uRect, tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
-                scene.surfaces.forEachIndexed { i, m ->
-                    if (m.name in hidden) return@forEachIndexed
-                    val st = styles[m.name] ?: SurfaceStyle()
-                    if (st.elevation == ElevationPaint.NONE) return@forEachIndexed
-                    val ids = meshBuffers[i]
-                    GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
-                    GLES30.glEnableVertexAttribArray(0)
-                    GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
-                    GLES30.glEnableVertexAttribArray(1)
-                    GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
-                    GLES30.glEnableVertexAttribArray(2)
-                    GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
-                    GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
-                    GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
+            val chunks = surfaceChunks
+            // Surface first, then its tiles: the vertex setup is bound once per surface.
+            scene.surfaces.forEachIndexed { i, m ->
+                if (m.name in hidden) return@forEachIndexed
+                val st = styles[m.name] ?: SurfaceStyle()
+                if (st.elevation == ElevationPaint.NONE) return@forEachIndexed
+                val ids = meshBuffers[i]
+                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
+                GLES30.glEnableVertexAttribArray(0)
+                GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+                GLES30.glEnableVertexAttribArray(1)
+                GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
+                GLES30.glEnableVertexAttribArray(2)
+                GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
+                GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
+                // Finer tiles come first. Where they are drawn the coarser ones fail the depth test.
+                for (tile in tiles) {
+                    val ranges = chunks[i].ranges(tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
+                    if (ranges.isEmpty()) continue
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tile.id)
+                    GLES30.glUniform4f(uRect, tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
+                    var r = 0
+                    while (r < ranges.size) {
+                        GLES30.glDrawElements(GLES30.GL_TRIANGLES, ranges[r + 1], GLES30.GL_UNSIGNED_INT, ranges[r] * 4)
+                        r += 2
+                    }
                 }
             }
             GLES30.glUniform1i(uDrape, 0)
@@ -1261,6 +1293,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, b.vertices.size / 3)
         }
         drawOverlay(uAlpha, uBias, uColor, uLit, uDrape)
+        drawSolid(uAlpha, uBias, uColor, uLit, uDrape)
     }
 
     /** Highlight draped on the surface. Uploaded when the polygon changes, drawn as one batch. */
@@ -1302,6 +1335,35 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         overlayTriCount = tris.size / 3
         // A polygon that arrived while this uploaded stays dirty for the next frame.
         if (pendingLines === lines && pendingTris === tris) overlayDirty = false
+    }
+
+    /** Opaque drainage solid. Normals and a concrete colour so the walls read as a solid, not a flat line. */
+    private fun drawSolid(uAlpha: Int, uBias: Int, uColor: Int, uLit: Int, uDrape: Int) {
+        if (solidCount == 0) return
+        GLES30.glUniform1i(uLit, 1)
+        GLES30.glUniform1i(uDrape, 0)
+        GLES30.glUniform3f(uColor, 0.62f, 0.62f, 0.58f)
+        GLES30.glUniform1f(uAlpha, 1f)
+        GLES30.glUniform1f(uBias, 0.0008f)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, solidBuf)
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+        GLES30.glEnableVertexAttribArray(1)
+        GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
+        GLES30.glEnableVertexAttribArray(2)
+        GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, solidCount)
+        GLES30.glDisableVertexAttribArray(1)
+        GLES30.glDisableVertexAttribArray(2)
+        GLES30.glUniform1i(uLit, 0)
+        GLES30.glUniform1f(uBias, 0f)
+    }
+
+    private fun uploadSolid() {
+        val tris = pendingSolid
+        solidBuf = replaceBuffer(solidBuf, tris)
+        solidCount = tris.size / 9
+        if (pendingSolid === tris) solidDirty = false
     }
 
     private fun replaceBuffer(old: Int, data: FloatArray): Int {
@@ -1369,7 +1431,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             precision mediump float;
             in vec3 vColor;
             in float vShade;
-            in vec2 vUv;
+            // highp: at mediump (16 bits on Mali) a 2048 texture is read in steps of a whole texel,
+            // so every quality looked blocky in 3D.
+            in highp vec2 vUv;
             uniform int uDrape;
             uniform sampler2D uTex;
             uniform float uAlpha;
@@ -1399,6 +1463,63 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
 private fun visibleSurfaces(project: LandXmlProject, hidden: Set<String>): List<Surface> {
     val replaced = project.surfaces.map { it.name }.filter { n -> project.surfaces.any { it.name == n + EDITED_SUFFIX } }.toSet()
     return project.surfaces.filter { it.name !in hidden && it.name !in replaced && it.triangleCount > 0 }
+}
+
+/**
+ * Drainage triangles as a lit mesh: position, face normal and concrete colour.
+ * Nine floats per vertex. Built off the UI thread. Faces stay two-sided in the shader,
+ * so the inside of a channel is shaded as well.
+ */
+private fun litSolid(world: DoubleArray, scene: Scene3D): FloatArray {
+    if (world.size < 9) return FloatArray(0)
+    val triangles = world.size / 9
+    val out = FloatArray(triangles * 27)
+    val red = 0.62f
+    val green = 0.62f
+    val blue = 0.58f
+    var t = 0
+    var o = 0
+    while (t + 8 < world.size) {
+        val ax = (world[t] - scene.originX).toFloat()
+        val ay = (world[t + 1] - scene.originY).toFloat()
+        val az = (world[t + 2] - scene.originZ).toFloat()
+        val bx = (world[t + 3] - scene.originX).toFloat()
+        val by = (world[t + 4] - scene.originY).toFloat()
+        val bz = (world[t + 5] - scene.originZ).toFloat()
+        val cx = (world[t + 6] - scene.originX).toFloat()
+        val cy = (world[t + 7] - scene.originY).toFloat()
+        val cz = (world[t + 8] - scene.originZ).toFloat()
+        var nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay)
+        var ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az)
+        var nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+        val len = sqrt(nx * nx + ny * ny + nz * nz)
+        if (len < 1e-8f) {
+            nx = 0f
+            ny = 0f
+            nz = 1f
+        } else {
+            nx /= len
+            ny /= len
+            nz /= len
+        }
+        val xs = floatArrayOf(ax, bx, cx)
+        val ys = floatArrayOf(ay, by, cy)
+        val zs = floatArrayOf(az, bz, cz)
+        for (k in 0 until 3) {
+            out[o] = xs[k]
+            out[o + 1] = ys[k]
+            out[o + 2] = zs[k]
+            out[o + 3] = nx
+            out[o + 4] = ny
+            out[o + 5] = nz
+            out[o + 6] = red
+            out[o + 7] = green
+            out[o + 8] = blue
+            o += 9
+        }
+        t += 9
+    }
+    return out
 }
 
 /** World coordinates shifted to the scene origin, so the GPU floats keep their precision. */
