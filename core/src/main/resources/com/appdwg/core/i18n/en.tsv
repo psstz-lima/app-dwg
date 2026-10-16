@@ -1476,3 +1476,5 @@ Pedregulho	Gravel
 Rocha	Rock
 Velocidade {0} m/s, limite do solo {1} m/s. Enrocamento D50 {2} m.	Velocity {0} m/s, soil limit {1} m/s. Riprap D50 {2} m.
 Velocidade acima do limite: sugerir dissipador DES.	Velocity above the limit: suggest a DES dissipator.
+Dreno: escavação {0} m³, filtrante {1} m³, tubo {2} m.	Drain: excavation {0} m³, filter {1} m³, pipe {2} m.
+Colchão drenante: {0} m³ (espessura {1} m, talude {2} m).	Drainage blanket: {0} m³ (thickness {1} m, slope {2} m).

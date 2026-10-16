@@ -2,9 +2,11 @@ package com.appdwg.app
 
 import com.appdwg.core.Point2
 import com.appdwg.core.StationFormat
+import com.appdwg.core.drainage.BlanketTakeoff
 import com.appdwg.core.drainage.DeviceDef
 import com.appdwg.core.drainage.DeviceSide
 import com.appdwg.core.drainage.DeviceTakeoff
+import com.appdwg.core.drainage.DrainTakeoff
 import com.appdwg.core.drainage.DrainageGraph
 import com.appdwg.core.drainage.GradeMode
 import com.appdwg.core.drainage.GradeSpec
@@ -15,6 +17,7 @@ import com.appdwg.core.drainage.OutletSoil
 import com.appdwg.core.drainage.Parameter
 import com.appdwg.core.drainage.PathSource
 import com.appdwg.core.drainage.PlacedDevice
+import com.appdwg.core.drainage.Subsurface
 import com.appdwg.core.drainage.resolveSection
 import com.appdwg.core.tr
 import androidx.compose.foundation.horizontalScroll
@@ -192,6 +195,29 @@ fun protectionLine(device: PlacedDevice?, catalog: com.appdwg.core.drainage.Devi
     return if (advice.dissipator) line + " " + tr("Velocidade acima do limite: sugerir dissipador DES.") else line
 }
 
+/** Drain trench or drainage blanket for a placed device, from the catalog dimensions. */
+fun subsurfaceLine(device: DeviceDef?, placed: PlacedDevice?): String? {
+    val linear = placed as? PlacedDevice.Linear ?: return null
+    if (device == null) return null
+    var length = 0.0
+    for (i in 1 until linear.xs.size) length += kotlin.math.hypot(linear.xs[i] - linear.xs[i - 1], linear.ys[i] - linear.ys[i - 1])
+    val qty = Subsurface.of(device, length) ?: return null
+    return when (qty) {
+        is DrainTakeoff -> tr(
+            "Dreno: escavação {0} m³, filtrante {1} m³, tubo {2} m.",
+            StationFormat.decimal(qty.excavation, 2),
+            StationFormat.decimal(qty.filter, 2),
+            StationFormat.decimal(qty.pipe, 2),
+        )
+        is BlanketTakeoff -> tr(
+            "Colchão drenante: {0} m³ (espessura {1} m, talude {2} m).",
+            StationFormat.decimal(qty.volume, 2),
+            StationFormat.decimal(qty.thickness, 2),
+            StationFormat.decimal(qty.slopeLength, 2),
+        )
+    }
+}
+
 @Composable
 fun DrainagePlaceCard(
     draft: PlaceDraft,
@@ -319,6 +345,7 @@ fun DrainageSelectionCard(
     soil: OutletSoil? = null,
     onSoil: ((OutletSoil) -> Unit)? = null,
     protection: String? = null,
+    subsurface: String? = null,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -349,6 +376,7 @@ fun DrainageSelectionCard(
             }
         }
         protection?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
+        subsurface?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
         ChoiceRow {
             Choice(false, tr("Editar")) { onEdit() }
             Choice(moving, tr("Mover")) { onMove() }

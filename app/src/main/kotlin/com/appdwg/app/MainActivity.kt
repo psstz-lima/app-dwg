@@ -1427,6 +1427,7 @@ private fun ProjectScreen(
                             soil = outletSoil,
                             onSoil = if (proOpen(ProFeature.DRAINAGE) && (drainageFlows[drainageSelected]?.accumulated ?: 0.0) > 0.0) ({ outletSoil = it }) else null,
                             protection = protectionLine(placed, vm.drainageCatalog, drainageFlows[drainageSelected]?.accumulated ?: 0.0, outletSoil),
+                            subsurface = if (proOpen(ProFeature.DRAINAGE)) subsurfaceLine(device, placed) else null,
                         )
                     }
                 } else if (show3d && !measuring && !drawingPlatform && genPick == null) {
