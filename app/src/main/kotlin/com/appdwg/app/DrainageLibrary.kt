@@ -2,8 +2,10 @@ package com.appdwg.app
 
 import com.appdwg.core.Display
 import com.appdwg.core.StationFormat
+import com.appdwg.core.drainage.CatalogAudit
 import com.appdwg.core.drainage.CatalogFormatException
 import com.appdwg.core.drainage.CatalogLoader
+import com.appdwg.core.drainage.CatalogReport
 import com.appdwg.core.drainage.ConnectionPoint
 import com.appdwg.core.drainage.CrossSection
 import com.appdwg.core.drainage.DeviceAccess
@@ -53,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** IPR-736 device library. Browsing is open; placement and calculations ask for Pro. */
 @Composable
@@ -139,6 +143,8 @@ private fun DeviceBrowser(
     }
     Text(tr("Catálogo {0} · {1}", catalog.origin, catalog.generated), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
     Text(tr("{0} dispositivos", shown.size), style = MaterialTheme.typography.bodySmall)
+    Text(tr("Catálogo offline: {0} dispositivos, cálculos no aparelho.", catalog.devices.size), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    if (isPro) CatalogAuditLine(catalog)
     val userCount = catalog.devices.count { it.origin != catalog.origin }
     if (userCount > 0) {
         Text(tr("{0} dispositivos da biblioteca do usuário", userCount), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -175,6 +181,21 @@ private fun DeviceBrowser(
     if (!isPro) {
         Text(tr("O Pro libera o lançamento e os cálculos."), style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
+}
+
+@Composable
+private fun CatalogAuditLine(catalog: DeviceCatalog) {
+    var report by remember(catalog) { mutableStateOf<CatalogReport?>(null) }
+    LaunchedEffect(catalog) {
+        report = withContext(Dispatchers.Default) { CatalogAudit.check(catalog) }
+    }
+    val checked = report ?: return
+    val text = if (checked.problems.isEmpty()) {
+        tr("Catálogo conferido: {0} dispositivos com seção, sem pendência.", checked.sectioned)
+    } else {
+        tr("Catálogo: {0} dispositivos com pendência de cálculo.", checked.problems.size)
+    }
+    Text(text, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
 }
 
 @Composable

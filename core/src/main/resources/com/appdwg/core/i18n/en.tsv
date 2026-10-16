@@ -1485,3 +1485,6 @@ Rede de drenagem (LandXML)	Drainage network (LandXML)
 Tubos e estruturas da rede, para o Civil 3D	Pipes and structures of the network, for Civil 3D
 Sem dispositivos de drenagem no projeto	No drainage devices in the project
 rede de drenagem	drainage network
+Catálogo offline: {0} dispositivos, cálculos no aparelho.	Offline catalog: {0} devices, calculations on the device.
+Catálogo conferido: {0} dispositivos com seção, sem pendência.	Catalog checked: {0} devices with a section, nothing pending.
+Catálogo: {0} dispositivos com pendência de cálculo.	Catalog: {0} devices with a calculation problem.
