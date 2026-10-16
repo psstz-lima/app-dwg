@@ -357,7 +357,7 @@ object Sweep {
             inLeft + inRight.asReversed()
         }
         return SweepMesh(
-            frames, triangles, 0.0, length, left + right.asReversed(), invert, false,
+            frames, triangles, enclosedVolume(triangles), length, left + right.asReversed(), invert, false,
             channel, if (channel.size >= 3) listOf(channel) else emptyList(),
             widthM, heightM, innerWidthM,
         ).also { it.hydraulic = hydraulics }
@@ -400,7 +400,7 @@ object Sweep {
         val channel = if (inner.size < 3) emptyList() else at(inner, bottom).map { Point2(it.first, it.second) }.let { it + it.first() }
         val invert = listOf(Point2(x, y))
         return SweepMesh(
-            emptyList(), triangles, 0.0, 0.0, footprint, invert, false,
+            emptyList(), triangles, enclosedVolume(triangles), 0.0, footprint, invert, false,
             channel, if (channel.size >= 3) listOf(channel) else emptyList(),
             widthM, heightM, innerWidthM,
         )
@@ -629,34 +629,55 @@ object Sweep {
         val tris = ArrayList<Double>()
         val count = minOf(outer.first().size, inner.first().size)
         val edges = if (openMouth) count - 1 else count
-        fun stitch(a: List<Triple<Double, Double, Double>>, b: List<Triple<Double, Double, Double>>) {
+        fun stitch(
+            a: List<Triple<Double, Double, Double>>,
+            b: List<Triple<Double, Double, Double>>,
+            reverse: Boolean,
+        ) {
             for (i in 0 until edges) {
                 val j = (i + 1) % a.size
-                addTri(tris, a[i], a[j], b[j])
-                addTri(tris, a[i], b[j], b[i])
+                if (reverse) {
+                    addTri(tris, a[i], b[j], a[j])
+                    addTri(tris, a[i], b[i], b[j])
+                } else {
+                    addTri(tris, a[i], a[j], b[j])
+                    addTri(tris, a[i], b[j], b[i])
+                }
             }
         }
         for (k in 0 until outer.size - 1) {
-            stitch(outer[k], outer[k + 1])
-            stitch(inner[k], inner[k + 1])
-            if (openMouth) {
-                for (i in 0 until count) {
-                    addTri(tris, outer[k][i], outer[k + 1][i], inner[k + 1][i])
-                    addTri(tris, outer[k][i], inner[k + 1][i], inner[k][i])
+            stitch(outer[k], outer[k + 1], reverse = false)
+            // The bore faces the other way, so the shell encloses the wall and not the opening.
+            stitch(inner[k], inner[k + 1], reverse = true)
+            if (openMouth && count >= 2) {
+                // Only the two corners of the free surface. Sealing every vertex cuts the wall.
+                val lips = intArrayOf(0, count - 1)
+                for (lip in lips) {
+                    addTri(tris, outer[k][lip], outer[k + 1][lip], inner[k + 1][lip])
+                    addTri(tris, outer[k][lip], inner[k + 1][lip], inner[k][lip])
                 }
             }
             if (tris.size / 9 > MAX_TRIANGLES) break
         }
-        fun cap(o: List<Triple<Double, Double, Double>>, inn: List<Triple<Double, Double, Double>>) {
+        fun cap(
+            o: List<Triple<Double, Double, Double>>,
+            inn: List<Triple<Double, Double, Double>>,
+            reverse: Boolean,
+        ) {
             for (i in 0 until edges) {
                 val j = (i + 1) % o.size
-                addTri(tris, o[i], o[j], inn[j])
-                addTri(tris, o[i], inn[j], inn[i])
+                if (reverse) {
+                    addTri(tris, o[i], inn[j], o[j])
+                    addTri(tris, o[i], inn[i], inn[j])
+                } else {
+                    addTri(tris, o[i], o[j], inn[j])
+                    addTri(tris, o[i], inn[j], inn[i])
+                }
             }
         }
         if (tris.size / 9 <= MAX_TRIANGLES) {
-            cap(outer.first(), inner.first())
-            cap(outer.last(), inner.last())
+            cap(outer.first(), inner.first(), reverse = true)
+            cap(outer.last(), inner.last(), reverse = false)
         }
         if (tris.size / 9 > MAX_TRIANGLES) return DoubleArray(MAX_TRIANGLES * 9) { tris[it] }
         return tris.toDoubleArray()
@@ -714,6 +735,9 @@ object Sweep {
         }
         return tris.toDoubleArray()
     }
+
+    /** Closed-shell volume. A straight prism is the material section times the path length. */
+    fun enclosedVolume(triangles: DoubleArray): Double = volume(triangles)
 
     private fun volume(triangles: DoubleArray): Double {
         var sum = 0.0

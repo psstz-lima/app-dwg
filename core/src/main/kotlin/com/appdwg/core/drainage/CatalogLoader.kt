@@ -67,7 +67,7 @@ object CatalogLoader {
             category = category(obj.str("category")),
             subtype = obj.str("subtype") ?: "",
             position = obj.str("position"),
-            parameters = readParameters(params, geometry),
+            parameters = readParameters(params, geometry) + fillWall(obj),
             section = crossSection(geometry, bindings(params, geometry)),
             materials = readMaterials(obj.fields["materials"]),
             quantities = readQuantities(obj),
@@ -118,6 +118,18 @@ object CatalogLoader {
             for ((key, value) in geometry.fields) {
                 if (value is Jv.Num && seen.add(key)) out += Parameter(key, value.n, null)
             }
+        }
+        return out
+    }
+
+    /** Album wall and haunch of the first fill type. Box culverts keep these off the geometry ring. */
+    private fun fillWall(device: Jv.Obj): List<Parameter> {
+        val table = device.child("fill_types") ?: return emptyList()
+        val first = table.fields.values.firstOrNull()?.obj() ?: return emptyList()
+        val out = ArrayList<Parameter>()
+        for (key in listOf("espessura_cm", "misula_cm")) {
+            val value = first.num(key) ?: continue
+            out += Parameter(key, value, null)
         }
         return out
     }

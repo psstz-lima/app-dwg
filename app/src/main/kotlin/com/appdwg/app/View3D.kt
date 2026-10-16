@@ -1531,11 +1531,41 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     fragColor = vec4(mix(c * vShade, t.rgb * (0.7 + 0.3 * vShade), t.a), uAlpha);
                     return;
                 }
+                float r = c.r;
+                float g = c.g;
+                float b = c.b;
+                bool water = b > r + 0.12 && b > g;
+                if (water) {
+                    fragColor = vec4(c * vShade, uAlpha);
+                    return;
+                }
                 float n = grit(vPos);
-                bool water = vColor.b > vColor.r + 0.12;
-                float grain = water ? 0.0 : (n - 0.5) * 0.14;
-                float shade = vShade * (water ? 1.0 : (0.92 + 0.16 * n));
-                fragColor = vec4((c + vec3(grain)) * shade, uAlpha);
+                float m = grit(vPos * 0.37 + vec3(19.0, 7.0, 3.0));
+                bool grass = g > r + 0.05 && g >= b;
+                bool earth = r > g + 0.10 && r > b + 0.08 && g > 0.25;
+                bool stone = !grass && !earth && r > b + 0.02 && abs(r - g) < 0.12 && r < 0.70;
+                bool metal = !grass && !earth && !stone && b + 0.02 >= r && b + 0.02 >= g && r < 0.75;
+                vec3 tone = c;
+                if (grass) {
+                    float patch = grit(vPos * 3.5);
+                    tone = mix(c * vec3(0.78, 0.92, 0.72), c * vec3(0.95, 1.08, 0.80), patch);
+                    tone += (n - 0.5) * 0.08;
+                } else if (stone) {
+                    float course = step(0.90, fract(vPos.z * 14.0));
+                    float block = step(0.93, fract(vPos.x * 6.0 + floor(vPos.z * 14.0) * 0.5));
+                    tone = c * (0.86 + 0.20 * m) * (1.0 - 0.28 * max(course, block));
+                } else if (earth) {
+                    tone = c * (0.88 + 0.24 * n) + vec3(0.04, 0.02, 0.0) * (m - 0.5);
+                } else if (metal) {
+                    float streak = step(0.82, fract(vPos.x * 28.0 + vPos.y * 4.0));
+                    tone = c * (0.90 + 0.16 * n) * (1.0 - 0.18 * streak);
+                } else {
+                    float board = step(0.96, fract(vPos.y * 5.0));
+                    float tie = smoothstep(0.05, 0.0, length(fract(vPos.xy * 2.5) - 0.5));
+                    tone = c * (0.94 + 0.10 * n) * (1.0 - 0.12 * board) - vec3(tie * 0.05);
+                }
+                float shade = vShade * (0.94 + 0.10 * n);
+                fragColor = vec4(tone * shade, uAlpha);
             }
         """.trimIndent()
 
