@@ -64,26 +64,26 @@ object DrainageScene {
         var budget = Sweep.MAX_TRIANGLES
         for (placedDevice in placed) {
             val device = deviceOf(placedDevice.code) ?: continue
-            if (device.needsReview) continue
             val section = resolveSection(device, placedDevice.params)
             when (placedDevice) {
                 is PlacedDevice.Linear -> {
                     val nodes = nodesOf(placedDevice, alignmentOf) ?: continue
                     val profile = profileOf(placedDevice.profile ?: placedDevice.alignment, alignmentOf)
-                    val mesh = Sweep.sweep(
-                        section ?: continue,
-                        nodes,
-                        Sweep.signedOffset(placedDevice.side, placedDevice.offset),
-                        placedDevice.grade,
-                        terrain,
-                        { station -> profile?.elevationAt(station) },
-                    ) ?: continue
+                    val signed = Sweep.signedOffset(placedDevice.side, placedDevice.offset)
+                    val profileAt: (Double) -> Double? = { station -> profile?.elevationAt(station) }
+                    val drawn = DeviceBody.linear(device, placedDevice.params, nodes, signed, placedDevice.grade, terrain, profileAt)
+                    val mesh = drawn ?: if (device.needsReview || section == null) {
+                        null
+                    } else {
+                        Sweep.sweep(section, nodes, signed, placedDevice.grade, terrain, profileAt)
+                    }
+                    if (mesh == null) continue
                     val kept = keep(mesh.triangles, budget)
                     budget -= kept.size / 9
                     for (value in kept) triangles += value
                     glyphs += DrainageGlyph(
                         placedDevice.id, mesh.footprint, mesh.invert, flowArrows(mesh.invert, mesh.length),
-                        null, mesh.simplified,
+                        null, mesh.simplified, mesh.channel, mesh.channels, mesh.widthM,
                     )
                     takeoff += DrainageTakeoff.of(placedDevice.id, device, mesh.length, section, point = false)
                 }
@@ -91,17 +91,25 @@ object DrainageScene {
                     val profileName = placedDevice.profile ?: placedDevice.alignment
                     val profile = profileOf(profileName, alignmentOf)
                     val station = alignmentOf(profileName ?: "")?.stationOffset(Point2(placedDevice.x, placedDevice.y))?.station
-                    val mesh = Sweep.point(
-                        section, placedDevice.x, placedDevice.y, placedDevice.rotationDeg, placedDevice.skewDeg,
-                        placedDevice.grade, terrain(placedDevice.x, placedDevice.y),
-                        if (station == null) null else profile?.elevationAt(station),
+                    val ground = terrain(placedDevice.x, placedDevice.y)
+                    val profileZ = if (station == null) null else profile?.elevationAt(station)
+                    val drawn = DeviceBody.point(
+                        device, placedDevice.params, placedDevice.x, placedDevice.y,
+                        placedDevice.rotationDeg, placedDevice.skewDeg, placedDevice.grade, ground, profileZ,
                     )
+                    val mesh = drawn ?: if (device.needsReview) {
+                        null
+                    } else {
+                        Sweep.point(section, placedDevice.x, placedDevice.y, placedDevice.rotationDeg, placedDevice.skewDeg, placedDevice.grade, ground, profileZ)
+                    }
+                    if (mesh == null) continue
                     val kept = keep(mesh.triangles, budget)
                     budget -= kept.size / 9
                     for (value in kept) triangles += value
                     val label = if (mesh.simplified) placedDevice.code else null
                     glyphs += DrainageGlyph(
                         placedDevice.id, mesh.footprint, mesh.invert, emptyList(), label, mesh.simplified,
+                        mesh.channel, mesh.channels, mesh.widthM,
                     )
                     takeoff += DrainageTakeoff.of(placedDevice.id, device, 1.0, section, point = true)
                 }
@@ -116,19 +124,25 @@ object DrainageScene {
         var best: String? = null
         var bestD = radius
         for (glyph in glyphs) {
-            val lines = if (glyph.invert.size >= 2) glyph.invert else glyph.footprint
-            for (i in 1 until lines.size) {
-                val d = segmentDistance(x, y, lines[i - 1], lines[i])
-                if (d < bestD) {
-                    bestD = d
-                    best = glyph.id
+            val parts = ArrayList<List<Point2>>()
+            if (glyph.invert.isNotEmpty()) parts += glyph.invert
+            if (glyph.footprint.size >= 2) parts += glyph.footprint
+            val holes = glyph.channels.ifEmpty { listOf(glyph.channel) }
+            for (hole in holes) if (hole.size >= 2) parts += hole
+            for (lines in parts) {
+                for (i in 1 until lines.size) {
+                    val d = segmentDistance(x, y, lines[i - 1], lines[i])
+                    if (d < bestD) {
+                        bestD = d
+                        best = glyph.id
+                    }
                 }
-            }
-            if (lines.size == 1) {
-                val d = hypot(lines[0].x - x, lines[0].y - y)
-                if (d < bestD) {
-                    bestD = d
-                    best = glyph.id
+                if (lines.size == 1) {
+                    val d = hypot(lines[0].x - x, lines[0].y - y)
+                    if (d < bestD) {
+                        bestD = d
+                        best = glyph.id
+                    }
                 }
             }
         }

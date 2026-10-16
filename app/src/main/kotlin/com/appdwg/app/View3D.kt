@@ -120,7 +120,8 @@ fun View3D(
         holder[0]?.requestRender()
     }
     LaunchedEffect(solidTris) {
-        renderer.setSolid(sceneFloats(solidTris, scene))
+        val lit = withContext(Dispatchers.Default) { litSolid(solidTris, scene) }
+        renderer.setSolid(lit)
         holder[0]?.requestRender()
     }
     val failState = rememberUpdatedState(onDrapeFailed)
@@ -1336,27 +1337,32 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         if (pendingLines === lines && pendingTris === tris) overlayDirty = false
     }
 
-    /** Opaque drainage solid in the same view as the orthophoto drape. */
+    /** Opaque drainage solid. Normals and a concrete colour so the walls read as a solid, not a flat line. */
     private fun drawSolid(uAlpha: Int, uBias: Int, uColor: Int, uLit: Int, uDrape: Int) {
         if (solidCount == 0) return
-        GLES30.glUniform1i(uLit, 0)
+        GLES30.glUniform1i(uLit, 1)
         GLES30.glUniform1i(uDrape, 0)
-        GLES30.glDisableVertexAttribArray(1)
-        GLES30.glDisableVertexAttribArray(2)
-        GLES30.glUniform3f(uColor, 0.45f, 0.62f, 0.55f)
+        GLES30.glUniform3f(uColor, 0.62f, 0.62f, 0.58f)
         GLES30.glUniform1f(uAlpha, 1f)
-        GLES30.glUniform1f(uBias, 0.003f)
+        GLES30.glUniform1f(uBias, 0.0008f)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, solidBuf)
         GLES30.glEnableVertexAttribArray(0)
-        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+        GLES30.glEnableVertexAttribArray(1)
+        GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
+        GLES30.glEnableVertexAttribArray(2)
+        GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, solidCount)
+        GLES30.glDisableVertexAttribArray(1)
+        GLES30.glDisableVertexAttribArray(2)
+        GLES30.glUniform1i(uLit, 0)
         GLES30.glUniform1f(uBias, 0f)
     }
 
     private fun uploadSolid() {
         val tris = pendingSolid
         solidBuf = replaceBuffer(solidBuf, tris)
-        solidCount = tris.size / 3
+        solidCount = tris.size / 9
         if (pendingSolid === tris) solidDirty = false
     }
 
@@ -1457,6 +1463,63 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
 private fun visibleSurfaces(project: LandXmlProject, hidden: Set<String>): List<Surface> {
     val replaced = project.surfaces.map { it.name }.filter { n -> project.surfaces.any { it.name == n + EDITED_SUFFIX } }.toSet()
     return project.surfaces.filter { it.name !in hidden && it.name !in replaced && it.triangleCount > 0 }
+}
+
+/**
+ * Drainage triangles as a lit mesh: position, face normal and concrete colour.
+ * Nine floats per vertex. Built off the UI thread. Faces stay two-sided in the shader,
+ * so the inside of a channel is shaded as well.
+ */
+private fun litSolid(world: DoubleArray, scene: Scene3D): FloatArray {
+    if (world.size < 9) return FloatArray(0)
+    val triangles = world.size / 9
+    val out = FloatArray(triangles * 27)
+    val red = 0.62f
+    val green = 0.62f
+    val blue = 0.58f
+    var t = 0
+    var o = 0
+    while (t + 8 < world.size) {
+        val ax = (world[t] - scene.originX).toFloat()
+        val ay = (world[t + 1] - scene.originY).toFloat()
+        val az = (world[t + 2] - scene.originZ).toFloat()
+        val bx = (world[t + 3] - scene.originX).toFloat()
+        val by = (world[t + 4] - scene.originY).toFloat()
+        val bz = (world[t + 5] - scene.originZ).toFloat()
+        val cx = (world[t + 6] - scene.originX).toFloat()
+        val cy = (world[t + 7] - scene.originY).toFloat()
+        val cz = (world[t + 8] - scene.originZ).toFloat()
+        var nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay)
+        var ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az)
+        var nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+        val len = sqrt(nx * nx + ny * ny + nz * nz)
+        if (len < 1e-8f) {
+            nx = 0f
+            ny = 0f
+            nz = 1f
+        } else {
+            nx /= len
+            ny /= len
+            nz /= len
+        }
+        val xs = floatArrayOf(ax, bx, cx)
+        val ys = floatArrayOf(ay, by, cy)
+        val zs = floatArrayOf(az, bz, cz)
+        for (k in 0 until 3) {
+            out[o] = xs[k]
+            out[o + 1] = ys[k]
+            out[o + 2] = zs[k]
+            out[o + 3] = nx
+            out[o + 4] = ny
+            out[o + 5] = nz
+            out[o + 6] = red
+            out[o + 7] = green
+            out[o + 8] = blue
+            o += 9
+        }
+        t += 9
+    }
+    return out
 }
 
 /** World coordinates shifted to the scene origin, so the GPU floats keep their precision. */

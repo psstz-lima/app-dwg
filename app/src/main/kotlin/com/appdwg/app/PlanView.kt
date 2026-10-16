@@ -679,7 +679,7 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
-        if (drainage.isNotEmpty()) drawDrainage(drainage, selectedDrainage, drainageAlerts) { toScreen(it, cam) }
+        if (drainage.isNotEmpty()) drawDrainage(drainage, selectedDrainage, drainageAlerts, cam.scale) { toScreen(it, cam) }
         if (measure.isNotEmpty()) {
             if (measureIsAxis) drawMeasure(measure, false, lines = AxisInfo.TANGENTS !in axisHidden, lengths = AxisInfo.LENGTHS !in axisHidden,
                 vertices = AxisInfo.PIS !in axisHidden) { toScreen(it, cam) }
@@ -1148,11 +1148,12 @@ private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2
 
 private val DRAINAGE_COLOR = Color(0xFF1565C0)
 
-/** Footprint, invert and flow arrows of the placed drainage devices. */
+/** Footprint, concrete, inner channel and flow arrows. A device under 3 px wide keeps the centerline. */
 private fun DrawScope.drawDrainage(
     glyphs: List<com.appdwg.core.drainage.DrainageGlyph>,
     selected: String?,
     alerts: Set<String>,
+    scale: Double,
     toScreen: (Point2) -> Offset,
 ) {
     val label = Paint().apply {
@@ -1169,21 +1170,61 @@ private fun DrawScope.drawDrainage(
             bad -> Color(0xFFC62828)
             else -> DRAINAGE_COLOR
         }
-        if (glyph.footprint.size >= 3) {
-            val fill = Path().apply {
+        val concrete = when {
+            on -> Color(0xFFFF8A50)
+            bad -> Color(0xFFEF9A9A)
+            else -> Color(0xFF90A4AE)
+        }
+        val px = glyph.widthM * scale
+        val showBody = glyph.footprint.size >= 3 && (glyph.widthM <= 0.0 || px >= 3.0)
+        val invert = glyph.invert.map(toScreen)
+        if (showBody) {
+            val fill = screenPath(glyph.footprint, toScreen)
+            drawPath(fill, concrete.copy(alpha = if (on) 0.82f else 0.78f))
+            if (px >= 8.0) {
+                val clip = android.graphics.Path()
                 val first = toScreen(glyph.footprint.first())
-                moveTo(first.x, first.y)
+                clip.moveTo(first.x, first.y)
+                var left = first.x
+                var top = first.y
+                var right = first.x
+                var bottom = first.y
                 for (point in glyph.footprint.drop(1)) {
                     val sp = toScreen(point)
-                    lineTo(sp.x, sp.y)
+                    clip.lineTo(sp.x, sp.y)
+                    if (sp.x < left) left = sp.x
+                    if (sp.y < top) top = sp.y
+                    if (sp.x > right) right = sp.x
+                    if (sp.y > bottom) bottom = sp.y
                 }
-                close()
+                clip.close()
+                val hatch = Paint().apply {
+                    isAntiAlias = true
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1f
+                    color = stroke.copy(alpha = 0.28f).toArgb()
+                }
+                drawContext.canvas.nativeCanvas.withClip(clip) {
+                    var y = top
+                    while (y < bottom + (right - left)) {
+                        drawLine(left, y, right, y - (right - left) * 0.35f, hatch)
+                        y += 7f
+                    }
+                }
             }
-            drawPath(fill, stroke.copy(alpha = if (on) 0.35f else if (bad) 0.28f else 0.18f))
-            drawPath(fill, stroke, style = Stroke(width = if (on || bad) 4f else 2f))
+            val holes = glyph.channels.ifEmpty { if (glyph.channel.size >= 3) listOf(glyph.channel) else emptyList() }
+            for (hole in holes) {
+                val water = screenPath(hole, toScreen)
+                drawPath(water, Color(0xFF1565C0).copy(alpha = if (bad) 0.55f else 0.42f))
+                drawPath(water, stroke.copy(alpha = 0.9f), style = Stroke(width = 1.5f))
+            }
+            drawPath(fill, stroke, style = Stroke(width = if (on || bad) 3f else 1.5f))
+        } else if (invert.size >= 2) {
+            val line = if (bad && !on) Color(0xFFC62828) else if (on) Color(0xFFFF6D00) else Color(0xFF0D47A1)
+            for (i in 1 until invert.size) drawLine(line, invert[i - 1], invert[i], strokeWidth = 2.5f)
+        } else if (invert.isNotEmpty()) {
+            drawCircle(stroke, radius = 4f, center = invert.first())
         }
-        val invert = glyph.invert.map(toScreen)
-        for (i in 1 until invert.size) drawLine(if (bad && !on) Color(0xFFC62828) else if (on) Color(0xFFFF6D00) else Color(0xFF0D47A1), invert[i - 1], invert[i], strokeWidth = 3f)
         val len = 8.sp.toPx()
         for ((point, angle) in glyph.arrows) {
             val c = toScreen(point)
@@ -1200,6 +1241,17 @@ private fun DrawScope.drawDrainage(
             drawContext.canvas.nativeCanvas.drawText(tr("{0} (simplificado)", glyph.label), sp.x + 6f, sp.y - 6f, label)
         }
     }
+}
+
+private fun screenPath(points: List<Point2>, toScreen: (Point2) -> Offset): Path = Path().apply {
+    if (points.isEmpty()) return@apply
+    val first = toScreen(points.first())
+    moveTo(first.x, first.y)
+    for (point in points.drop(1)) {
+        val sp = toScreen(point)
+        lineTo(sp.x, sp.y)
+    }
+    close()
 }
 
 /** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */

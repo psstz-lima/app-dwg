@@ -57,6 +57,16 @@ class SweepMesh(
     val footprint: List<Point2>,
     val invert: List<Point2>,
     val simplified: Boolean,
+    /** Inner waterway in plan. Empty when the solid has no opening. */
+    val channel: List<Point2> = emptyList(),
+    /** One polygon per bore. A double barrel keeps both openings. */
+    val channels: List<List<Point2>> = emptyList(),
+    /** True width of the device in plan, metres. The plan view uses it to choose the zoom fallback. */
+    val widthM: Double = 0.0,
+    /** Vertical extent of the drawn solid, metres. */
+    val heightM: Double = 0.0,
+    /** Width of the inner opening, metres. Zero when the solid is filled. */
+    val innerWidthM: Double = 0.0,
 )
 
 object Sweep {
@@ -231,6 +241,194 @@ object Sweep {
         )
     }
 
+    /**
+     * Concrete shell swept along [nodes]. [outer] is the outside of the wall and [inner] is the
+     * waterway. An empty [inner] is a filled solid, such as a curb. The quantity sweep is left
+     * unchanged; this mesh is only for drawing.
+     *
+     * When the computed grade would put the solid in the terrain, the whole device is lifted by
+     * one constant so its lowest point sits 2 cm above the highest ground it crosses. The grade
+     * along the device is kept. Buried culverts therefore show on the surface instead of
+     * disappearing inside the TIN.
+     */
+    fun visual(
+        outer: List<SectionPoint>,
+        inner: List<SectionPoint>,
+        nodes: List<PathNode>,
+        signedOffset: Double,
+        grade: GradeSpec,
+        terrain: (Double, Double) -> Double? = { _, _ -> null },
+        profileAt: (Double) -> Double? = { null },
+        widthM: Double = 0.0,
+        heightM: Double = 0.0,
+        innerWidthM: Double = 0.0,
+    ): SweepMesh? {
+        if (outer.size < 3 || nodes.size < 2) return null
+        val dense = densify(nodes)
+        if (dense.size < 2) return null
+        val samples = outer + inner
+        val minY = samples.minOf { it.y }
+        val maxY = samples.maxOf { it.y }
+        val minX = outer.minOf { it.x }
+        val maxX = outer.maxOf { it.x }
+        val length = dense.last().distance - dense.first().distance
+        if (length < 1e-6) return null
+        val invertSource = inner.ifEmpty { outer }
+        val invertLow = invertSource.minOf { it.y }
+        val invertX = invertSource.filter { abs(it.y - invertLow) < 1e-6 }.map { it.x }.average()
+        val openMouth = inner.isNotEmpty() && freeSurface(inner)
+        val outerPlaced = ArrayList<List<Triple<Double, Double, Double>>>(dense.size)
+        val innerPlaced = ArrayList<List<Triple<Double, Double, Double>>>(dense.size)
+        val frames = ArrayList<SweepFrame>(dense.size)
+        val frameMinZ = ArrayList<Double>(dense.size)
+        val grounds = ArrayList<Pair<Double, Double>>(dense.size)
+        for (i in dense.indices) {
+            val node = dense[i]
+            val tangent = tangentAt(dense, i)
+            val miter = if (node.corner) miterOf(dense, i) else 1.0
+            val rightX = tangent.second
+            val rightY = -tangent.first
+            val cx = node.x + rightX * signedOffset * miter
+            val cy = node.y + rightY * signedOffset * miter
+            val reference = referenceZ(grade, node.distance - dense.first().distance, length, node.station, terrain(cx, cy), profileAt(node.station))
+            val refY = when (grade.mode) {
+                GradeMode.SURFACE_TOP -> maxY
+                GradeMode.PROFILE -> 0.0
+                else -> minY
+            }
+            fun place(ring: List<SectionPoint>) = ring.map { point ->
+                val across = (point.x + signedOffset) * miter
+                Triple(node.x + rightX * across, node.y + rightY * across, reference + (point.y - refY))
+            }
+            val placedOuter = place(outer)
+            val placedInner = if (inner.isEmpty()) emptyList() else place(inner)
+            outerPlaced += placedOuter
+            if (placedInner.isNotEmpty()) innerPlaced += placedInner
+            val low = (placedOuter + placedInner).minOf { it.third }
+            frameMinZ += low
+            grounds += cx to cy
+            frames += SweepFrame(
+                node.x, node.y, node.distance, node.station, rightX, rightY, miter,
+                invertZ = reference + (minY - refY),
+                topZ = reference + (maxY - refY),
+            )
+        }
+        val raw = if (innerPlaced.isEmpty()) loft(outerPlaced) else loftShell(outerPlaced, innerPlaced, openMouth)
+        val lift = visualLift(frameMinZ, grounds, terrain)
+        val triangles = raise(raw, lift)
+        val left = track(frames, minX, signedOffset)
+        val right = track(frames, maxX, signedOffset)
+        val invert = track(frames, invertX, signedOffset)
+        val channel = if (inner.isEmpty()) emptyList() else {
+            val inLeft = track(frames, inner.minOf { it.x }, signedOffset)
+            val inRight = track(frames, inner.maxOf { it.x }, signedOffset)
+            inLeft + inRight.asReversed()
+        }
+        return SweepMesh(
+            frames, triangles, 0.0, length, left + right.asReversed(), invert, false,
+            channel, if (channel.size >= 3) listOf(channel) else emptyList(),
+            widthM, heightM, innerWidthM,
+        )
+    }
+
+    /**
+     * Vertical solid of a plan outline. [bottom] and [top] are world elevations before the
+     * terrain seat in [liftTriangles]. A non-empty [inner] leaves the opening clear.
+     */
+    fun extrude(
+        outer: List<SectionPoint>,
+        inner: List<SectionPoint>,
+        x: Double,
+        y: Double,
+        rotationDeg: Double,
+        skewDeg: Double,
+        bottom: Double,
+        top: Double,
+        widthM: Double,
+        heightM: Double,
+        innerWidthM: Double,
+    ): SweepMesh? {
+        if (outer.size < 3 || top - bottom < 1e-4) return null
+        val heading = Math.toRadians(rotationDeg)
+        val dx = cos(heading)
+        val dy = sin(heading)
+        val skew = tan(Math.toRadians(skewDeg.coerceIn(-60.0, 60.0)))
+        fun at(ring: List<SectionPoint>, z: Double) = ring.map { point ->
+            val placed = local(x, y, point.x, point.y, dx, dy, skew)
+            Triple(placed.x, placed.y, z)
+        }
+        val lowOuter = at(outer, bottom)
+        val highOuter = at(outer, top)
+        val triangles = if (inner.size >= 3) {
+            loftShell(listOf(lowOuter, highOuter), listOf(at(inner, bottom), at(inner, top)), openMouth = false)
+        } else {
+            loft(listOf(lowOuter, highOuter))
+        }
+        val footprint = lowOuter.map { Point2(it.first, it.second) }.let { it + it.first() }
+        val channel = if (inner.size < 3) emptyList() else at(inner, bottom).map { Point2(it.first, it.second) }.let { it + it.first() }
+        val invert = listOf(Point2(x, y))
+        return SweepMesh(
+            emptyList(), triangles, 0.0, 0.0, footprint, invert, false,
+            channel, if (channel.size >= 3) listOf(channel) else emptyList(),
+            widthM, heightM, innerWidthM,
+        )
+    }
+
+    /** Lifts a triangle soup so its lowest vertex clears [ground] by 2 cm when it would not. */
+    fun liftTriangles(triangles: DoubleArray, ground: Double?): DoubleArray {
+        if (ground == null || triangles.size < 3) return triangles
+        var minZ = Double.POSITIVE_INFINITY
+        var i = 2
+        while (i < triangles.size) {
+            if (triangles[i] < minZ) minZ = triangles[i]
+            i += 3
+        }
+        if (minZ == Double.POSITIVE_INFINITY) return triangles
+        return raise(triangles, visualLift(listOf(minZ), listOf(0.0 to 0.0)) { _, _ -> ground })
+    }
+
+    fun gradeElevation(grade: GradeSpec, distance: Double, length: Double, station: Double, terrainZ: Double?, profileZ: Double?): Double =
+        referenceZ(grade, distance, length, station, terrainZ, profileZ)
+
+    private fun track(frames: List<SweepFrame>, acrossX: Double, signedOffset: Double): List<Point2> = frames.map { frame ->
+        val across = (acrossX + signedOffset) * frame.miter
+        Point2(frame.x + frame.rightX * across, frame.y + frame.rightY * across)
+    }
+
+    private fun visualLift(frameMinZ: List<Double>, samples: List<Pair<Double, Double>>, terrain: (Double, Double) -> Double?): Double {
+        var lift = 0.0
+        for (i in frameMinZ.indices) {
+            val ground = terrain(samples[i].first, samples[i].second) ?: continue
+            val bury = ground - frameMinZ[i]
+            val need = if (bury > -CLEARANCE) bury + CLEARANCE else 0.0
+            if (need > lift) lift = need
+        }
+        return lift
+    }
+
+    private fun raise(triangles: DoubleArray, lift: Double): DoubleArray {
+        if (lift == 0.0 || triangles.isEmpty()) return triangles
+        val out = triangles.copyOf()
+        var i = 2
+        while (i < out.size) {
+            out[i] += lift
+            i += 3
+        }
+        return out
+    }
+
+    /** True when the edge that closes the ring is the free water surface, not a wall. */
+    private fun freeSurface(ring: List<SectionPoint>): Boolean {
+        if (ring.size < 3) return false
+        val a = ring.last()
+        val b = ring.first()
+        val dx = abs(b.x - a.x)
+        val dy = abs(b.y - a.y)
+        val top = ring.maxOf { it.y }
+        val mid = (a.y + b.y) / 2.0
+        return mid >= top - 1e-4 && dx > 1e-3 && dx >= dy * 2
+    }
+
     private fun local(ox: Double, oy: Double, lx: Double, ly: Double, dx: Double, dy: Double, skew: Double): Point2 {
         val sx = lx + ly * skew
         return Point2(ox + sx * dx - ly * dy, oy + sx * dy + ly * dx)
@@ -334,6 +532,73 @@ object Sweep {
         return x / length to y / length
     }
 
+    /**
+     * Walls between [outer] and [inner]. [openMouth] skips the edge that closes each ring,
+     * so a ditch keeps its channel and only the bank tops are sealed.
+     */
+    private fun loftShell(
+        outer: List<List<Triple<Double, Double, Double>>>,
+        inner: List<List<Triple<Double, Double, Double>>>,
+        openMouth: Boolean,
+    ): DoubleArray {
+        if (outer.size < 2 || inner.size < 2 || outer.first().size < 3 || inner.first().size < 3) return DoubleArray(0)
+        val tris = ArrayList<Double>()
+        val count = minOf(outer.first().size, inner.first().size)
+        val edges = if (openMouth) count - 1 else count
+        fun stitch(a: List<Triple<Double, Double, Double>>, b: List<Triple<Double, Double, Double>>) {
+            for (i in 0 until edges) {
+                val j = (i + 1) % a.size
+                addTri(tris, a[i], a[j], b[j])
+                addTri(tris, a[i], b[j], b[i])
+            }
+        }
+        for (k in 0 until outer.size - 1) {
+            stitch(outer[k], outer[k + 1])
+            stitch(inner[k], inner[k + 1])
+            if (openMouth) {
+                for (i in 0 until count) {
+                    addTri(tris, outer[k][i], outer[k + 1][i], inner[k + 1][i])
+                    addTri(tris, outer[k][i], inner[k + 1][i], inner[k][i])
+                }
+            }
+            if (tris.size / 9 > MAX_TRIANGLES) break
+        }
+        fun cap(o: List<Triple<Double, Double, Double>>, inn: List<Triple<Double, Double, Double>>) {
+            for (i in 0 until edges) {
+                val j = (i + 1) % o.size
+                addTri(tris, o[i], o[j], inn[j])
+                addTri(tris, o[i], inn[j], inn[i])
+            }
+        }
+        if (tris.size / 9 <= MAX_TRIANGLES) {
+            cap(outer.first(), inner.first())
+            cap(outer.last(), inner.last())
+        }
+        if (tris.size / 9 > MAX_TRIANGLES) return DoubleArray(MAX_TRIANGLES * 9) { tris[it] }
+        return tris.toDoubleArray()
+    }
+
+    private fun addTri(
+        tris: ArrayList<Double>,
+        a: Triple<Double, Double, Double>,
+        b: Triple<Double, Double, Double>,
+        c: Triple<Double, Double, Double>,
+    ) {
+        val ux = b.first - a.first
+        val uy = b.second - a.second
+        val uz = b.third - a.third
+        val vx = c.first - a.first
+        val vy = c.second - a.second
+        val vz = c.third - a.third
+        val cx = uy * vz - uz * vy
+        val cy = uz * vx - ux * vz
+        val cz = ux * vy - uy * vx
+        if (cx * cx + cy * cy + cz * cz < 1e-16) return
+        tris += a.first; tris += a.second; tris += a.third
+        tris += b.first; tris += b.second; tris += b.third
+        tris += c.first; tris += c.second; tris += c.third
+    }
+
     private fun loft(frames: List<List<Triple<Double, Double, Double>>>): DoubleArray {
         if (frames.size < 2) return DoubleArray(0)
         val n = frames.first().size
@@ -380,6 +645,7 @@ object Sweep {
     }
 
     private const val CORNER_RAD = 12.0 * Math.PI / 180.0
+    private const val CLEARANCE = 0.02
 }
 
 /** Plan drawing of one placed device: footprint, invert and the direction of flow. */
@@ -390,6 +656,12 @@ data class DrainageGlyph(
     val arrows: List<Pair<Point2, Double>>,
     val label: String?,
     val simplified: Boolean,
+    /** Inner opening. Empty when the device is drawn as a filled footprint only. */
+    val channel: List<Point2> = emptyList(),
+    /** Every bore, when a device has more than one. */
+    val channels: List<List<Point2>> = emptyList(),
+    /** Plan width in metres. Below about 3 px the plan keeps only the centerline. */
+    val widthM: Double = 0.0,
 )
 
 data class DeviceTakeoff(

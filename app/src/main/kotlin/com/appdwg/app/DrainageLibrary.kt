@@ -3,11 +3,11 @@ package com.appdwg.app
 import com.appdwg.core.Display
 import com.appdwg.core.StationFormat
 import com.appdwg.core.drainage.CatalogAudit
+import com.appdwg.core.drainage.DeviceBody
 import com.appdwg.core.drainage.CatalogFormatException
 import com.appdwg.core.drainage.CatalogLoader
 import com.appdwg.core.drainage.CatalogReport
 import com.appdwg.core.drainage.ConnectionPoint
-import com.appdwg.core.drainage.CrossSection
 import com.appdwg.core.drainage.DeviceAccess
 import com.appdwg.core.drainage.DeviceCatalog
 import com.appdwg.core.drainage.DeviceCategory
@@ -19,12 +19,12 @@ import com.appdwg.core.tr
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
@@ -224,13 +224,17 @@ private fun CatalogAuditLine(catalog: DeviceCatalog) {
 
 @Composable
 private fun DeviceRow(device: DeviceDef, onOpen: () -> Unit) {
-    Box(
+    Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
             .testTag("device-${device.code}")
             .clickable(role = Role.Button, onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
+        val rings = DeviceBody.previewRings(device)
+        if (rings.any { it.size >= 2 }) SectionSketch(rings, Modifier.size(40.dp))
+        Column(Modifier.weight(1f)) {
             Text(device.code, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(device.name, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (device.needsReview) {
@@ -309,10 +313,11 @@ private fun DeviceDetail(
     }
     device.review?.let { Text(tr("Revisado por {0} em {1}.", it.by, it.date), maxLines = 3, overflow = TextOverflow.Ellipsis) }
     val section = device.section
-    if (section == null || section.rings.none { it.size >= 2 }) Text(tr("Sem seção paramétrica"))
+    val drawn = DeviceBody.previewRings(device).ifEmpty { section?.rings.orEmpty() }
+    if (drawn.none { it.size >= 2 }) Text(tr("Sem seção paramétrica"))
     else {
-        SectionDrawing(section)
-        section.areaM2?.let { area ->
+        SectionSketch(drawn, Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = tr("Seção do dispositivo") })
+        section?.areaM2?.let { area ->
             val caption = section.excavationM3PerM?.let { cut ->
                 tr("Área da seção: {0} m² ({1} m³/m)", formatNumber(area), formatNumber(cut))
             } ?: tr("Área da seção: {0} m²", formatNumber(area))
@@ -444,18 +449,16 @@ private fun ConnectionLine(point: ConnectionPoint) {
 }
 
 @Composable
-private fun SectionDrawing(section: CrossSection) {
+private fun SectionSketch(rings: List<List<SectionPoint>>, modifier: Modifier) {
     val color = MaterialTheme.colorScheme.primary
-    Canvas(
-        Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = tr("Seção do dispositivo") },
-    ) {
-        val points = section.rings.flatten()
+    Canvas(modifier) {
+        val points = rings.flatten()
         if (points.isEmpty()) return@Canvas
         val minX = points.minOf { it.x }
         val maxX = points.maxOf { it.x }
         val minY = points.minOf { it.y }
         val maxY = points.maxOf { it.y }
-        val pad = 12.dp.toPx()
+        val pad = minOf(8.dp.toPx(), size.minDimension * 0.12f)
         val spanX = (maxX - minX).takeIf { it > 1e-6 } ?: 1.0
         val spanY = (maxY - minY).takeIf { it > 1e-6 } ?: 1.0
         val scale = minOf((size.width - 2 * pad) / spanX, (size.height - 2 * pad) / spanY)
@@ -463,7 +466,7 @@ private fun SectionDrawing(section: CrossSection) {
             (pad + (point.x - minX) * scale).toFloat(),
             (size.height - pad - (point.y - minY) * scale).toFloat(),
         )
-        for (ring in section.rings) {
+        for (ring in rings) {
             if (ring.size < 2) continue
             val path = Path()
             val first = at(ring.first())
@@ -474,7 +477,7 @@ private fun SectionDrawing(section: CrossSection) {
             }
             path.close()
             drawPath(path, color.copy(alpha = 0.22f))
-            drawPath(path, color, style = Stroke(width = 2.dp.toPx()))
+            drawPath(path, color, style = Stroke(width = 1.5.dp.toPx()))
         }
     }
 }

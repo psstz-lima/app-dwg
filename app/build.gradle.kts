@@ -14,8 +14,8 @@ android {
         applicationId = "app.gromatic"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.1.9"
+        versionCode = 9
+        versionName = "0.1.8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Native debug symbols travel inside the AAB (Play Console "native code without debug symbols").
         ndk {
