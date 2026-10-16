@@ -37,6 +37,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
@@ -159,6 +160,51 @@ fun FitRow(
         verticalArrangement = Arrangement.spacedBy(spacedBy),
         itemVerticalAlignment = verticalAlignment,
     ) { content(this) }
+}
+
+/** Section title above a spec table. */
+@Composable
+fun SpecHeader(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier.padding(top = 8.dp, bottom = 2.dp),
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** Label and value on one card row: the shared look of results, measurements and properties. */
+@Composable
+fun SpecRow(label: String, value: String, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (g.dark) g.card else g.chip)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = g.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        if (value.isNotEmpty()) Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** A result sentence on the same card as [SpecRow], when the line is not a label/value pair. */
+@Composable
+fun FactLine(text: String, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    Text(
+        text,
+        modifier.fillMaxWidth().padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (g.dark) g.card else g.chip)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        maxLines = 6,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /** Icon button for a crowded bar. The icon does not grow with the font scale; the description does the talking. */

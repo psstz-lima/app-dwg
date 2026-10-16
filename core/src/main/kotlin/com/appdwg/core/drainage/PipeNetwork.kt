@@ -13,6 +13,8 @@ object PipeNetworkWriter {
         graph: DrainageGraph,
         circular: (String) -> Boolean = { false },
         out: Appendable,
+        alignments: List<DrainAlignment> = emptyList(),
+        profiles: List<DrainProfile> = emptyList(),
     ) {
         val structs = structures(graph)
         val bySocket = HashMap<String, PipeStruct>()
@@ -58,7 +60,43 @@ object PipeNetworkWriter {
         out.append("      </Pipes>\n")
         out.append("    </PipeNetwork>\n")
         out.append("  </PipeNetworks>\n")
+        if (alignments.isNotEmpty()) writeAlignments(alignments, profiles, out)
         out.append("</LandXML>\n")
+    }
+
+    private fun writeAlignments(alignments: List<DrainAlignment>, profiles: List<DrainProfile>, out: Appendable) {
+        out.append("  <Alignments>\n")
+        for (alignment in alignments) {
+            val profile = profiles.find { it.alignmentId == alignment.id }
+            out.append(
+                "    <Alignment name=\"${esc(alignment.name)}\" length=\"${f3(alignment.length)}\" staStart=\"0\">\n",
+            )
+            out.append("      <CoordGeom>\n")
+            val nodes = alignment.nodes
+            for (i in 0 until nodes.size - 1) {
+                val a = nodes[i]
+                val b = nodes[i + 1]
+                out.append("        <Line><Start>${f3(a.y)} ${f3(a.x)}</Start><End>${f3(b.y)} ${f3(b.x)}</End></Line>\n")
+            }
+            out.append("      </CoordGeom>\n")
+            if (profile != null && profile.samples.size >= 2) {
+                out.append("      <Profile>\n")
+                out.append("        <ProfAlign name=\"invert\">\n")
+                for (sample in profile.samples) {
+                    if (sample.structure) continue
+                    out.append("          <PVI>${f3(sample.station)} ${f3(sample.invert)}</PVI>\n")
+                }
+                out.append("        </ProfAlign>\n")
+                out.append("        <ProfSurf name=\"terrain\">\n")
+                out.append("          <PntList2D>")
+                out.append(profile.samples.joinToString(" ") { "${f3(it.station)} ${f3(it.terrain)}" })
+                out.append("</PntList2D>\n")
+                out.append("        </ProfSurf>\n")
+                out.append("      </Profile>\n")
+            }
+            out.append("    </Alignment>\n")
+        }
+        out.append("  </Alignments>\n")
     }
 
     private fun structures(graph: DrainageGraph): List<PipeStruct> {

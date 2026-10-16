@@ -153,9 +153,9 @@ fun PlatformDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(optionTitle(o), style = MaterialTheme.typography.bodyMedium)
-                            Text(tr("Cota {0} · corte {1} · aterro {2} · talude até {3} · ocupa mais {4}",
-                                StationFormat.lengthValue(o.baseElevation, 2), StationFormat.volume(o.cut), StationFormat.volume(o.fill),
-                                StationFormat.length(o.maxSlopeHeight, 1), StationFormat.area(o.footprint, 0)), style = MaterialTheme.typography.bodySmall)
+                            FactLine(tr("Cota {0} · corte {1} · aterro {2} · talude até {3} · ocupa mais {4}",
+                                StationFormat.length(o.baseElevation, 2), StationFormat.volume(o.cut), StationFormat.volume(o.fill),
+                                StationFormat.length(o.maxSlopeHeight, 1), StationFormat.area(o.footprint, 0)))
                         }
                         OutlinedButton(enabled = vm.tasks.isEmpty(), onClick = {
                             useVertex = false
@@ -171,11 +171,11 @@ fun PlatformDialog(
                 vm.platformMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 vm.platformVolumes?.let { d ->
                     HorizontalDivider()
-                    Text(tr("Resultado contra {0}", d.baseName), style = MaterialTheme.typography.labelLarge)
-                    Text(tr("Corte {0} · Aterro {1} · ", StationFormat.volume(d.cutVolume), StationFormat.volume(d.fillVolume)) +
-                        tr("Saldo {0}", (if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(kotlin.math.abs(d.netVolume))))
-                    Text(tr("Área do projeto (até o offset): {0} · malha {1}", StationFormat.area(d.cutArea + d.fillArea, 0), StationFormat.length(d.cellSize, 2)),
-                        style = MaterialTheme.typography.bodySmall)
+                    SpecHeader(tr("Resultado contra {0}", d.baseName))
+                    SpecRow(tr("Corte"), StationFormat.volume(d.cutVolume))
+                    SpecRow(tr("Aterro"), StationFormat.volume(d.fillVolume))
+                    SpecRow(tr("Saldo"), (if (d.netVolume >= 0) "+" else "−") + StationFormat.volume(kotlin.math.abs(d.netVolume)))
+                    FactLine(tr("Área do projeto (até o offset): {0} · malha {1}", StationFormat.area(d.cutArea + d.fillArea, 0), StationFormat.length(d.cellSize, 2)))
                     Text(tr("A superfície \"{0}\" já entra na seção, no perfil, no comparativo e na exportação (LandXML com breaklines e limite; DXF com borda, offset e bermas).", PLATFORM_LABEL),
                         style = MaterialTheme.typography.bodySmall)
                 }

@@ -85,16 +85,16 @@ fun CrossCompareDialog(vm: ProjectViewModel, project: LandXmlProject, onShown: (
                     HorizontalDivider()
                     Text(tr("Etapas"), style = MaterialTheme.typography.labelLarge)
                     p.periods.forEachIndexed { k, period ->
-                        Text(tr("Período {0}: {1} → {2}", k + 1, short(period.from), short(period.to)), style = MaterialTheme.typography.bodyMedium)
-                        Text(tr("corte {0} · aterro {1} · movimentado {2}", m3(period.cut), m3(period.fill), m3(period.cut + period.fill)),
-                            style = MaterialTheme.typography.bodySmall)
+                        SpecHeader(tr("Período {0}: {1} → {2}", k + 1, short(period.from), short(period.to)))
+                        SpecRow(tr("Corte"), m3(period.cut))
+                        SpecRow(tr("Aterro"), m3(period.fill))
+                        SpecRow(tr("Movimentado"), m3(period.cut + period.fill))
                     }
-                    Text(tr("Executado até {0}: ", short(marked.getOrNull(marked.size - 2) ?: "")) +
-                        m3(p.periods.sumOf { it.cut + it.fill }), style = MaterialTheme.typography.bodyMedium)
-                    Text(tr("Falta até o projeto: corte {0} · aterro {1}", m3(p.remainingCut), m3(p.remainingFill)), style = MaterialTheme.typography.bodyMedium)
-                    Text(tr("Total terreno → projeto: corte {0} · aterro {1}", m3(p.totalCut), m3(p.totalFill)), style = MaterialTheme.typography.bodySmall)
-                    Text(tr("Concluído: ") + StationFormat.decimal(p.done * 100, 1) + tr(" % (pelo volume movimentado)"),
-                        style = MaterialTheme.typography.titleSmall)
+                    SpecRow(tr("Executado até {0}", short(marked.getOrNull(marked.size - 2) ?: "")), m3(p.periods.sumOf { it.cut + it.fill }))
+                    SpecRow(tr("Corte"), m3(p.remainingCut))
+                    SpecRow(tr("Aterro"), m3(p.remainingFill))
+                    FactLine(tr("Total terreno → projeto: corte {0} · aterro {1}", m3(p.totalCut), m3(p.totalFill)))
+                    SpecRow(tr("Concluído"), StationFormat.decimal(p.done * 100, 1) + " %")
                 }
             }
         },

@@ -219,6 +219,8 @@ class ProjectDoc(
     val drainageBasins: List<com.appdwg.core.drainage.DeviceBasin> = emptyList(),
     /** Construction phase of a placed device. Absent from older project files. */
     val drainagePhases: List<com.appdwg.core.drainage.DevicePhase> = emptyList(),
+    /** Edited names of drainage alignments. Absent from older project files. */
+    val drainageNames: Map<String, String> = emptyMap(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -260,6 +262,7 @@ class ProjectDoc(
         if (drainagePhases.isNotEmpty()) put("drainagePhases", JSONArray(drainagePhases.map { phase ->
             JSONObject().put("id", phase.deviceId).put("phase", phase.phase)
         }))
+        if (drainageNames.isNotEmpty()) put("drainageNames", JSONObject(drainageNames as Map<*, *>))
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -333,6 +336,9 @@ class ProjectDoc(
                         val p = a.getJSONObject(it)
                         com.appdwg.core.drainage.DevicePhase(p.getString("id"), p.optInt("phase", 0))
                     }.filter { it.phase > 0 }
+                }.orEmpty(),
+                drainageNames = o.optJSONObject("drainageNames")?.let { e ->
+                    e.keys().asSequence().associateWith { e.getString(it) }
                 }.orEmpty(),
             )
         }

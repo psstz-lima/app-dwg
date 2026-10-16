@@ -43,8 +43,6 @@ import com.appdwg.core.FixQuality
 import com.appdwg.core.NtripSettings
 import com.appdwg.core.PointInfo
 import com.appdwg.core.StationFormat
-import kotlin.math.abs
-
 /** Colour of the position marker by fix quality. */
 fun fixColor(q: FixQuality?): Color = when (q) {
     FixQuality.RTK_FIXED -> Color(0xFF2E7D32)
@@ -155,18 +153,22 @@ fun GpsCard(gnss: GnssManager, east: Double, north: Double, height: Double?, cal
                 Text(f.quality.label + (f.satellites?.let { tr(" · {0} satélites", it) } ?: "") + (f.correctionAge?.let { tr(" · idade {0} s", StationFormat.decimal(it, 0)) } ?: ""),
                     style = MaterialTheme.typography.labelLarge)
             }
-            val prec = listOfNotNull(f.sigmaH?.let { "H ${StationFormat.lengthValue(it)}" }, f.sigmaV?.let { "V ${StationFormat.lengthValue(it)}" })
-            Text(if (prec.isNotEmpty()) tr("Precisão ") + prec.joinToString(" · ") + " " + StationFormat.lengthUnit else f.hdop?.let { "HDOP ${StationFormat.decimal(it, 1)}" } ?: "",
-                style = MaterialTheme.typography.bodySmall)
-            Text("E ${StationFormat.lengthValue(east)} · N ${StationFormat.lengthValue(north)}" + (height?.let { " · " + tr("cota {0}", StationFormat.lengthValue(it)) } ?: "") +
-                if (calibrated) " · " + tr("calibrado") else "",
-                style = MaterialTheme.typography.bodySmall)
+            val prec = listOfNotNull(f.sigmaH?.let { "H ${StationFormat.length(it, 3)}" }, f.sigmaV?.let { "V ${StationFormat.length(it, 3)}" })
+            if (prec.isNotEmpty()) SpecRow(tr("Precisão"), prec.joinToString(" · "))
+            else f.hdop?.let { SpecRow("HDOP", StationFormat.decimal(it, 1)) }
+            SpecRow("E", StationFormat.lengthValue(east))
+            SpecRow("N", StationFormat.lengthValue(north))
+            height?.let { SpecRow(tr("Cota"), StationFormat.lengthValue(it)) }
+            if (calibrated) FactLine(tr("calibrado"))
             info?.alignment?.takeIf { !it.stationOffset.outside }?.let { a ->
-                Text("${a.name}: ${StationFormat.estaca(a.stationOffset.station)} · ${StationFormat.offset(a.stationOffset.offset)}", style = MaterialTheme.typography.bodySmall)
+                SpecRow(a.name, StationFormat.estaca(a.stationOffset.station) + " · " + StationFormat.offset(a.stationOffset.offset))
             }
             info?.terrainElevation?.let { t ->
-                Text(tr("Terreno {0}", StationFormat.lengthValue(t)) + (height?.let { z -> val d = z - t; " · " + tr("antena {0}", (if (d >= 0) "+" else "−") + StationFormat.length(abs(d), 3)) } ?: ""),
-                    style = MaterialTheme.typography.bodySmall)
+                SpecRow(tr("Terreno no ponto"), StationFormat.length(t, 3))
+                height?.let { z ->
+                    val d = z - t
+                    SpecRow(tr("Antena"), (if (d >= 0) "+" else "−") + StationFormat.length(kotlin.math.abs(d), 3))
+                }
             }
         }
     }

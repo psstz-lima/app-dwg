@@ -102,8 +102,7 @@ fun ProfilePanel(
                         OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("+" + StationFormat.decimal(0.1, 2)) }
                         OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("−" + StationFormat.decimal(0.1, 2)) }
                         OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Remover PVI")) }
-                        Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
-                            style = MaterialTheme.typography.labelMedium)
+                        SpecRow("PVI ${i + 1}", StationFormat.estaca(editPvis[i].station) + " · " + StationFormat.length(editPvis[i].elevation, 3))
                         if (i > 0 && i < editPvis.size - 1) {
                             // Vertical curve length of this PVI; 0 takes it from K.
                             var lt by remember(i, editPvis[i].curveLength) { mutableStateOf(StationFormat.lengthValue(editPvis[i].curveLength, 1)) }

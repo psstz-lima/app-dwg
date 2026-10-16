@@ -2,6 +2,9 @@ package com.appdwg.app
 
 import com.appdwg.core.Point2
 import com.appdwg.core.StationFormat
+import com.appdwg.core.drainage.DeviceProfile
+import com.appdwg.core.drainage.DrainAlignment
+import com.appdwg.core.drainage.DrainCrossSection
 import com.appdwg.core.drainage.BlanketTakeoff
 import com.appdwg.core.drainage.DeviceDef
 import com.appdwg.core.drainage.DeviceSide
@@ -20,11 +23,13 @@ import com.appdwg.core.drainage.PlacedDevice
 import com.appdwg.core.drainage.Subsurface
 import com.appdwg.core.drainage.resolveSection
 import com.appdwg.core.tr
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -39,6 +44,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
@@ -56,11 +65,17 @@ data class PlaceDraft(
     val offset: String = "0",
     val start: String = "",
     val end: String = "",
-    val grade: GradeMode = GradeMode.SURFACE_INVERT,
+    val grade: GradeMode = GradeMode.HYDRAULIC,
     val z0: String = "0",
     val z1: String = "0",
     val depth: String = "0",
     val slope: String = "0",
+    val minSlope: String = "0.5",
+    val minCover: String = "0.60",
+    val maxDepth: String = "6",
+    val buried: Boolean = false,
+    val flowToStart: Boolean = false,
+    val flowAuto: Boolean = true,
     val profile: String? = null,
     val rotation: String = "0",
     val skew: String = "0",
@@ -70,15 +85,21 @@ data class PlaceDraft(
     val params: Map<String, String> = emptyMap(),
 )
 
-fun draftFor(device: DeviceDef): PlaceDraft = PlaceDraft(
-    id = java.util.UUID.randomUUID().toString(),
-    code = device.code,
-    name = device.name,
-    point = device.category == com.appdwg.core.drainage.DeviceCategory.POINT,
-    params = device.parameters.mapNotNull { parameter ->
-        parameter.number?.let { parameter.key to StationFormat.decimal(it, 3) }
-    }.toMap(),
-)
+fun draftFor(device: DeviceDef): PlaceDraft {
+    val buried = com.appdwg.core.drainage.deviceRunsBuried(device)
+    return PlaceDraft(
+        id = java.util.UUID.randomUUID().toString(),
+        code = device.code,
+        name = device.name,
+        point = device.category == com.appdwg.core.drainage.DeviceCategory.POINT,
+        grade = GradeMode.HYDRAULIC,
+        buried = buried,
+        minCover = if (buried) "0.60" else "0",
+        params = device.parameters.mapNotNull { parameter ->
+            parameter.number?.let { parameter.key to StationFormat.decimal(it, 3) }
+        }.toMap(),
+    )
+}
 
 fun PlacedDevice.toDraft(name: String): PlaceDraft = when (this) {
     is PlacedDevice.Linear -> PlaceDraft(
@@ -86,12 +107,15 @@ fun PlacedDevice.toDraft(name: String): PlaceDraft = when (this) {
         alignment = alignment, side = side, offset = num(offset),
         start = start?.let(::num) ?: "", end = end?.let(::num) ?: "",
         grade = grade.mode, z0 = num(grade.z0), z1 = num(grade.z1), depth = num(grade.depth),
-        slope = num(grade.slope * 100.0), profile = profile, editingId = id,
-        params = params.mapValues { num(it.value) },
+        slope = num(grade.slope * 100.0), minSlope = num(grade.minSlope * 100.0), minCover = num(grade.minCover),
+        maxDepth = num(grade.maxDepth), buried = grade.buried, flowToStart = grade.flowToStart, flowAuto = grade.flowAuto,
+        profile = profile, editingId = id, params = params.mapValues { num(it.value) },
     )
     is PlacedDevice.Point -> PlaceDraft(
         id, code, name, point = true, alignment = alignment, grade = grade.mode,
         z0 = num(grade.z0), z1 = num(grade.z1), depth = num(grade.depth),
+        minSlope = num(grade.minSlope * 100.0), minCover = num(grade.minCover), maxDepth = num(grade.maxDepth),
+        buried = grade.buried, flowToStart = grade.flowToStart, flowAuto = grade.flowAuto,
         rotation = num(rotationDeg), skew = num(skewDeg), x = x, y = y, editingId = id, profile = profile,
         params = params.mapValues { num(it.value) },
     )
@@ -107,6 +131,12 @@ fun PlaceDraft.placed(): PlacedDevice? {
         z1 = StationFormat.number(z1) ?: 0.0,
         depth = StationFormat.number(depth) ?: 0.0,
         slope = (StationFormat.number(slope) ?: 0.0) / 100.0,
+        minSlope = (StationFormat.number(minSlope) ?: 0.5) / 100.0,
+        minCover = StationFormat.number(minCover) ?: if (buried) 0.6 else 0.0,
+        maxDepth = StationFormat.number(maxDepth) ?: 6.0,
+        buried = buried,
+        flowToStart = flowToStart,
+        flowAuto = flowAuto,
     )
     if (point) {
         val px = x ?: return null
@@ -279,6 +309,7 @@ fun DrainagePlaceCard(
         }
         Text(tr("Cota"), style = MaterialTheme.typography.labelLarge)
         ChoiceRow {
+            Choice(draft.grade == GradeMode.HYDRAULIC, tr("Greide hidráulico")) { onChange(draft.copy(grade = GradeMode.HYDRAULIC)) }
             Choice(draft.grade == GradeMode.SURFACE_TOP, tr("Terreno (topo)")) { onChange(draft.copy(grade = GradeMode.SURFACE_TOP)) }
             Choice(draft.grade == GradeMode.SURFACE_INVERT, tr("Fundo no terreno")) { onChange(draft.copy(grade = GradeMode.SURFACE_INVERT)) }
             if (!draft.point) {
@@ -303,6 +334,16 @@ fun DrainagePlaceCard(
                     for (name in profiles) Choice(draft.profile == name, name) { onChange(draft.copy(profile = name)) }
                 }
             }
+            GradeMode.HYDRAULIC -> {
+                if (!draft.point) NumberField(tr("Declividade mínima (%)"), draft.minSlope) { onChange(draft.copy(minSlope = it)) }
+                NumberField(tr("Cobertura mínima (m)"), draft.minCover) { onChange(draft.copy(minCover = it)) }
+                NumberField(tr("Profundidade máxima (m)"), draft.maxDepth) { onChange(draft.copy(maxDepth = it)) }
+                ChoiceRow {
+                    Choice(draft.buried, tr("Enterrado")) { onChange(draft.copy(buried = !draft.buried)) }
+                    Choice(draft.flowAuto, tr("Fluxo automático")) { onChange(draft.copy(flowAuto = !draft.flowAuto)) }
+                    if (!draft.flowAuto) Choice(draft.flowToStart, tr("Fluxo para o início")) { onChange(draft.copy(flowToStart = !draft.flowToStart)) }
+                }
+            }
             GradeMode.SURFACE_TOP -> Unit
         }
         if (parameters.isNotEmpty()) {
@@ -318,6 +359,34 @@ fun DrainagePlaceCard(
             if (!draft.point && draft.points.isNotEmpty()) Choice(false, tr("Desfazer")) { onUndoPoint() }
             Choice(false, tr("Cancelar")) { onCancel() }
             Choice(true, tr("Concluir")) { onCommit() }
+        }
+    }
+}
+
+/** Essential controls while a path is being picked. The map stays free above this bar. */
+@Composable
+fun DrainagePickBar(
+    title: String,
+    detail: String,
+    canUndo: Boolean,
+    onUndo: () -> Unit,
+    onFinish: () -> Unit,
+    onCancel: () -> Unit,
+    onMore: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(detail, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (canUndo) Choice(false, tr("Desfazer")) { onUndo() }
+            Choice(true, tr("Concluir")) { onFinish() }
+            Choice(false, tr("Cancelar")) { onCancel() }
+            Choice(false, tr("Mais")) { onMore() }
         }
     }
 }
@@ -350,6 +419,13 @@ fun DrainageSelectionCard(
     phaseThrough: Int = 0,
     onPhase: ((Int) -> Unit)? = null,
     onPhaseThrough: ((Int) -> Unit)? = null,
+    profile: DeviceProfile? = null,
+    run: DrainAlignment? = null,
+    section: DrainCrossSection? = null,
+    connected: List<String> = emptyList(),
+    onRename: ((String) -> Unit)? = null,
+    onReverse: (() -> Unit)? = null,
+    onExport: ((String) -> Unit)? = null,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -366,6 +442,10 @@ fun DrainageSelectionCard(
         }
         row?.let { TakeoffLines(tr("Este dispositivo"), it) }
         total?.let { TakeoffLines(tr("Total do projeto"), it) }
+        profile?.let { HydraulicBlock(it, run, section, connected, onRename, onReverse, onExport) }
+        if (profile == null && row != null) {
+            Text(tr("Este lançamento acompanha o terreno. O greide hidráulico faz a água descer."), maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
         for (note in notes) Text(note, maxLines = 3, overflow = TextOverflow.Ellipsis)
         basinSummary?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
         if (onLinkBasin != null) BasinLink(onLinkBasin)
@@ -418,11 +498,136 @@ private fun BasinLink(onLink: (String, String) -> Unit) {
 
 @Composable
 private fun TakeoffLines(title: String, row: DeviceTakeoff) {
-    Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    Text(tr("Comprimento: {0} m", StationFormat.decimal(row.length, 2)), maxLines = 1, overflow = TextOverflow.Ellipsis)
-    Text(tr("Concreto: {0} m³", StationFormat.decimal(row.concrete, 3)), maxLines = 1, overflow = TextOverflow.Ellipsis)
-    Text(tr("Escavação: {0} m³", StationFormat.decimal(row.excavation, 3)), maxLines = 1, overflow = TextOverflow.Ellipsis)
-    if (row.formworkKnown) Text(tr("Formas: {0} m²", StationFormat.decimal(row.formwork, 3)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    SpecHeader(title)
+    SpecRow(tr("Comprimento"), StationFormat.length(row.length, 2))
+    SpecRow(tr("Concreto"), StationFormat.volume(row.concrete, 3))
+    if (row.trench > 0.0) SpecRow(tr("Escavação"), StationFormat.volume(row.trench, 3))
+    else SpecRow(tr("Escavação"), StationFormat.volume(row.excavation, 3))
+    if (row.backfill > 0.0) SpecRow(tr("Reaterro"), StationFormat.volume(row.backfill, 3))
+    if (row.bedding > 0.0) SpecRow(tr("Berço"), StationFormat.volume(row.bedding, 3))
+    if (row.spoil > 0.0) SpecRow(tr("Bota-fora"), StationFormat.volume(row.spoil, 3))
+    if (row.fill > 0.0) SpecRow(tr("Aterro"), StationFormat.volume(row.fill, 3))
+    if (row.formworkKnown) SpecRow(tr("Formas"), StationFormat.area(row.formwork, 3))
+    if (row.shoring) FactLine(tr("Escoramento acima de 1,25 m"))
+    if (row.tooDeep) FactLine(tr("A vala passa de {0} m: prever bombeamento ou queda.", StationFormat.decimal(row.cutDepth, 2)))
+}
+
+@Composable
+private fun HydraulicBlock(
+    profile: DeviceProfile,
+    run: DrainAlignment?,
+    section: DrainCrossSection?,
+    connected: List<String>,
+    onRename: ((String) -> Unit)?,
+    onReverse: (() -> Unit)?,
+    onExport: ((String) -> Unit)?,
+) {
+    val grade = profile.hydraulic
+    Text(tr("Perfil hidráulico"), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(
+        tr("Montante {0} m · jusante {1} m", StationFormat.decimal(grade.invertUpstream, 3), StationFormat.decimal(grade.invertDownstream, 3)),
+        maxLines = 2, overflow = TextOverflow.Ellipsis,
+    )
+    Text(tr("Declividade mínima do trecho {0} %", StationFormat.decimal(grade.minSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    ProfileChart(grade.samples.map { it.distance to it.terrain to it.invert })
+    if (grade.tooDeep) {
+        Text(tr("A vala passa de {0} m: prever bombeamento ou queda.", StationFormat.decimal(grade.maxCut, 2)), maxLines = 3, overflow = TextOverflow.Ellipsis)
+    }
+    run?.let { alignment ->
+        Text(tr("Eixo {0}", alignment.name), style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (onRename != null) {
+            var name by remember(alignment.id) { mutableStateOf(alignment.name) }
+            OutlinedTextField(
+                name, { name = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(tr("Nome do eixo"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                singleLine = true,
+            )
+            Choice(false, tr("Nome do eixo")) { onRename(name) }
+        }
+        if (onReverse != null) Choice(false, tr("Inverter sentido")) { onReverse() }
+    }
+    section?.let { cut ->
+        Text(tr("Seção na estaca {0}", StationFormat.decimal(cut.station, 1)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        SectionChart(cut)
+    }
+    if (connected.isNotEmpty()) {
+        Text(tr("Conectado a {0}", connected.joinToString(", ")), maxLines = 3, overflow = TextOverflow.Ellipsis)
+    }
+    if (onExport != null) {
+        ChoiceRow {
+            Choice(false, tr("CSV")) { onExport("csv") }
+            Choice(false, tr("PDF")) { onExport("pdf") }
+            Choice(false, tr("LandXML")) { onExport("xml") }
+            Choice(false, tr("IFC")) { onExport("ifc") }
+        }
+    }
+}
+
+@Composable
+private fun ProfileChart(samples: List<Pair<Pair<Double, Double>, Double>>) {
+    if (samples.size < 2) return
+    val terrainColor = MaterialTheme.colorScheme.tertiary
+    val invertColor = MaterialTheme.colorScheme.primary
+    Canvas(Modifier.fillMaxWidth().height(120.dp)) {
+        val ds = samples.map { it.first.first }
+        val zs = samples.flatMap { listOf(it.first.second, it.second) }
+        val d0 = ds.min(); val d1 = ds.max()
+        val z0 = zs.min(); val z1 = zs.max()
+        val spanD = (d1 - d0).takeIf { it > 1e-6 } ?: 1.0
+        val spanZ = (z1 - z0).takeIf { it > 1e-6 } ?: 1.0
+        fun at(distance: Double, z: Double) = Offset(
+            ((distance - d0) / spanD * size.width).toFloat(),
+            (size.height - (z - z0) / spanZ * size.height).toFloat(),
+        )
+        fun stroke(color: androidx.compose.ui.graphics.Color, pick: (Triple<Double, Double, Double>) -> Double) {
+            val path = Path()
+            samples.forEachIndexed { index, sample ->
+                val point = at(sample.first.first, pick(Triple(sample.first.first, sample.first.second, sample.second)))
+                if (index == 0) path.moveTo(point.x, point.y) else path.lineTo(point.x, point.y)
+            }
+            drawPath(path, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+        }
+        stroke(terrainColor) { it.second }
+        stroke(invertColor) { it.third }
+    }
+}
+
+@Composable
+private fun SectionChart(cut: DrainCrossSection) {
+    val ground = MaterialTheme.colorScheme.tertiary
+    val device = MaterialTheme.colorScheme.primary
+    val trench = MaterialTheme.colorScheme.secondary
+    Canvas(Modifier.fillMaxWidth().height(110.dp)) {
+        val rings = listOf(cut.terrain, cut.trench, cut.device)
+        val points = rings.flatten()
+        if (points.isEmpty()) return@Canvas
+        val minX = points.minOf { it.x }
+        val maxX = points.maxOf { it.x }
+        val minY = points.minOf { it.y }
+        val maxY = points.maxOf { it.y }
+        val spanX = (maxX - minX).takeIf { it > 1e-6 } ?: 1.0
+        val spanY = (maxY - minY).takeIf { it > 1e-6 } ?: 1.0
+        fun at(x: Double, y: Double) = Offset(
+            ((x - minX) / spanX * size.width).toFloat(),
+            (size.height - (y - minY) / spanY * size.height).toFloat(),
+        )
+        fun drawRing(ring: List<com.appdwg.core.drainage.SectionPoint>, color: androidx.compose.ui.graphics.Color, close: Boolean) {
+            if (ring.size < 2) return
+            val path = Path()
+            val first = at(ring.first().x, ring.first().y)
+            path.moveTo(first.x, first.y)
+            for (point in ring.drop(1)) {
+                val next = at(point.x, point.y)
+                path.lineTo(next.x, next.y)
+            }
+            if (close) path.close()
+            drawPath(path, color, style = Stroke(width = 2.dp.toPx()))
+        }
+        drawRing(cut.terrain, ground, close = false)
+        drawRing(cut.trench, trench, close = true)
+        drawRing(cut.device, device, close = true)
+    }
 }
 
 @Composable

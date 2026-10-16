@@ -286,8 +286,11 @@ object DrainageNetwork {
                     { station -> profile?.elevationAt(station) },
                 ) ?: return null
                 if (mesh.frames.size < 2) return null
-                val a = mesh.frames.first()
-                val b = mesh.frames.last()
+                val start = mesh.frames.first()
+                val end = mesh.frames.last()
+                val uphill = device.grade.mode == GradeMode.HYDRAULIC && start.invertZ + 1e-4 < end.invertZ
+                val a = if (uphill) end else start
+                val b = if (uphill) start else end
                 val direction = atan2(b.y - a.y, b.x - a.x)
                 listOf(
                     Socket(device.id, ROLE_UP, a.x, a.y, a.invertZ, direction, width, height),

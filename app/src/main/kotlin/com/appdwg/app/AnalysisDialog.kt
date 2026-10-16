@@ -68,7 +68,7 @@ fun AnalysisDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () 
                     Text(stringResource(R.string.ta_slope_hint), style = MaterialTheme.typography.bodySmall)
                     SlopeLegend(vm, Modifier)
                 }
-                if (vm.analysisCell > 0) Text(stringResource(R.string.ta_cell, StationFormat.length(vm.analysisCell, 2)), style = MaterialTheme.typography.bodySmall)
+                if (vm.analysisCell > 0) FactLine(stringResource(R.string.ta_cell, StationFormat.length(vm.analysisCell, 2)))
             }
         },
     )
@@ -82,11 +82,10 @@ fun SlopeLegend(vm: ProjectViewModel, modifier: Modifier) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(stringResource(R.string.ta_legend), style = MaterialTheme.typography.labelMedium)
             vm.slopeClasses.forEach { c ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                val range = if (c.to == null) "> ${c.from.toInt()} %" else "${c.from.toInt()}–${c.to!!.toInt()} %"
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.size(14.dp).background(Color(c.color), RoundedCornerShape(3.dp)))
-                    val range = if (c.to == null) "> ${c.from.toInt()}" else "${c.from.toInt()}–${c.to!!.toInt()}"
-                    Text("  $range ${c.name}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                    Text(StationFormat.landArea(c.area, 2), style = MaterialTheme.typography.labelSmall)
+                    SpecRow("$range ${c.name}", StationFormat.landArea(c.area, 2), Modifier.weight(1f))
                 }
             }
         }

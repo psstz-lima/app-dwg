@@ -12,7 +12,7 @@ import kotlin.math.sin
 import kotlin.math.tan
 
 /** How the section sits on the ground or on a grade. */
-enum class GradeMode { SURFACE_TOP, SURFACE_INVERT, FIXED, SLOPE, PROFILE }
+enum class GradeMode { SURFACE_TOP, SURFACE_INVERT, FIXED, SLOPE, PROFILE, HYDRAULIC }
 
 enum class DeviceSide { LEFT, AXIS, RIGHT }
 
@@ -26,8 +26,20 @@ data class GradeSpec(
     val z1: Double = 0.0,
     /** Depth of the invert below the terrain, for [GradeMode.SURFACE_INVERT]. */
     val depth: Double = 0.0,
-    /** Rise over run (0.01 is 1 %), for [GradeMode.SLOPE]. */
+    /** Rise over run (0.01 is 1 %), for [GradeMode.SLOPE]. Positive rises along the drawn path. */
     val slope: Double = 0.0,
+    /** Minimum downhill grade (0.005 is 0.5 %), for [GradeMode.HYDRAULIC]. */
+    val minSlope: Double = 0.005,
+    /** Cover over a buried device, metres. */
+    val minCover: Double = 0.60,
+    /** Excavation deeper than this is kept, and reported as needing a drop or pumping. */
+    val maxDepth: Double = 6.0,
+    /** A buried pipe or culvert. A gutter or curb stays on the surface. */
+    val buried: Boolean = false,
+    /** When [flowAuto] is off, true sends the water toward the drawn start. */
+    val flowToStart: Boolean = false,
+    /** The lower end is downstream. */
+    val flowAuto: Boolean = true,
 )
 
 /** One vertex of the path the section is swept along. [corner] is a miter; a curve sample is not. */
@@ -67,7 +79,10 @@ class SweepMesh(
     val heightM: Double = 0.0,
     /** Width of the inner opening, metres. Zero when the solid is filled. */
     val innerWidthM: Double = 0.0,
-)
+) {
+    /** Hydraulic grade used to place this solid. Null for the older grade modes. */
+    var hydraulic: HydraulicGrade.Result? = null
+}
 
 object Sweep {
     /** Samples along a long path. A 10 km run stays on this budget instead of one vertex per metre. */
@@ -148,6 +163,7 @@ object Sweep {
         val invertX = ring.filter { abs(it.y - minY) < 1e-9 }.map { it.x }.average()
         val length = dense.last().distance - dense.first().distance
         if (length < 1e-6) return null
+        val hydraulics = hydraulicOf(dense, grade, terrain, signedOffset, maxY - minY, maxX - minX, section.areaM2 ?: ringArea(ring))
         val frames = ArrayList<SweepFrame>(dense.size)
         val placed = ArrayList<List<Triple<Double, Double, Double>>>(dense.size)
         for (i in dense.indices) {
@@ -158,7 +174,8 @@ object Sweep {
             val rightY = -tangent.first
             val cx = node.x + rightX * signedOffset * miter
             val cy = node.y + rightY * signedOffset * miter
-            val reference = referenceZ(grade, node.distance - dense.first().distance, length, node.station, terrain(cx, cy), profileAt(node.station))
+            val reference = hydraulics?.samples?.getOrNull(i)?.invert
+                ?: referenceZ(grade, node.distance - dense.first().distance, length, node.station, terrain(cx, cy), profileAt(node.station))
             val refY = when (grade.mode) {
                 GradeMode.SURFACE_TOP -> maxY
                 GradeMode.PROFILE -> 0.0
@@ -193,6 +210,7 @@ object Sweep {
             Point2(frame.x + frame.rightX * across, frame.y + frame.rightY * across)
         }
         return SweepMesh(frames, triangles, volume(triangles), length, left + right.asReversed(), invert, simplified)
+            .also { it.hydraulic = hydraulics }
     }
 
     /** A point device: the catalog section swept one metre, or a labelled box when the section is missing. */
@@ -224,7 +242,11 @@ object Sweep {
         }
         val half = box / 2.0
         val z = referenceZ(grade, 0.0, 1.0, 0.0, terrainZ, profileZ)
-        val refY = if (grade.mode == GradeMode.SURFACE_TOP) box else 0.0
+        val refY = when (grade.mode) {
+            GradeMode.SURFACE_TOP -> box
+            GradeMode.HYDRAULIC -> box + if (grade.buried) grade.minCover else 0.0
+            else -> 0.0
+        }
         val bottom = z - refY
         val corners = listOf(
             local(x, y, -half, -half, dx, dy, skew),
@@ -273,6 +295,7 @@ object Sweep {
         val maxX = outer.maxOf { it.x }
         val length = dense.last().distance - dense.first().distance
         if (length < 1e-6) return null
+        val hydraulics = hydraulicOf(dense, grade, terrain, signedOffset, maxY - minY, maxX - minX, ringArea(outer))
         val invertSource = inner.ifEmpty { outer }
         val invertLow = invertSource.minOf { it.y }
         val invertX = invertSource.filter { abs(it.y - invertLow) < 1e-6 }.map { it.x }.average()
@@ -290,7 +313,8 @@ object Sweep {
             val rightY = -tangent.first
             val cx = node.x + rightX * signedOffset * miter
             val cy = node.y + rightY * signedOffset * miter
-            val reference = referenceZ(grade, node.distance - dense.first().distance, length, node.station, terrain(cx, cy), profileAt(node.station))
+            val reference = hydraulics?.samples?.getOrNull(i)?.invert
+                ?: referenceZ(grade, node.distance - dense.first().distance, length, node.station, terrain(cx, cy), profileAt(node.station))
             val refY = when (grade.mode) {
                 GradeMode.SURFACE_TOP -> maxY
                 GradeMode.PROFILE -> 0.0
@@ -314,7 +338,11 @@ object Sweep {
             )
         }
         val raw = if (innerPlaced.isEmpty()) loft(outerPlaced) else loftShell(outerPlaced, innerPlaced, openMouth)
-        val lift = visualLift(frameMinZ, grounds, terrain)
+        val lift = if (grade.mode == GradeMode.HYDRAULIC) {
+            if (grade.buried) 0.0 else HydraulicGrade.SURFACE_SEAT
+        } else {
+            visualLift(frameMinZ, grounds, terrain)
+        }
         val triangles = raise(raw, lift)
         val left = track(frames, minX, signedOffset)
         val right = track(frames, maxX, signedOffset)
@@ -328,7 +356,7 @@ object Sweep {
             frames, triangles, 0.0, length, left + right.asReversed(), invert, false,
             channel, if (channel.size >= 3) listOf(channel) else emptyList(),
             widthM, heightM, innerWidthM,
-        )
+        ).also { it.hydraulic = hydraulics }
     }
 
     /**
@@ -373,6 +401,9 @@ object Sweep {
             widthM, heightM, innerWidthM,
         )
     }
+
+    /** Moves every vertex by [lift] metres. A hydraulic surface device uses a fixed seat, not a drape. */
+    fun offsetZ(triangles: DoubleArray, lift: Double): DoubleArray = raise(triangles, lift)
 
     /** Lifts a triangle soup so its lowest vertex clears [ground] by 2 cm when it would not. */
     fun liftTriangles(triangles: DoubleArray, ground: Double?): DoubleArray {
@@ -442,7 +473,51 @@ object Sweep {
             GradeMode.FIXED -> grade.z0 + (grade.z1 - grade.z0) * (if (length <= 0.0) 0.0 else distance / length)
             GradeMode.SLOPE -> grade.z0 + grade.slope * distance
             GradeMode.PROFILE -> profileZ ?: grade.z0
+            // Cover line only. The sweep replaces this with the monotonic grade.
+            GradeMode.HYDRAULIC -> ground
         }.let { if (station.isNaN()) it else it }
+    }
+
+    private fun hydraulicOf(
+        dense: List<PathNode>,
+        grade: GradeSpec,
+        terrain: (Double, Double) -> Double?,
+        signedOffset: Double,
+        height: Double,
+        width: Double,
+        area: Double,
+    ): HydraulicGrade.Result? {
+        if (grade.mode != GradeMode.HYDRAULIC || dense.size < 2) return null
+        val distances = DoubleArray(dense.size)
+        val grounds = DoubleArray(dense.size)
+        val origin = dense.first().distance
+        for (i in dense.indices) {
+            val node = dense[i]
+            val tangent = tangentAt(dense, i)
+            val miter = if (node.corner) miterOf(dense, i) else 1.0
+            val rightX = tangent.second
+            val rightY = -tangent.first
+            distances[i] = node.distance - origin
+            val cx = node.x + rightX * signedOffset * miter
+            val cy = node.y + rightY * signedOffset * miter
+            grounds[i] = terrain(cx, cy) ?: 0.0
+        }
+        return HydraulicGrade.design(
+            distances, grounds, height, width, area, grade.buried,
+            minSlope = grade.minSlope, minCover = if (grade.buried) grade.minCover else 0.0,
+            maxDepth = grade.maxDepth,
+            downstreamAtStart = if (grade.flowAuto) null else grade.flowToStart,
+        )
+    }
+
+    private fun ringArea(ring: List<SectionPoint>): Double {
+        var sum = 0.0
+        for (i in ring.indices) {
+            val a = ring[i]
+            val b = ring[(i + 1) % ring.size]
+            sum += a.x * b.y - b.x * a.y
+        }
+        return abs(sum) / 2.0
     }
 
     private fun densify(nodes: List<PathNode>): List<PathNode> {
@@ -672,10 +747,23 @@ data class DeviceTakeoff(
     val excavation: Double,
     val formwork: Double,
     val formworkKnown: Boolean,
+    val backfill: Double = 0.0,
+    val bedding: Double = 0.0,
+    val spoil: Double = 0.0,
+    val fill: Double = 0.0,
+    val trench: Double = 0.0,
+    val shoring: Boolean = false,
+    val tooDeep: Boolean = false,
+    val invertUp: Double = Double.NaN,
+    val invertDown: Double = Double.NaN,
+    val gradeSlope: Double = Double.NaN,
+    val cutDepth: Double = Double.NaN,
 ) {
     operator fun plus(other: DeviceTakeoff) = DeviceTakeoff(
         "", "", length + other.length, concrete + other.concrete, excavation + other.excavation,
         formwork + other.formwork, formworkKnown || other.formworkKnown,
+        backfill + other.backfill, bedding + other.bedding, spoil + other.spoil, fill + other.fill,
+        trench + other.trench, shoring || other.shoring, tooDeep || other.tooDeep,
     )
 }
 

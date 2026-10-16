@@ -55,9 +55,9 @@ object DeviceBody {
         val terrain: (Double, Double) -> Double? = { _, _ -> terrainZ }
         val profile: (Double) -> Double? = { profileZ }
         return when (shape) {
-            is Box -> seat(shape.mesh(x, y, rotationDeg, skewDeg, grade, terrainZ, profileZ), terrainZ)
-            is Apron -> seat(shape.mesh(x, y, rotationDeg, skewDeg, grade, terrainZ, profileZ), terrainZ)
-            is Head -> seat(shape.mesh(x, y, rotationDeg, skewDeg, grade, terrainZ, profileZ), terrainZ)
+            is Box -> seat(shape.mesh(x, y, rotationDeg, skewDeg, grade, terrainZ, profileZ), terrainZ, grade)
+            is Apron -> seat(shape.mesh(x, y, rotationDeg, skewDeg, grade, terrainZ, profileZ), terrainZ, grade)
+            is Head -> seat(shape.mesh(x, y, rotationDeg, skewDeg, grade, terrainZ, profileZ), terrainZ, grade)
             is Tubes -> {
                 val heading = Math.toRadians(rotationDeg)
                 val nodes = listOf(
@@ -100,15 +100,22 @@ object DeviceBody {
         return merge(parts, shape.widthM, shape.heightM, shape.innerWidthM)
     }
 
-    private fun seat(mesh: SweepMesh?, ground: Double?): SweepMesh? {
+    private fun seat(mesh: SweepMesh?, ground: Double?, grade: GradeSpec): SweepMesh? {
         if (mesh == null) return null
+        if (grade.mode == GradeMode.HYDRAULIC) {
+            val lift = if (grade.buried) 0.0 else HydraulicGrade.SURFACE_SEAT
+            if (lift == 0.0) return mesh
+            return copyMesh(mesh, Sweep.offsetZ(mesh.triangles, lift))
+        }
         val lifted = Sweep.liftTriangles(mesh.triangles, ground)
         if (lifted === mesh.triangles) return mesh
-        return SweepMesh(
-            mesh.frames, lifted, mesh.volume, mesh.length, mesh.footprint, mesh.invert, mesh.simplified,
-            mesh.channel, mesh.channels, mesh.widthM, mesh.heightM, mesh.innerWidthM,
-        )
+        return copyMesh(mesh, lifted)
     }
+
+    private fun copyMesh(mesh: SweepMesh, triangles: DoubleArray): SweepMesh = SweepMesh(
+        mesh.frames, triangles, mesh.volume, mesh.length, mesh.footprint, mesh.invert, mesh.simplified,
+        mesh.channel, mesh.channels, mesh.widthM, mesh.heightM, mesh.innerWidthM,
+    ).also { it.hydraulic = mesh.hydraulic }
 
     private sealed interface Shape {
         val preview: List<List<SectionPoint>>
@@ -463,7 +470,7 @@ private fun merge(parts: List<SweepMesh>, widthM: Double, heightM: Double, inner
     return SweepMesh(
         middle.frames, joinArrays(parts.map { it.triangles }), 0.0, middle.length, ribbon(first, last), middle.invert, false,
         channels.firstOrNull().orEmpty(), channels, widthM, heightM, innerWidthM,
-    )
+    ).also { it.hydraulic = parts.firstNotNullOfOrNull { part -> part.hydraulic } }
 }
 
 private fun ribbon(first: SweepMesh, last: SweepMesh): List<Point2> {
@@ -493,6 +500,7 @@ private fun sole(grade: GradeSpec, height: Double, terrainZ: Double?, profileZ: 
     val reference = Sweep.gradeElevation(grade, 0.0, 1.0, 0.0, terrainZ, profileZ)
     return when (grade.mode) {
         GradeMode.SURFACE_TOP, GradeMode.PROFILE -> reference - height
+        GradeMode.HYDRAULIC -> reference - height - if (grade.buried) grade.minCover else 0.0
         else -> reference
     }
 }

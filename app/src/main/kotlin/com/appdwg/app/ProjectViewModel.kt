@@ -1148,6 +1148,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var drainagePhases by mutableStateOf<List<com.appdwg.core.drainage.DevicePhase>>(emptyList())
         private set
+    /** User names of drainage alignments. Geometry is derived from the devices. */
+    var drainageNames by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
     private val drainageUndo = ArrayDeque<DrainageHistory>()
     var canUndoDrainage by mutableStateOf(false)
         private set
@@ -1245,7 +1248,28 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drainage = prev.devices
         drainageBasins = prev.basins
         drainagePhases = prev.phases
+        drainageNames = prev.names
         canUndoDrainage = drainageUndo.isNotEmpty()
+    }
+
+    /** Renames a drainage alignment. An empty name returns to the automatic one. */
+    fun renameDrainageAlignment(id: String, name: String) {
+        val next = drainageNames.toMutableMap()
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) next.remove(id) else next[id] = trimmed
+        pushDrainage(drainage, drainageBasins, drainagePhases, next)
+    }
+
+    /**
+     * Reverses flow on the linear devices of one alignment.
+     * [currentlyDownstreamAtStart] is the direction the profile is using now.
+     */
+    fun reverseDrainageFlow(ids: Set<String>, currentlyDownstreamAtStart: Boolean) {
+        val next = drainage.map { device ->
+            if (device !is com.appdwg.core.drainage.PlacedDevice.Linear || device.id !in ids) device
+            else device.copy(grade = device.grade.copy(flowAuto = false, flowToStart = !currentlyDownstreamAtStart))
+        }
+        pushDrainage(next)
     }
 
     private fun bstcCode(rise: Double): String {
@@ -1259,12 +1283,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         next: List<com.appdwg.core.drainage.PlacedDevice>,
         basins: List<com.appdwg.core.drainage.DeviceBasin> = drainageBasins,
         phases: List<com.appdwg.core.drainage.DevicePhase> = drainagePhases,
+        names: Map<String, String> = drainageNames,
     ) {
-        drainageUndo.addLast(DrainageHistory(drainage, drainageBasins, drainagePhases))
+        drainageUndo.addLast(DrainageHistory(drainage, drainageBasins, drainagePhases, drainageNames))
         if (drainageUndo.size > 50) drainageUndo.removeFirst()
         drainage = next
         drainageBasins = basins
         drainagePhases = phases
+        drainageNames = names
         canUndoDrainage = true
     }
 
@@ -1272,6 +1298,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         val devices: List<com.appdwg.core.drainage.PlacedDevice>,
         val basins: List<com.appdwg.core.drainage.DeviceBasin>,
         val phases: List<com.appdwg.core.drainage.DevicePhase>,
+        val names: Map<String, String>,
     )
 
     /** Shown line at [index] (as [LineRef.Drawing] numbers them). */
@@ -3062,6 +3089,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     fun exportPipeNetwork(target: Uri) {
         val devices = drainage
         val catalog = drainageCatalog
+        val names = drainageNames
         val project = exportProject() ?: return
         writeTo(target, tr("rede de drenagem")) { out ->
             val hidden = hiddenLayers()
@@ -3080,10 +3108,170 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                 val type = catalog.device(placed.code)?.section?.type.orEmpty()
                 placed.id to ("circular" in type || "barrel" in type)
             }
+            val scene = buildDrainScene(devices, catalog, names, project)
             out.writer(Charsets.UTF_8).use { writer ->
-                com.appdwg.core.drainage.PipeNetworkWriter.write("Drenagem", graph, { circular[it] == true }, writer)
+                com.appdwg.core.drainage.PipeNetworkWriter.write(
+                    "Drenagem", graph, { circular[it] == true }, writer, scene.runs, scene.runProfiles,
+                )
             }
         }
+    }
+
+    /** Quantity table of the placed drainage, semicolon separated, with a BOM for Excel. */
+    fun exportDrainCsv(target: Uri) = exportDrainReport(target, pdf = false)
+
+    /** Same quantities as [exportDrainCsv], laid out as an A4 table. */
+    fun exportDrainPdf(target: Uri) = exportDrainReport(target, pdf = true)
+
+    /** IFC4 property exchange: each device is a pipe segment with a drainage property set. */
+    fun exportDrainIfc(target: Uri) {
+        val devices = drainage
+        val catalog = drainageCatalog
+        val names = drainageNames
+        val phases = drainagePhases
+        val project = exportProject() ?: return
+        writeTo(target, tr("IFC de drenagem")) { out ->
+            val scene = buildDrainScene(devices, catalog, names, project)
+            val graph = analyzeDrainage(devices, catalog, project)
+            val codeOf = devices.associate { it.id to it.code }
+            val phaseOf = phases.associate { it.deviceId to it.phase }
+            val ifc = scene.takeoff.map { row ->
+                val placed = devices.find { it.id == row.id }
+                val def = catalog.device(row.code)
+                val links = graph.links.filter { it.upstreamId == row.id || it.downstreamId == row.id }
+                val connected = links.joinToString(",") { link ->
+                    val other = if (link.upstreamId == row.id) link.downstreamId else link.upstreamId
+                    codeOf[other] ?: other
+                }
+                val (x, y) = when (placed) {
+                    is com.appdwg.core.drainage.PlacedDevice.Linear ->
+                        (placed.xs.firstOrNull() ?: 0.0) to (placed.ys.firstOrNull() ?: 0.0)
+                    is com.appdwg.core.drainage.PlacedDevice.Point -> placed.x to placed.y
+                    else -> 0.0 to 0.0
+                }
+                com.appdwg.core.drainage.IfcDevice(
+                    row.id, row.code, def?.name ?: row.code, def?.family ?: "DNIT IPR-736",
+                    row.length, row.invertUp, row.invertDown, row.gradeSlope, phaseOf[row.id] ?: 0,
+                    x, y, if (row.invertUp.isNaN()) 0.0 else row.invertUp, connected,
+                )
+            }
+            out.writer(Charsets.UTF_8).use { com.appdwg.core.drainage.IfcDrainage.write("Drenagem", ifc, it) }
+        }
+    }
+
+    private fun exportDrainReport(target: Uri, pdf: Boolean) {
+        val devices = drainage
+        val catalog = drainageCatalog
+        val names = drainageNames
+        val phases = drainagePhases
+        val project = exportProject() ?: return
+        val what = tr(if (pdf) "PDF de quantidades" else "CSV de quantidades")
+        writeTo(target, what) { out ->
+            val scene = buildDrainScene(devices, catalog, names, project)
+            if (pdf) writeDrainPdf(scene, phases, out)
+            else out.write(("\uFEFF" + drainCsv(scene, phases)).toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    private fun buildDrainScene(
+        devices: List<com.appdwg.core.drainage.PlacedDevice>,
+        catalog: com.appdwg.core.drainage.DeviceCatalog,
+        names: Map<String, String>,
+        project: LandXmlProject,
+    ): com.appdwg.core.drainage.DrainageBuilt {
+        val hidden = hiddenLayers()
+        val surfaces = project.surfaces.filter { it.name !in hidden && it.triangleCount > 0 }
+        val terrain: (Double, Double) -> Double? = { x, y -> surfaces.firstNotNullOfOrNull { it.elevationAt(com.appdwg.core.Point2(x, y)) } }
+        val alignmentOf: (String) -> com.appdwg.core.Alignment? = { name -> project.alignments.firstOrNull { it.name == name } }
+        return com.appdwg.core.drainage.DrainageScene.build(devices, { catalog.device(it) }, terrain, alignmentOf, names)
+    }
+
+    private fun analyzeDrainage(
+        devices: List<com.appdwg.core.drainage.PlacedDevice>,
+        catalog: com.appdwg.core.drainage.DeviceCatalog,
+        project: LandXmlProject,
+    ): com.appdwg.core.drainage.DrainageGraph {
+        val hidden = hiddenLayers()
+        val surfaces = project.surfaces.filter { it.name !in hidden && it.triangleCount > 0 }
+        val terrain: (Double, Double) -> Double? = { x, y -> surfaces.firstNotNullOfOrNull { it.elevationAt(com.appdwg.core.Point2(x, y)) } }
+        val alignmentOf: (String) -> com.appdwg.core.Alignment? = { name -> project.alignments.firstOrNull { it.name == name } }
+        return com.appdwg.core.drainage.DrainageNetwork.analyze(
+            devices,
+            { placed -> catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) } },
+            { false },
+            { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
+            terrain,
+            alignmentOf,
+        )
+    }
+
+    private fun drainCsv(
+        scene: com.appdwg.core.drainage.DrainageBuilt,
+        phases: List<com.appdwg.core.drainage.DevicePhase>,
+    ): String {
+        val phaseOf = phases.associate { it.deviceId to it.phase }
+        fun n(v: Double) = if (v.isNaN()) "" else StationFormat.decimal(v, 3)
+        fun yn(v: Boolean) = if (v) tr("sim") else tr("não")
+        return buildString {
+            append(tr("Código;Eixo;Comprimento (m);Montante (m);Jusante (m);Declividade (%);Escavação (m³);Reaterro (m³);Berço (m³);Bota-fora (m³);Aterro (m³);Concreto (m³);Formas (m²);Escoramento;Profundo;Fase"))
+            append("\r\n")
+            for (row in scene.takeoff) {
+                val run = scene.runs.find { row.id in it.deviceIds }
+                val slope = if (row.gradeSlope.isNaN()) "" else StationFormat.decimal(row.gradeSlope * 100.0, 3)
+                append(listOf(
+                    row.code, run?.name.orEmpty(), n(row.length), n(row.invertUp), n(row.invertDown), slope,
+                    n(if (row.trench > 0.0) row.trench else row.excavation), n(row.backfill), n(row.bedding),
+                    n(row.spoil), n(row.fill), n(row.concrete), if (row.formworkKnown) n(row.formwork) else "",
+                    yn(row.shoring), yn(row.tooDeep), (phaseOf[row.id] ?: 0).toString(),
+                ).joinToString(";"))
+                append("\r\n")
+            }
+        }
+    }
+
+    private fun writeDrainPdf(
+        scene: com.appdwg.core.drainage.DrainageBuilt,
+        phases: List<com.appdwg.core.drainage.DevicePhase>,
+        out: java.io.OutputStream,
+    ) {
+        val phaseOf = phases.associate { it.deviceId to it.phase }
+        fun n(v: Double) = if (v.isNaN()) "—" else StationFormat.decimal(v, 2)
+        val doc = android.graphics.pdf.PdfDocument()
+        val paint = android.graphics.Paint().apply { textSize = 8f; isAntiAlias = true; color = 0xFF1A1A1A.toInt() }
+        val bold = android.graphics.Paint(paint).apply { isFakeBoldText = true; textSize = 9f }
+        val title = android.graphics.Paint(bold).apply { textSize = 14f }
+        val rows = scene.takeoff
+        val pages = rows.chunked(24).ifEmpty { listOf(emptyList()) }
+        pages.forEachIndexed { pageIndex, chunk ->
+            val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(842, 595, pageIndex + 1).create())
+            val canvas = page.canvas
+            canvas.drawColor(0xFFF7F4EE.toInt())
+            canvas.drawText(tr("Quantidades de drenagem"), 28f, 36f, title)
+            canvas.drawText(tr("Página {0} de {1}", pageIndex + 1, pages.size), 680f, 36f, paint)
+            var y = 58f
+            val head = listOf(
+                tr("Código"), tr("Eixo"), tr("L (m)"), tr("Montante"), tr("Jusante"), tr("i %"),
+                tr("Vala m³"), tr("Reaterro"), tr("Berço"), tr("Concreto"), tr("Fase"),
+            )
+            val x = floatArrayOf(28f, 110f, 230f, 280f, 350f, 420f, 470f, 530f, 600f, 660f, 740f)
+            head.forEachIndexed { i, h -> canvas.drawText(h, x[i], y, bold) }
+            canvas.drawLine(28f, y + 4f, 814f, y + 4f, paint)
+            y += 18f
+            for (row in chunk) {
+                val run = scene.runs.find { row.id in it.deviceIds }
+                val cells = listOf(
+                    row.code, run?.name.orEmpty(), n(row.length), n(row.invertUp), n(row.invertDown),
+                    if (row.gradeSlope.isNaN()) "—" else n(row.gradeSlope * 100.0),
+                    n(if (row.trench > 0.0) row.trench else row.excavation), n(row.backfill), n(row.bedding),
+                    n(row.concrete), (phaseOf[row.id] ?: 0).toString(),
+                )
+                cells.forEachIndexed { i, cell -> canvas.drawText(cell.take(18), x[i], y, paint) }
+                y += 16f
+            }
+            doc.finishPage(page)
+        }
+        doc.writeTo(out)
+        doc.close()
     }
 
     /** Points and lines for GIS files: the drawing's, the axes and [extra] (measurement, section…). */
@@ -3232,6 +3420,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             drainage = drainage,
             drainageBasins = drainageBasins,
             drainagePhases = drainagePhases,
+            drainageNames = drainageNames,
             edited = addedFiles.filter { it.uri == null && it.label.endsWith(EDITED_SUFFIX) }
                 .flatMap { f -> f.project.surfaces }.map { s -> synchronized(encodedSurfaces) { encodedSurfaces.getOrPut(s) { SurfaceCodec.encode(s) } } },
         )
@@ -3261,6 +3450,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drainage = emptyList()
         drainageBasins = emptyList()
         drainagePhases = emptyList()
+        drainageNames = emptyMap()
         drainageUndo.clear()
         canUndoDrainage = false
     }
@@ -3599,6 +3789,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drainage = doc.drainage
         drainageBasins = doc.drainageBasins
         drainagePhases = doc.drainagePhases
+        drainageNames = doc.drainageNames
         drainageUndo.clear()
         canUndoDrainage = false
         if (doc.pointsSurface) surfaceFromPointsNow()
@@ -3696,6 +3887,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     drainage = emptyList()
                     drainageBasins = emptyList()
                     drainagePhases = emptyList()
+                    drainageNames = emptyMap()
                     drainageUndo.clear()
                     canUndoDrainage = false
                     keptOriginals = project.polylines.indices.toList()

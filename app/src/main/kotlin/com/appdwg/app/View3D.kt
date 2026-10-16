@@ -80,6 +80,10 @@ fun View3D(
     overlayTris: DoubleArray = DoubleArray(0),
     /** Placed drainage solids, world xyz, nine doubles per triangle. Drawn opaque in the draped view. */
     solidTris: DoubleArray = DoubleArray(0),
+    /** More drainage layers, each with an opaque RGB colour. Drawn with the device. */
+    extraSolids: List<Pair<DoubleArray, Int>> = emptyList(),
+    /** Terrain fill opacity. Below 1 the ground is a cutaway so buried devices stay visible. */
+    terrainAlpha: Float = 1f,
     /** The GPU refused the picture. The caller steps the quality down and tries again. */
     onDrapeFailed: () -> Unit = {},
     /** True while tiles sharper than the overview are still loading. */
@@ -119,9 +123,21 @@ fun View3D(
         renderer.setOverlay(sceneFloats(overlayLines, scene), sceneFloats(overlayTris, scene))
         holder[0]?.requestRender()
     }
-    LaunchedEffect(solidTris) {
-        val lit = withContext(Dispatchers.Default) { litSolid(solidTris, scene) }
+    LaunchedEffect(solidTris, extraSolids) {
+        val lit = withContext(Dispatchers.Default) {
+            val parts = ArrayList<FloatArray>()
+            if (solidTris.size >= 9) parts += litSolid(solidTris, scene, 0.62f, 0.62f, 0.58f)
+            for ((tris, rgb) in extraSolids) {
+                if (tris.size < 9) continue
+                parts += litSolid(tris, scene, ((rgb shr 16) and 0xFF) / 255f, ((rgb shr 8) and 0xFF) / 255f, (rgb and 0xFF) / 255f)
+            }
+            joinFloats(parts)
+        }
         renderer.setSolid(lit)
+        holder[0]?.requestRender()
+    }
+    LaunchedEffect(terrainAlpha) {
+        renderer.terrainAlpha = terrainAlpha
         holder[0]?.requestRender()
     }
     val failState = rememberUpdatedState(onDrapeFailed)
@@ -441,6 +457,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var pendingLines = FloatArray(0)
     @Volatile private var pendingTris = FloatArray(0)
     @Volatile private var pendingSolid = FloatArray(0)
+    @Volatile var terrainAlpha = 1f
     @Volatile private var overlayDirty = false
     @Volatile private var solidDirty = false
     private var overlayLineBuf = 0
@@ -1168,7 +1185,13 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uZScale"), zScale)
         val uAlpha = GLES30.glGetUniformLocation(program, "uAlpha")
-        GLES30.glUniform1f(uAlpha, 1f)
+        val clearGround = terrainAlpha < 0.99f
+        if (clearGround) {
+            GLES30.glEnable(GLES30.GL_BLEND)
+            GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+            GLES30.glDepthMask(false)
+        }
+        GLES30.glUniform1f(uAlpha, terrainAlpha)
         val uBias = GLES30.glGetUniformLocation(program, "uDepthBias")
         GLES30.glUniform1f(uBias, 0f)
         val uLit = GLES30.glGetUniformLocation(program, "uLit")
@@ -1237,6 +1260,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         }
         GLES30.glUniform1i(uGray, 0)
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+        if (clearGround) {
+            GLES30.glDepthMask(true)
+            GLES30.glDisable(GLES30.GL_BLEND)
+        }
+        GLES30.glUniform1f(uAlpha, 1f)
         // Mesh and border lines over the surfaces, unlit.
         GLES30.glUniform1i(uLit, 0)
         GLES30.glDisableVertexAttribArray(1)
@@ -1408,9 +1436,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             out vec3 vColor;
             out float vShade;
             out vec2 vUv;
+            out vec3 vPos;
             void main() {
                 gl_Position = uMvp * vec4(aPos.xy, aPos.z * uZScale, 1.0);
                 gl_Position.z -= uDepthBias * gl_Position.w;
+                vPos = aPos;
                 vUv = vec2((aPos.x - uDrapeRect.x) / uDrapeRect.z, (uDrapeRect.y - aPos.y) / uDrapeRect.w);
                 if (uLit == 1) {
                     // Normal under a vertical stretch: (nx, ny, nz / s), normalised.
@@ -1434,10 +1464,14 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             // highp: at mediump (16 bits on Mali) a 2048 texture is read in steps of a whole texel,
             // so every quality looked blocky in 3D.
             in highp vec2 vUv;
+            in vec3 vPos;
             uniform int uDrape;
             uniform sampler2D uTex;
             uniform float uAlpha;
             out vec4 fragColor;
+            float grit(vec3 p) {
+                return fract(sin(dot(floor(p * 37.0), vec3(127.1, 311.7, 74.7))) * 43758.5453);
+            }
             void main() {
                 vec3 c = vColor;
                 if (uDrape == 1) {
@@ -1447,7 +1481,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     fragColor = vec4(mix(c * vShade, t.rgb * (0.7 + 0.3 * vShade), t.a), uAlpha);
                     return;
                 }
-                fragColor = vec4(c * vShade, uAlpha);
+                float n = grit(vPos);
+                bool water = vColor.b > vColor.r + 0.12;
+                float grain = water ? 0.0 : (n - 0.5) * 0.14;
+                float shade = vShade * (water ? 1.0 : (0.92 + 0.16 * n));
+                fragColor = vec4((c + vec3(grain)) * shade, uAlpha);
             }
         """.trimIndent()
 
@@ -1470,13 +1508,22 @@ private fun visibleSurfaces(project: LandXmlProject, hidden: Set<String>): List<
  * Nine floats per vertex. Built off the UI thread. Faces stay two-sided in the shader,
  * so the inside of a channel is shaded as well.
  */
-private fun litSolid(world: DoubleArray, scene: Scene3D): FloatArray {
+private fun joinFloats(parts: List<FloatArray>): FloatArray {
+    var count = 0
+    for (part in parts) count += part.size
+    val out = FloatArray(count)
+    var at = 0
+    for (part in parts) {
+        part.copyInto(out, at)
+        at += part.size
+    }
+    return out
+}
+
+private fun litSolid(world: DoubleArray, scene: Scene3D, red: Float, green: Float, blue: Float): FloatArray {
     if (world.size < 9) return FloatArray(0)
     val triangles = world.size / 9
     val out = FloatArray(triangles * 27)
-    val red = 0.62f
-    val green = 0.62f
-    val blue = 0.58f
     var t = 0
     var o = 0
     while (t + 8 < world.size) {

@@ -1490,3 +1490,62 @@ rede de drenagem	drainage network
 Catálogo offline: {0} dispositivos, cálculos no aparelho.	Offline catalog: {0} devices, calculations on the device.
 Catálogo conferido: {0} dispositivos com seção, sem pendência.	Catalog checked: {0} devices with a section, nothing pending.
 Catálogo: {0} dispositivos com pendência de cálculo.	Catalog: {0} devices with a calculation problem.
+Greide hidráulico	Hydraulic grade
+Declividade mínima (%)	Minimum slope (%)
+Cobertura mínima (m)	Minimum cover (m)
+Profundidade máxima (m)	Maximum depth (m)
+Enterrado	Buried
+Fluxo automático	Automatic flow
+Fluxo para o início	Flow toward the start
+Mais	More
+Este lançamento acompanha o terreno. O greide hidráulico faz a água descer.	This placement follows the ground. The hydraulic grade makes the water run downhill.
+Escavação	Excavation
+Reaterro	Backfill
+Berço	Bedding
+Bota-fora	Spoil
+Concreto	Concrete
+Formas	Formwork
+Escoramento acima de 1,25 m	Shoring required above 1.25 m
+A vala passa de {0} m: prever bombeamento ou queda.	The trench exceeds {0} m: plan pumping or a drop structure.
+Perfil hidráulico	Hydraulic profile
+Montante {0} m · jusante {1} m	Upstream {0} m · downstream {1} m
+Declividade mínima do trecho {0} %	Minimum grade of the reach {0} %
+Nome do eixo	Alignment name
+Seção na estaca {0}	Section at station {0}
+CSV	CSV
+PDF	PDF
+IFC	IFC
+Quantidades por metro	Quantities per metre
+Apiloamento	Tamping
+Guia de madeira	Timber guide
+Argamassa	Mortar
+Largura {0} m · altura {1} m	Width {0} m · height {1} m
+Dispositivo	Device
+Terreno transparente	Transparent ground
+Precisão	Precision
+Antena	Antenna
+Saldo	Balance
+Escavação, reaterro, berço e concreto de cada dispositivo	Trench, backfill, bedding and concrete of each device
+Tabela de quantidades da rede, em A4	Network quantity table, on A4
+Propriedades IFC4 da rede, para coordenação	IFC4 properties of the network, for coordination
+IFC de drenagem	drainage IFC
+sim	yes
+não	no
+Código;Eixo;Comprimento (m);Montante (m);Jusante (m);Declividade (%);Escavação (m³);Reaterro (m³);Berço (m³);Bota-fora (m³);Aterro (m³);Concreto (m³);Formas (m²);Escoramento;Profundo;Fase	Code;Alignment;Length (m);Upstream (m);Downstream (m);Slope (%);Excavation (m³);Backfill (m³);Bedding (m³);Spoil (m³);Embankment (m³);Concrete (m³);Formwork (m²);Shoring;Too deep;Phase
+Quantidades de drenagem	Drainage quantities
+Página {0} de {1}	Page {0} of {1}
+L (m)	L (m)
+i %	i %
+Vala m³	Trench m³
+Movimentado	Moved
+Executado até {0}	Done through {0}
+Concluído	Complete
+Intensidade	Intensity
+Vazão	Flow
+Talvegue	Thalweg
+Declividade	Slope
+PDF de quantidades	quantity PDF
+CSV de quantidades	quantity CSV
+Quantidades de drenagem (CSV)	Drainage quantities (CSV)
+Quantidades de drenagem (PDF)	Drainage quantities (PDF)
+Drenagem (IFC)	Drainage (IFC)

@@ -212,10 +212,10 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
                     if (idf == null) Text(tr("Escolha a cidade ou informe a equação de chuvas da região (K, a, b, c) para calcular a vazão."), style = MaterialTheme.typography.bodySmall)
                     else {
                         val q = Hydrology.rational(b, p.runoff, idf, p.years)
-                        Text(tr("t = {0} min · i = {1} mm/h · Q = {2} m³/s",
-                            StationFormat.decimal(q.minutes, 1), StationFormat.decimal(q.intensity, 1), StationFormat.decimal(q.peak, 3)))
-                        if (q.tooLarge) Text(tr("Bacia maior que 2 km²: o método racional tende a superestimar; prefira o hidrograma unitário (SCS)."),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        SpecRow(tr("Tempo de concentração (min)"), StationFormat.decimal(q.minutes, 1))
+                        SpecRow(tr("Intensidade"), StationFormat.decimal(q.intensity, 1) + " mm/h")
+                        SpecRow(tr("Vazão"), StationFormat.decimal(q.peak, 3) + " m³/s")
+                        if (q.tooLarge) FactLine(tr("Bacia maior que 2 km²: o método racional tende a superestimar; prefira o hidrograma unitário (SCS)."))
                     }
                     Text(tr("Contorno e talvegue vão no DXF exportado (camadas _BACIA e _BACIA_TALVEGUE)."), style = MaterialTheme.typography.bodySmall)
                 }
@@ -226,14 +226,18 @@ fun BasinDialog(vm: ProjectViewModel, project: LandXmlProject, onPick: () -> Uni
 
 @Composable
 private fun BasinFigures(b: Basin) {
-    Text(tr("Bacia"), style = MaterialTheme.typography.labelLarge)
-    Text(tr("Área {0} · Perímetro {1}", StationFormat.landArea(b.area, 3), StationFormat.length(b.perimeter, 0)))
-    Text(tr("Talvegue principal {0} · desnível {1} · declividade {2} %", StationFormat.length(b.streamLength, 0),
-        StationFormat.length(b.streamDrop, 2), StationFormat.decimal(b.streamSlope * 100, 2)))
-    Text(tr("Cotas {0} a {1} · declividade média {2} %", StationFormat.lengthValue(b.minElevation, 2),
-        StationFormat.lengthValue(b.maxElevation, 2), StationFormat.decimal(b.meanSlope, 1)))
-    Text(tr("Kc {0} · Kf {1} · tempo de concentração (Kirpich) {2} min", StationFormat.decimal(b.compactness, 2),
-        StationFormat.decimal(b.formFactor, 2), StationFormat.decimal(b.kirpichMinutes, 1)))
+    SpecHeader(tr("Bacia"))
+    SpecRow(tr("Área"), StationFormat.landArea(b.area, 3))
+    SpecRow(tr("Perímetro"), StationFormat.length(b.perimeter, 0))
+    SpecRow(tr("Talvegue"), StationFormat.length(b.streamLength, 0))
+    SpecRow(tr("Desnível"), StationFormat.length(b.streamDrop, 2))
+    SpecRow(tr("Declividade"), StationFormat.decimal(b.streamSlope * 100, 2) + " %")
+    SpecRow(tr("Cota mínima"), StationFormat.lengthValue(b.minElevation, 2))
+    SpecRow(tr("Cota máxima"), StationFormat.lengthValue(b.maxElevation, 2))
+    SpecRow(tr("Declividade média"), StationFormat.decimal(b.meanSlope, 1) + " %")
+    SpecRow("Kc", StationFormat.decimal(b.compactness, 2))
+    SpecRow("Kf", StationFormat.decimal(b.formFactor, 2))
+    SpecRow(tr("Tempo de concentração (min)"), StationFormat.decimal(b.kirpichMinutes, 1))
 }
 
 private fun kindText(k: OutletSuggestion.Kind) = when (k) {

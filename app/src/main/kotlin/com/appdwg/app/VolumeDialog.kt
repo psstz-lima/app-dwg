@@ -27,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.LandXmlProject
@@ -110,19 +109,18 @@ fun VolumeDialog(vm: ProjectViewModel, project: LandXmlProject, st: VolumeState,
                 vm.volumeMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 if (r != null) {
                     HorizontalDivider()
-                    Text(stringResource(R.string.vol_above, StationFormat.volume(r.above), StationFormat.area(r.aboveArea)), fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.vol_below, StationFormat.volume(r.below), StationFormat.area(r.belowArea)), fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.vol_net, StationFormat.volume(r.net), StationFormat.area(r.area), StationFormat.lengthValue(r.minSurface), StationFormat.length(r.maxSurface, 3), StationFormat.length(r.cellSize, 2)),
-                        style = MaterialTheme.typography.bodySmall)
+                    SpecHeader(stringResource(R.string.vol_compute))
+                    FactLine(stringResource(R.string.vol_above, StationFormat.volume(r.above), StationFormat.area(r.aboveArea)))
+                    FactLine(stringResource(R.string.vol_below, StationFormat.volume(r.below), StationFormat.area(r.belowArea)))
+                    FactLine(stringResource(R.string.vol_net, StationFormat.volume(r.net), StationFormat.area(r.area), StationFormat.lengthValue(r.minSurface), StationFormat.length(r.maxSurface, 3), StationFormat.length(r.cellSize, 2)))
                     val flat = r.baseZ
                     val plane = r.plane
-                    Text(
+                    FactLine(
                         when {
                             flat != null -> stringResource(R.string.vol_base_flat, StationFormat.length(flat, 3))
                             plane != null -> stringResource(R.string.vol_base_inclined, n(plane[1] * 100, 2), n(plane[2] * 100, 2))
                             else -> stringResource(R.string.vol_base_surface, otherName ?: "")
                         },
-                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }

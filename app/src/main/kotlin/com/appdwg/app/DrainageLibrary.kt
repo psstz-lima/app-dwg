@@ -17,6 +17,7 @@ import com.appdwg.core.drainage.Quantities
 import com.appdwg.core.drainage.SectionPoint
 import com.appdwg.core.tr
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,6 +36,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -243,24 +246,40 @@ private fun CatalogAuditLine(catalog: DeviceCatalog) {
 
 @Composable
 private fun DeviceRow(device: DeviceDef, onOpen: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp)
-            .testTag("device-${device.code}")
-            .clickable(role = Role.Button, onClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("device-${device.code}").clickable(role = Role.Button, onClick = onOpen),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        val rings = DeviceBody.previewRings(device)
-        if (rings.any { it.size >= 2 }) SectionSketch(rings, Modifier.size(40.dp))
-        Column(Modifier.weight(1f)) {
-            Text(device.code, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(device.name, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (device.needsReview) {
-                Text(tr("Em revisão"), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val rings = DeviceBody.previewRings(device)
+            if (rings.any { it.size >= 2 }) SectionSketch(rings, Modifier.size(48.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(device.code, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(device.name, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Chip(categoryLabel(device.category))
+                    if (device.family.isNotBlank()) Chip(device.family)
+                    if (device.needsReview) Chip(tr("Em revisão"))
+                }
             }
         }
     }
+}
+
+@Composable
+private fun Chip(label: String) {
+    Text(
+        label,
+        modifier = Modifier.background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -312,6 +331,7 @@ private fun DeviceDetail(
     GButton(tr("Voltar"), onBack, outlined = true)
     Text(device.code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
     Text(device.name, maxLines = 6, overflow = TextOverflow.Ellipsis)
+    PlaceRow(catalog, device, isPro, onPro, onPlace)
     Text(
         "${chapterTitle(catalog, device.chapter)} · ${categoryLabel(device.category)} · ${device.family}",
         style = MaterialTheme.typography.bodySmall,
@@ -336,6 +356,12 @@ private fun DeviceDetail(
     if (drawn.none { it.size >= 2 }) Text(tr("Sem seção paramétrica"))
     else {
         SectionSketch(drawn, Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = tr("Seção do dispositivo") })
+        val span = drawn.flatten()
+        if (span.isNotEmpty()) {
+            val width = span.maxOf { it.x } - span.minOf { it.x }
+            val heightM = span.maxOf { it.y } - span.minOf { it.y }
+            Text(tr("Largura {0} m · altura {1} m", formatNumber(width), formatNumber(heightM)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
         section?.areaM2?.let { area ->
             val caption = section.excavationM3PerM?.let { cut ->
                 tr("Área da seção: {0} m² ({1} m³/m)", formatNumber(area), formatNumber(cut))
@@ -347,9 +373,7 @@ private fun DeviceDetail(
     device.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis) }
     if (device.parameters.isNotEmpty()) {
         Text(tr("Parâmetros"), style = MaterialTheme.typography.titleSmall)
-        for (parameter in device.parameters) {
-            Text("${parameter.key}: ${parameterText(parameter)}", maxLines = 3, overflow = TextOverflow.Ellipsis)
-        }
+        SpecTable(device.parameters.map { parameter -> parameter.key to parameterText(parameter) })
     }
     if (device.materials.isNotEmpty()) {
         Text(tr("Materiais"), style = MaterialTheme.typography.titleSmall)
@@ -375,7 +399,6 @@ private fun DeviceDetail(
     catalog.sources[device.page.source]?.title?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
     }
-    PlaceRow(catalog, device, isPro, onPro, onPlace)
 }
 
 @Composable
@@ -453,12 +476,46 @@ private fun PlaceRow(
 @Composable
 private fun QuantityList(quantities: Quantities) {
     val groups = quantities.items.groupBy { it.method }
+    Text(tr("Quantidades por metro"), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     for ((method, items) in groups) {
         if (method != null) Text(methodLabel(method), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        for (item in items) {
-            Text("${item.name.replace('_', ' ')}: ${formatNumber(item.value)} ${item.unit}", maxLines = 2, overflow = TextOverflow.Ellipsis)
+        SpecTable(items.map { item -> quantityTitle(item.name) to "${formatNumber(item.value)} ${unitLabel(item.unit)}" })
+    }
+}
+
+@Composable
+private fun SpecTable(rows: List<Pair<String, String>>) {
+    if (rows.isEmpty()) return
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for ((label, value) in rows) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
         }
     }
+}
+
+private fun quantityTitle(name: String): String = when (name.lowercase()) {
+    "escavacao" -> tr("Escavação")
+    "apiloamento" -> tr("Apiloamento")
+    "concreto", "concreto_fck20", "concreto fck20" -> tr("Concreto")
+    "guia_madeira", "guia madeira" -> tr("Guia de madeira")
+    "argamassa" -> tr("Argamassa")
+    "forma", "formas" -> tr("Formas")
+    else -> name.replace('_', ' ').replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun unitLabel(unit: String): String = when (unit.lowercase()) {
+    "m3/m" -> "m³/m"
+    "m2/m" -> "m²/m"
+    "m3" -> "m³"
+    "m2" -> "m²"
+    "m" -> "m"
+    "un" -> "un"
+    else -> unit.replace("m3", "m³").replace("m2", "m²")
 }
 
 @Composable
