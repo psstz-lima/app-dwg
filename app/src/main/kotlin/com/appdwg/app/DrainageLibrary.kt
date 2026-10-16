@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -97,24 +99,26 @@ fun DrainageLibraryBody(
     var selected by remember { mutableStateOf<String?>(null) }
     val scroll = rememberScrollState()
     LaunchedEffect(selected) { scroll.scrollTo(0) }
-    Column(
-        modifier.verticalScroll(scroll).padding(horizontal = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        val picked = selected?.let { catalog.device(it) }
-        if (picked != null) {
+    val picked = selected?.let { catalog.device(it) }
+    if (picked != null) {
+        Column(
+            modifier.verticalScroll(scroll).padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             DeviceDetail(catalog, picked, isPro, onPro, onBack = { selected = null }, onCatalog = { catalog = it }, onPlace = onPlace)
-        } else {
-            DeviceBrowser(
-                catalog, query, chapter, category, family, isPro,
-                onQuery = { query = it },
-                onChapter = { chapter = it },
-                onCategory = { category = it },
-                onFamily = { family = it },
-                onOpen = { selected = it },
-                onCatalog = { catalog = it },
-            )
         }
+    } else {
+        // The album has hundreds of rows. A plain column composes every one and the
+        // first open stops answering taps on a slow device.
+        DeviceBrowser(
+            catalog, query, chapter, category, family, isPro, modifier,
+            onQuery = { query = it },
+            onChapter = { chapter = it },
+            onCategory = { category = it },
+            onFamily = { family = it },
+            onOpen = { selected = it },
+            onCatalog = { catalog = it },
+        )
     }
 }
 
@@ -126,6 +130,7 @@ private fun DeviceBrowser(
     category: DeviceCategory?,
     family: String?,
     isPro: Boolean,
+    modifier: Modifier = Modifier,
     onQuery: (String) -> Unit,
     onChapter: (Int?) -> Unit,
     onCategory: (DeviceCategory?) -> Unit,
@@ -141,45 +146,64 @@ private fun DeviceBrowser(
     val shown = remember(catalog, query, chapter, category, familyOn) {
         catalog.query(query, chapter, category, familyOn)
     }
-    Text(tr("Catálogo {0} · {1}", catalog.origin, catalog.generated), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    Text(tr("{0} dispositivos", shown.size), style = MaterialTheme.typography.bodySmall)
-    Text(tr("Catálogo offline: {0} dispositivos, cálculos no aparelho.", catalog.devices.size), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    if (isPro) CatalogAuditLine(catalog)
     val userCount = catalog.devices.count { it.origin != catalog.origin }
-    if (userCount > 0) {
-        Text(tr("{0} dispositivos da biblioteca do usuário", userCount), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    }
-    OutlinedTextField(
-        query,
-        onQuery,
-        modifier = Modifier.fillMaxWidth().testTag("drainage-search"),
-        label = { Text(tr("Buscar por código ou nome"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        singleLine = true,
-    )
-    Text(tr("Capítulo"), style = MaterialTheme.typography.titleSmall)
-    ChoiceRow {
-        Choice(chapter == null, tr("Todos")) { onChapter(null) }
-        for (n in chapters) Choice(chapter == n, chapterTitle(catalog, n)) { onChapter(if (chapter == n) null else n) }
-    }
-    Text(tr("Categoria"), style = MaterialTheme.typography.titleSmall)
-    ChoiceRow {
-        Choice(category == null, tr("Todos")) { onCategory(null) }
-        Choice(category == DeviceCategory.LINEAR, tr("Lineares")) { onCategory(if (category == DeviceCategory.LINEAR) null else DeviceCategory.LINEAR) }
-        Choice(category == DeviceCategory.POINT, tr("Pontuais")) { onCategory(if (category == DeviceCategory.POINT) null else DeviceCategory.POINT) }
-    }
-    Text(tr("Família"), style = MaterialTheme.typography.titleSmall)
-    ChoiceRow {
-        Choice(familyOn == null, tr("Todos")) { onFamily(null) }
-        for (name in families) Choice(familyOn == name, name) { onFamily(if (familyOn == name) null else name) }
-    }
-    if (shown.isEmpty()) Text(tr("Nenhum dispositivo encontrado."))
-    for (device in shown) DeviceRow(device) { onOpen(device.code) }
-    if (catalog.unitsNote.isNotBlank()) {
-        Text(catalog.unitsNote, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
-    }
-    ImportBlock(catalog, onCatalog)
-    if (!isPro) {
-        Text(tr("O Pro libera o lançamento e os cálculos."), style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+    LazyColumn(
+        modifier.padding(horizontal = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr("Catálogo {0} · {1}", catalog.origin, catalog.generated), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(tr("{0} dispositivos", shown.size), style = MaterialTheme.typography.bodySmall)
+                Text(tr("Catálogo offline: {0} dispositivos, cálculos no aparelho.", catalog.devices.size), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (isPro) CatalogAuditLine(catalog)
+                if (userCount > 0) {
+                    Text(tr("{0} dispositivos da biblioteca do usuário", userCount), style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        item {
+            OutlinedTextField(
+                query,
+                onQuery,
+                modifier = Modifier.fillMaxWidth().testTag("drainage-search"),
+                label = { Text(tr("Buscar por código ou nome"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                singleLine = true,
+            )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr("Capítulo"), style = MaterialTheme.typography.titleSmall)
+                ChoiceRow {
+                    Choice(chapter == null, tr("Todos")) { onChapter(null) }
+                    for (n in chapters) Choice(chapter == n, chapterTitle(catalog, n)) { onChapter(if (chapter == n) null else n) }
+                }
+                Text(tr("Categoria"), style = MaterialTheme.typography.titleSmall)
+                ChoiceRow {
+                    Choice(category == null, tr("Todos")) { onCategory(null) }
+                    Choice(category == DeviceCategory.LINEAR, tr("Lineares")) { onCategory(if (category == DeviceCategory.LINEAR) null else DeviceCategory.LINEAR) }
+                    Choice(category == DeviceCategory.POINT, tr("Pontuais")) { onCategory(if (category == DeviceCategory.POINT) null else DeviceCategory.POINT) }
+                }
+                Text(tr("Família"), style = MaterialTheme.typography.titleSmall)
+                ChoiceRow {
+                    Choice(familyOn == null, tr("Todos")) { onFamily(null) }
+                    for (name in families) Choice(familyOn == name, name) { onFamily(if (familyOn == name) null else name) }
+                }
+            }
+        }
+        if (shown.isEmpty()) item { Text(tr("Nenhum dispositivo encontrado.")) }
+        items(shown, key = { it.code }) { device -> DeviceRow(device) { onOpen(device.code) } }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (catalog.unitsNote.isNotBlank()) {
+                    Text(catalog.unitsNote, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                }
+                ImportBlock(catalog, onCatalog)
+                if (!isPro) {
+                    Text(tr("O Pro libera o lançamento e os cálculos."), style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
     }
 }
 
