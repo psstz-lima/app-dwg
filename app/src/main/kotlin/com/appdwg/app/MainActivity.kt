@@ -1175,7 +1175,7 @@ private fun ProjectScreen(
                         }
                     })
                     // Vertical exaggeration helps read gentle terrain.
-                    if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 })
+                    if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 }, solid = true)
                     if (drape != null || vm.tiledRasters.isNotEmpty()) Box {
                         // Same three steps in plan and in 3D. Máxima is the file's own pixels.
                         var open by remember { mutableStateOf(false) }
@@ -1186,7 +1186,7 @@ private fun ProjectScreen(
                             tr("Máxima — cada pixel do arquivo"),
                         )
                         val imageLabel = if (show3d && drapeLoading) tr("Imagem: carregando {0}…", names[v.drapeQuality]) else tr("Imagem: {0}", names[v.drapeQuality])
-                        GButton(if (compact) names[v.drapeQuality] else imageLabel, { open = true }, icon = GIcon.IMAGE, description = imageLabel)
+                        GButton(if (compact) names[v.drapeQuality] else imageLabel, { open = true }, icon = GIcon.IMAGE, description = imageLabel, solid = true)
                         androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
                             MenuTitle(tr("Detalhe da imagem"))
                             details.forEachIndexed { i, n -> MenuLine(n, checked = v.drapeQuality == i) { open = false; v.drapeQuality = i } }
