@@ -26,6 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -261,6 +265,8 @@ fun DrainageSelectionCard(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     notes: List<String> = emptyList(),
+    basinSummary: String? = null,
+    onLinkBasin: ((String, String) -> Unit)? = null,
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -278,6 +284,8 @@ fun DrainageSelectionCard(
         row?.let { TakeoffLines(tr("Este dispositivo"), it) }
         total?.let { TakeoffLines(tr("Total do projeto"), it) }
         for (note in notes) Text(note, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        basinSummary?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
+        if (onLinkBasin != null) BasinLink(onLinkBasin)
         ChoiceRow {
             Choice(false, tr("Editar")) { onEdit() }
             Choice(moving, tr("Mover")) { onMove() }
@@ -285,6 +293,17 @@ fun DrainageSelectionCard(
             if (canUndo) Choice(false, tr("Desfazer")) { onUndo() }
             Choice(false, tr("Fechar")) { onClose() }
         }
+    }
+}
+
+@Composable
+private fun BasinLink(onLink: (String, String) -> Unit) {
+    var area by remember { mutableStateOf("") }
+    var minutes by remember { mutableStateOf("10") }
+    NumberField(tr("Área da bacia (m²)"), area) { area = it }
+    NumberField(tr("Tempo de concentração (min)"), minutes) { minutes = it }
+    ChoiceRow {
+        Choice(true, tr("Ligar bacia")) { onLink(area, minutes) }
     }
 }
 

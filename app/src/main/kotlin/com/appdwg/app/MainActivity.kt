@@ -582,6 +582,7 @@ private fun ProjectScreen(
     var drainageMoving by remember(fileName) { mutableStateOf(false) }
     var drainageBuilt by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageBuilt?>(null) }
     var drainageNetwork by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageGraph?>(null) }
+    var drainageFlows by remember(fileName) { mutableStateOf<Map<String, com.appdwg.core.drainage.ReachFlow>>(emptyMap()) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
@@ -802,7 +803,7 @@ private fun ProjectScreen(
         drapeTris = built.tris
         surfacePending = false
     }
-    LaunchedEffect(vm.drainage, drainageDraft, project, frozenLayers, vm.drainageCatalog) {
+    LaunchedEffect(vm.drainage, vm.drainageBasins, v.basinParams, drainageDraft, project, frozenLayers, vm.drainageCatalog) {
         val draft = drainageDraft
         val preview = draft?.placed()
         val committed = vm.drainage
@@ -817,19 +818,24 @@ private fun ProjectScreen(
             surfaces.firstNotNullOfOrNull { it.elevationAt(p) }
         }
         val alignmentOf: (String) -> com.appdwg.core.Alignment? = { name -> alignments.firstOrNull { it.name == name } }
+        val basins = vm.drainageBasins
+        val rain = v.basinParams
         val built = withContext(Dispatchers.Default) {
-            com.appdwg.core.drainage.DrainageScene.build(shown, { catalog.device(it) }, terrain, alignmentOf) to
-                com.appdwg.core.drainage.DrainageNetwork.analyze(
-                    shown,
-                    { placed -> catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) } },
-                    { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::isOutlet) == true },
-                    { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
-                    terrain,
-                    alignmentOf,
-                )
+            val scene = com.appdwg.core.drainage.DrainageScene.build(shown, { catalog.device(it) }, terrain, alignmentOf)
+            val graph = com.appdwg.core.drainage.DrainageNetwork.analyze(
+                shown,
+                { placed -> catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) } },
+                { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::isOutlet) == true },
+                { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
+                terrain,
+                alignmentOf,
+            )
+            val flows = rain.idf?.let { com.appdwg.core.drainage.DrainageFlow.linked(basins, graph.links, it, rain.years) }.orEmpty()
+            Triple(scene, com.appdwg.core.drainage.DrainageFlow.applyCapacity(graph, flows), flows)
         }
         drainageBuilt = built.first
         drainageNetwork = built.second
+        drainageFlows = built.third
     }
     LaunchedEffect(vm.drainage, drainageSelected) {
         if (drainageSelected != null && vm.drainage.none { it.id == drainageSelected }) drainageSelected = null
@@ -1398,6 +1404,24 @@ private fun ProjectScreen(
                             onClose = { drainageSelected = null; drainageMoving = false },
                             modifier = Modifier.fillMaxWidth(),
                             notes = drainageNotes(drainageNetwork, drainageSelected ?: ""),
+                            basinSummary = drainageFlows[drainageSelected]?.let { flow ->
+                                tr(
+                                    "Vazão da bacia: {0} m³/s. Acumulada: {1} m³/s. Capacidade: {2} m³/s.",
+                                    StationFormat.decimal(flow.local, 3),
+                                    StationFormat.decimal(flow.accumulated, 3),
+                                    StationFormat.decimal(drainageNetwork?.capacity?.get(drainageSelected) ?: 0.0, 3),
+                                ) + if (flow.tooLarge) " " + tr("Bacia grande para o método racional.") else ""
+                            },
+                            onLinkBasin = link@{ area, minutes ->
+                                val id = drainageSelected ?: return@link
+                                val size = StationFormat.number(area)
+                                val tc = StationFormat.number(minutes) ?: com.appdwg.core.Hydrology.MIN_TC_MINUTES
+                                when {
+                                    v.basinParams.idf == null -> vm.report(tr("Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão."))
+                                    size == null || size <= 0.0 -> vm.report(tr("Informe um número."))
+                                    else -> vm.setDrainageBasin(id, size, v.basinParams.runoff, tc)
+                                }
+                            },
                         )
                     }
                 } else if (show3d && !measuring && !drawingPlatform && genPick == null) {

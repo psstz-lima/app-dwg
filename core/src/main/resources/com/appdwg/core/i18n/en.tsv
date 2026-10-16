@@ -1458,3 +1458,9 @@ Queda de {0} m na conexão.	Connection drop of {0} m.
 Sem dispositivo de saída.	No outlet device.
 Vazão {0} m³/s acima da capacidade {1} m³/s.	Flow {0} m³/s above the capacity of {1} m³/s.
 Transição de seção na conexão.	Section transition at the connection.
+Área da bacia (m²)	Basin area (m²)
+Tempo de concentração (min)	Time of concentration (min)
+Ligar bacia	Link basin
+Vazão da bacia: {0} m³/s. Acumulada: {1} m³/s. Capacidade: {2} m³/s.	Basin flow: {0} m³/s. Accumulated: {1} m³/s. Capacity: {2} m³/s.
+Bacia grande para o método racional.	Basin is large for the rational method.
+Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão.	Enter the rainfall equation (K, a, b, c) in Basins before linking the flow.

@@ -1123,7 +1123,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var drainageCatalog by mutableStateOf(com.appdwg.core.drainage.CatalogLoader.bundled())
         private set
-    private val drainageUndo = ArrayDeque<List<com.appdwg.core.drainage.PlacedDevice>>()
+    var drainageBasins by mutableStateOf<List<com.appdwg.core.drainage.DeviceBasin>>(emptyList())
+        private set
+    private val drainageUndo = ArrayDeque<Pair<List<com.appdwg.core.drainage.PlacedDevice>, List<com.appdwg.core.drainage.DeviceBasin>>>()
     var canUndoDrainage by mutableStateOf(false)
         private set
 
@@ -1137,7 +1139,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteDrainage(id: String) {
-        pushDrainage(drainage.filter { it.id != id })
+        pushDrainage(drainage.filter { it.id != id }, drainageBasins.filter { it.deviceId != id })
+    }
+
+    fun setDrainageBasin(id: String, areaM2: Double, runoff: Double, minutes: Double) {
+        val next = drainageBasins.filter { it.deviceId != id } + com.appdwg.core.drainage.DeviceBasin(id, areaM2, runoff, minutes)
+        pushDrainage(drainage, next)
     }
 
     fun replaceDrainage(next: List<com.appdwg.core.drainage.PlacedDevice>) {
@@ -1155,14 +1162,19 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun undoDrainage() {
         val prev = drainageUndo.removeLastOrNull() ?: return
-        drainage = prev
+        drainage = prev.first
+        drainageBasins = prev.second
         canUndoDrainage = drainageUndo.isNotEmpty()
     }
 
-    private fun pushDrainage(next: List<com.appdwg.core.drainage.PlacedDevice>) {
-        drainageUndo.addLast(drainage)
+    private fun pushDrainage(
+        next: List<com.appdwg.core.drainage.PlacedDevice>,
+        basins: List<com.appdwg.core.drainage.DeviceBasin> = drainageBasins,
+    ) {
+        drainageUndo.addLast(drainage to drainageBasins)
         if (drainageUndo.size > 50) drainageUndo.removeFirst()
         drainage = next
+        drainageBasins = basins
         canUndoDrainage = true
     }
 
@@ -3094,6 +3106,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             models = models.map { m -> m.uris.map { it.toString() } to m.placement },
             notes = notes,
             drainage = drainage,
+            drainageBasins = drainageBasins,
             edited = addedFiles.filter { it.uri == null && it.label.endsWith(EDITED_SUFFIX) }
                 .flatMap { f -> f.project.surfaces }.map { s -> synchronized(encodedSurfaces) { encodedSurfaces.getOrPut(s) { SurfaceCodec.encode(s) } } },
         )
@@ -3121,6 +3134,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drapeUris = emptyList()
         encodedSurfaces.clear()
         drainage = emptyList()
+        drainageBasins = emptyList()
         drainageUndo.clear()
         canUndoDrainage = false
     }
@@ -3457,6 +3471,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         userLines = doc.userLines
         hiddenOriginals = doc.hiddenLines.toSet()
         drainage = doc.drainage
+        drainageBasins = doc.drainageBasins
         drainageUndo.clear()
         canUndoDrainage = false
         if (doc.pointsSurface) surfaceFromPointsNow()
@@ -3552,6 +3567,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     userLines = emptyList()
                     hiddenOriginals = emptySet()
                     drainage = emptyList()
+                    drainageBasins = emptyList()
                     drainageUndo.clear()
                     canUndoDrainage = false
                     keptOriginals = project.polylines.indices.toList()
