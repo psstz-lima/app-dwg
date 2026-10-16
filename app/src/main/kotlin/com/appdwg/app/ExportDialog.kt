@@ -35,6 +35,10 @@ import androidx.compose.ui.draw.clip
 enum class ExportKind(private val labelPt: String, val suffix: String) {
     DXF("DXF", ".dxf"),
     LANDXML("LandXML", "-landxml.xml"),
+    PIPES("Rede de drenagem (LandXML)", "-drenagem.xml"),
+    DRAIN_CSV("Quantidades de drenagem (CSV)", "-drenagem.csv"),
+    DRAIN_PDF("Quantidades de drenagem (PDF)", "-drenagem.pdf"),
+    DRAIN_IFC("Drenagem (IFC)", "-drenagem.ifc"),
     POINTS("Pontos PDENZ (TXT)", "-pontos.txt"),
     KML("KML (Google Earth)", ".kml"),
     GEOJSON("GeoJSON", ".geojson"),
@@ -95,6 +99,30 @@ fun ExportDialog(
                     if (vm.models.isNotEmpty()) ExportOption(tr("Modelos 3D como 3DFACE"), includeModels, onIncludeModels)
                 }
                 ExportRow(GIcon.CONTOURS, ExportKind.LANDXML.label, tr("Superfícies, eixos, greide e pontos para o Civil 3D")) { onExport(ExportKind.LANDXML) }
+                ExportRow(
+                    GIcon.DRAINAGE,
+                    ExportKind.PIPES.label,
+                    if (vm.drainage.isEmpty()) tr("Sem dispositivos de drenagem no projeto") else tr("Tubos e estruturas da rede, para o Civil 3D"),
+                    enabled = vm.drainage.isNotEmpty(),
+                ) { onExport(ExportKind.PIPES) }
+                ExportRow(
+                    GIcon.VOLUME,
+                    ExportKind.DRAIN_CSV.label,
+                    if (vm.drainage.isEmpty()) tr("Sem dispositivos de drenagem no projeto") else tr("Escavação, reaterro, berço e concreto de cada dispositivo"),
+                    enabled = vm.drainage.isNotEmpty(),
+                ) { onExport(ExportKind.DRAIN_CSV) }
+                ExportRow(
+                    GIcon.IMAGE,
+                    ExportKind.DRAIN_PDF.label,
+                    if (vm.drainage.isEmpty()) tr("Sem dispositivos de drenagem no projeto") else tr("Tabela de quantidades da rede, em A4"),
+                    enabled = vm.drainage.isNotEmpty(),
+                ) { onExport(ExportKind.DRAIN_PDF) }
+                ExportRow(
+                    GIcon.DRAINAGE,
+                    ExportKind.DRAIN_IFC.label,
+                    if (vm.drainage.isEmpty()) tr("Sem dispositivos de drenagem no projeto") else tr("Propriedades IFC4 da rede, para coordenação"),
+                    enabled = vm.drainage.isNotEmpty(),
+                ) { onExport(ExportKind.DRAIN_IFC) }
 
                 ExportGroup(tr("Mapas e SIG"))
                 val geoNote = if (geoOk) null else tr("Indisponível em sistema local")

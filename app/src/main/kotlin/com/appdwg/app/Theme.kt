@@ -238,7 +238,7 @@ fun GromaticTheme(choice: ThemeChoice, content: @Composable () -> Unit) {
 
 /** Units the user picked in Aparência; [AUTO] is imperial only in the United States. */
 enum class UnitChoice(private val labelPt: String, private val hintPt: String) {
-    AUTO("Automático", "Pelo idioma: imperial só em inglês dos EUA"),
+    AUTO("Automático", "Métrico em português; imperial só em inglês dos EUA"),
     METRIC("Métrico", "m, m², ha, m³"),
     IMPERIAL("Imperial", "pé internacional (ft), ft², acre, jarda cúbica (yd³)");
 

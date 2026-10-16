@@ -145,10 +145,9 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                                 NumField(it.previous, stringResource(R.string.bm_previous), 150.dp) { x -> set(i, it.copy(previous = x)) }
                                 NumField(it.period, stringResource(R.string.bm_this), 150.dp) { x -> set(i, it.copy(period = x)) }
                                 NumField(it.price, stringResource(R.string.bm_price), 130.dp) { x -> set(i, it.copy(price = x)) }
-                                Column {
-                                    Text("${stringResource(R.string.bm_accum)} ${StationFormat.decimal(it.accumulated, 2)} · ${StationFormat.decimal(it.percent, 1)} %",
-                                        style = MaterialTheme.typography.bodySmall)
-                                    Text("${stringResource(R.string.bm_value)} R$ ${money(it.periodValue)}", style = MaterialTheme.typography.bodySmall)
+                                Column(Modifier.widthIn(min = 160.dp)) {
+                                    SpecRow(stringResource(R.string.bm_accum), StationFormat.decimal(it.accumulated, 2) + " · " + StationFormat.decimal(it.percent, 1) + " %")
+                                    SpecRow(stringResource(R.string.bm_value), "R$ " + money(it.periodValue))
                                 }
                             }
                         }
@@ -156,8 +155,8 @@ fun BulletinDialog(vm: ProjectViewModel, onPdf: () -> Unit, onCsv: () -> Unit, o
                 }
                 if (items.isNotEmpty()) {
                     val acc = items.sumOf { it.accumulatedValue }; val con = items.sumOf { it.contractedValue }
-                    Text(stringResource(R.string.bm_totals, money(items.sumOf { it.periodValue }), money(acc), money(con),
-                        StationFormat.decimal(if (con > 0) acc / con * 100 else 0.0, 1)), fontWeight = FontWeight.SemiBold)
+                    FactLine(stringResource(R.string.bm_totals, money(items.sumOf { it.periodValue }), money(acc), money(con),
+                        StationFormat.decimal(if (con > 0) acc / con * 100 else 0.0, 1)))
                     FitRow() {
                         OutlinedButton(onClick = onPdf, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_pdf)) }
                         OutlinedButton(onClick = onCsv, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.bm_csv)) }

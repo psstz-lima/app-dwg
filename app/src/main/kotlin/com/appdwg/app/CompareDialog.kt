@@ -145,26 +145,16 @@ private fun SurfacePicker(label: String, names: List<String>, selected: String?,
 @Composable
 private fun DifferenceSummary(d: SurfaceDifference) {
     Column {
-        Row2(tr("Corte (B abaixo de A)"), m3(d.cutVolume) + " em " + StationFormat.area(d.cutArea, 0))
-        Row2(tr("Aterro (B acima de A)"), m3(d.fillVolume) + " em " + StationFormat.area(d.fillArea, 0))
-        Row2(tr("Saldo (aterro − corte)"), (if (d.netVolume >= 0) "+" else "−") + m3(kotlin.math.abs(d.netVolume)))
-        Row2(tr("Maior corte / aterro"), StationFormat.lengthValue(-d.minDifference) + " / " + StationFormat.length(d.maxDifference, 3))
-        Text(
-            tr("Calculado na área comum às duas, em malha de {0}.", StationFormat.length(d.cellSize, 2)),
-            style = MaterialTheme.typography.bodySmall,
-        )
+        SpecHeader(tr("Volumes"))
+        SpecRow(tr("Corte (B abaixo de A)"), m3(d.cutVolume) + " em " + StationFormat.area(d.cutArea, 0))
+        SpecRow(tr("Aterro (B acima de A)"), m3(d.fillVolume) + " em " + StationFormat.area(d.fillArea, 0))
+        SpecRow(tr("Saldo (aterro − corte)"), (if (d.netVolume >= 0) "+" else "−") + m3(kotlin.math.abs(d.netVolume)))
+        SpecRow(tr("Maior corte / aterro"), StationFormat.lengthValue(-d.minDifference) + " / " + StationFormat.length(d.maxDifference, 3))
+        FactLine(tr("Calculado na área comum às duas, em malha de {0}.", StationFormat.length(d.cellSize, 2)))
     }
 }
 
 private fun m3(v: Double) = StationFormat.volume(v)
-
-@Composable
-private fun Row2(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
-        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
-    }
-}
 
 /** Color key of the B − A map. */
 @Composable
@@ -172,9 +162,9 @@ fun DifferenceLegend(d: SurfaceDifference, modifier: Modifier) {
     val s = DifferenceImage.scale(d)
     Card(modifier) {
         Column(Modifier.padding(10.dp)) {
-            Text("B − A (${StationFormat.lengthUnit})", style = MaterialTheme.typography.labelMedium)
-            Text("A: ${d.baseName}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
-            Text("B: ${d.otherName}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            SpecHeader("B − A (${StationFormat.lengthUnit})")
+            SpecRow("A", d.baseName)
+            SpecRow("B", d.otherName)
             Spacer(Modifier.height(4.dp))
             Box(
                 Modifier.width(220.dp).height(14.dp).background(

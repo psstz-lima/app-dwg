@@ -59,9 +59,14 @@
     <string name="vol_elevation">Elevation (%1$s)</string>
     <string name="vol_base_hint">Stockpile: plane through the edge (sloping ground) or lowest elevation. Volume to an elevation: material above it (cut) and space below it (fill).</string>
     <string name="vol_compute">Compute</string>
-    <string name="vol_above">Above the base (material / cut): %1$s over %2$s</string>
-    <string name="vol_below">Below the base (void / fill): %1$s over %2$s</string>
-    <string name="vol_net">Balance %1$s · area %2$s · surface elevations %3$s to %4$s · grid %5$s</string>
+    <string name="vol_result">Result</string>
+    <string name="vol_cut">Cut</string>
+    <string name="vol_cut_area">Cut area</string>
+    <string name="vol_fill_row">Fill</string>
+    <string name="vol_fill_area">Fill area</string>
+    <string name="vol_balance">Net</string>
+    <string name="vol_elevations">Surface elevations</string>
+    <string name="vol_cell">Grid</string>
     <string name="vol_base_flat">Horizontal base at elevation %1$s</string>
     <string name="vol_base_inclined">Inclined base: %1$s %% in E, %2$s %% in N</string>
     <string name="vol_base_surface">Base: surface %1$s</string>

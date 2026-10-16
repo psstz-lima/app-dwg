@@ -25,9 +25,20 @@ internal object DownloadNames {
         "json", "geojson" -> "application/json"
         "zip" -> "application/zip"
         "pdf" -> "application/pdf"
+        "ifc" -> "application/octet-stream"
         "gmt" -> "application/octet-stream"
         else -> "application/octet-stream"
     }
 
     fun shouldAsk(unexported: Int): Boolean = unexported > 0
+
+    /**
+     * Suggested IFC name. Always ends in `.ifc`. A STEP mime made some tablets keep the previous
+     * PDF name and save `name.pdf (1)`.
+     */
+    fun ifcName(base: String): String {
+        val stem = base.trim().substringBeforeLast('.').ifBlank { "drenagem" }
+            .removeSuffix("-drenagem")
+        return "$stem-drenagem.ifc"
+    }
 }

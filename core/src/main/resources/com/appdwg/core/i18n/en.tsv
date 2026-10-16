@@ -527,6 +527,7 @@ Da galeria	From gallery
 Remover foto	Remove photo
 Anotação {0} · {1}	Note {0} · {1}
 Editar	Edit
+Excluir	Delete
 Imagem: {0}	Image: {0}
 Calcular	Compute
 Remover projeto	Remove design
@@ -1349,3 +1350,219 @@ Calibrado. RMS horizontal {0} m.	Calibrated. Horizontal RMS {0} m.
 Calibrar	Calibrate
 Você está sobre qual ponto?	Which point are you standing on?
 O projeto não tem pontos para calibrar.	The project has no points to calibrate on.
+Drenagem	Drainage
+Biblioteca de dispositivos	Device library
+Buscar por código ou nome	Search by code or name
+Capítulo	Chapter
+Capítulo {0}	Chapter {0}
+Categoria	Category
+Lineares	Linear
+Pontuais	Point
+Família	Family
+Em revisão	Under review
+Sem seção paramétrica	No parametric section
+Lançamento e cálculos bloqueados até a revisão.	Placement and calculations stay blocked until the review.
+Revisado por	Reviewed by
+Marcar como revisado	Mark as reviewed
+Informe o nome e a data.	Enter the name and the date.
+Revisado por {0} em {1}.	Reviewed by {0} on {1}.
+Lançar	Place
+Comprimento (m)	Length (m)
+O Pro libera o lançamento e os cálculos.	Pro unlocks placement and calculations.
+Disponível para lançamento.	Ready to place.
+Importar biblioteca	Import library
+Importar biblioteca (JSON)	Import library (JSON)
+Importar	Import
+A biblioteca do usuário foi incorporada ({0} dispositivos).	The user library was merged ({0} devices).
+Esquema {0} não é suportado.	Schema {0} is not supported.
+O JSON da biblioteca não pôde ser lido.	The library JSON could not be read.
+Nenhum dispositivo encontrado.	No devices found.
+Parâmetros	Parameters
+Materiais	Materials
+Consumos	Quantities
+Conexões	Connections
+Fonte	Source
+Fonte: {0}, página {1}, desenho {2}	Source: {0}, page {1}, drawing {2}
+Área da seção: {0} m² ({1} m³/m)	Section area: {0} m² ({1} m³/m)
+Área da seção: {0} m²	Section area: {0} m²
+Para {0} m	For {0} m
+Para {0} un	For {0} units
+Informe um número.	Enter a number.
+Catálogo {0} · {1}	Catalog {0} · {1}
+{0} dispositivos	{0} devices
+{0} dispositivos da biblioteca do usuário	{0} devices from the user library
+Drenagem superficial	Surface drainage
+Drenos profundos	Subsurface drains
+Drenos subsuperficiais	Shallow subsurface drains
+Drenos sub-horizontais	Horizontal drains
+Drenagem urbana	Urban drainage
+Bueiros tubulares	Pipe culverts
+Bueiros celulares	Box culverts
+Minitúneis	Microtunnels
+Canaletas com grelha	Grated channels
+Drenagem IPR-736: lançamento e cálculos	IPR-736 drainage: placement and calculations
+A biblioteca de drenagem pode ser consultada; o lançamento e os cálculos são do Pro.	The drainage library can be browsed; placement and calculations are part of Pro.
+Abrindo a biblioteca de drenagem…	Opening the drainage library…
+A biblioteca de drenagem não pôde ser aberta.	The drainage library could not be opened.
+Voltar	Back
+Montante	Upstream
+Jusante	Downstream
+Corpo	Barrel
+Ala	Wing wall
+Linear	Linear
+Pontual	Point
+Outro	Other
+Sem consumos tabelados.	No tabulated quantities.
+Problema: {0}	Issue: {0}
+Origem: {0}	Origin: {0}
+Seção do dispositivo	Device section
+Convencional	Conventional
+Extrusão	Extrusion
+Pré-moldado	Precast
+Linha simples	Single line
+sem valor	no value
+Lançar {0}	Place {0}
+Toque na planta ou no 3D para marcar o ponto. O toque encaixa em pontos e vértices próximos.	Tap the plan or the 3D view to mark the point. Taps snap to nearby points and vertices.
+Ponto marcado.	Point marked.
+Caminho	Path
+Desenhar	Draw
+Linha existente	Existing line
+Toque na planta ou no 3D para marcar o caminho. O toque encaixa em pontos e vértices próximos.	Tap the plan or the 3D view to mark the path. Taps snap to nearby points and vertices.
+Pontos do caminho: {0}	Path points: {0}
+Nenhum eixo no projeto.	No alignment in the project.
+Linha: {0}	Line: {0}
+Toque numa linha existente.	Tap an existing line.
+No eixo	On the alignment
+Esconsidade (°)	Skew (°)
+Afastamento (m)	Offset (m)
+Estaca inicial	Start station
+Estaca final	End station
+Terreno (topo)	Terrain (top)
+Fundo no terreno	Invert below terrain
+Greide fixo	Fixed grade
+Declividade constante	Constant slope
+Acompanhar greide	Follow the road grade
+Profundidade (m)	Depth (m)
+Cota inicial	Start elevation
+Cota final	End elevation
+Declividade (%)	Slope (%)
+Nenhum greide no projeto.	No profile in the project.
+Geometria simplificada	Simplified geometry
+Toque o novo lugar.	Tap the new position.
+Este dispositivo	This device
+Total do projeto	Project total
+Comprimento: {0} m	Length: {0} m
+Concreto: {0} m³	Concrete: {0} m³
+Escavação: {0} m³	Excavation: {0} m³
+Formas: {0} m²	Formwork: {0} m²
+{0} (simplificado)	{0} (simplified)
+Contracaída no trecho.	Adverse slope on this reach.
+Queda de {0} m na conexão.	Connection drop of {0} m.
+Sem dispositivo de saída.	No outlet device.
+Vazão {0} m³/s acima da capacidade {1} m³/s.	Flow {0} m³/s above the capacity of {1} m³/s.
+Transição de seção na conexão.	Section transition at the connection.
+Área da bacia (m²)	Basin area (m²)
+Tempo de concentração (min)	Time of concentration (min)
+Ligar bacia	Link basin
+Vazão da bacia: {0} m³/s. Acumulada: {1} m³/s. Capacidade: {2} m³/s.	Basin flow: {0} m³/s. Accumulated: {1} m³/s. Capacity: {2} m³/s.
+Bacia grande para o método racional.	Basin is large for the rational method.
+Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão.	Enter the rainfall equation (K, a, b, c) in Basins before linking the flow.
+Bueiro {0} m × {1} m, {2}: lâmina {3} m.	Culvert {0} m × {1} m, {2}: headwater {3} m.
+Transbordamento da rodovia.	The road overtops.
+Sugerir bueiros	Suggest culverts
+Nenhum talvegue cruza o eixo. Rode as bacias antes.	No thalweg crosses the alignment. Run the basins first.
+Solo da saída	Outlet soil
+Silte	Silt
+Areia	Sand
+Argila	Clay
+Pedregulho	Gravel
+Rocha	Rock
+Velocidade {0} m/s, limite do solo {1} m/s. Enrocamento D50 {2} m.	Velocity {0} m/s, soil limit {1} m/s. Riprap D50 {2} m.
+Velocidade acima do limite: sugerir dissipador DES.	Velocity above the limit: suggest a DES dissipator.
+Dreno: escavação {0} m³, filtrante {1} m³, tubo {2} m.	Drain: excavation {0} m³, filter {1} m³, pipe {2} m.
+Colchão drenante: {0} m³ (espessura {1} m, talude {2} m).	Drainage blanket: {0} m³ (thickness {1} m, slope {2} m).
+Fase	Phase
+Sem fase	No phase
+Ver até a fase	Show through phase
+Rede de drenagem (LandXML)	Drainage network (LandXML)
+Tubos e estruturas da rede, para o Civil 3D	Pipes and structures of the network, for Civil 3D
+Sem dispositivos de drenagem no projeto	No drainage devices in the project
+rede de drenagem	drainage network
+Catálogo offline: {0} dispositivos, cálculos no aparelho.	Offline catalog: {0} devices, calculations on the device.
+Catálogo conferido: {0} dispositivos com seção, sem pendência.	Catalog checked: {0} devices with a section, nothing pending.
+Catálogo: {0} dispositivos com pendência de cálculo.	Catalog: {0} devices with a calculation problem.
+Greide hidráulico	Hydraulic grade
+Declividade mínima (%)	Minimum slope (%)
+Cobertura mínima (m)	Minimum cover (m)
+Profundidade máxima (m)	Maximum depth (m)
+Enterrado	Buried
+Fluxo automático	Automatic flow
+Fluxo para o início	Flow toward the start
+Mais	More
+Este lançamento acompanha o terreno. O greide hidráulico faz a água descer.	This placement follows the ground. The hydraulic grade makes the water run downhill.
+Escavação	Excavation
+Reaterro	Backfill
+Berço	Bedding
+Bota-fora	Spoil
+Concreto	Concrete
+Formas	Formwork
+Escoramento acima de 1,25 m	Shoring required above 1.25 m
+A vala passa de {0} m: prever bombeamento ou queda.	The trench exceeds {0} m: plan pumping or a drop structure.
+Perfil hidráulico	Hydraulic profile
+Montante {0} m · jusante {1} m	Upstream {0} m · downstream {1} m
+Declividade mínima do trecho {0} %	Minimum grade of the reach {0} %
+Nome do eixo	Alignment name
+Seção na estaca {0}	Section at station {0}
+CSV	CSV
+PDF	PDF
+IFC	IFC
+Quantidades por metro	Quantities per metre
+Apiloamento	Tamping
+Guia de madeira	Timber guide
+Argamassa	Mortar
+Largura {0} m · altura {1} m	Width {0} m · height {1} m
+Dispositivo	Device
+Terreno transparente	Transparent ground
+Precisão	Precision
+Antena	Antenna
+Saldo	Balance
+Escavação, reaterro, berço e concreto de cada dispositivo	Trench, backfill, bedding and concrete of each device
+Tabela de quantidades da rede, em A4	Network quantity table, on A4
+Propriedades IFC4 da rede, para coordenação	IFC4 properties of the network, for coordination
+IFC de drenagem	drainage IFC
+sim	yes
+não	no
+Código;Eixo;Comprimento (m);Montante (m);Jusante (m);Declividade (%);Escavação (m³);Reaterro (m³);Berço (m³);Bota-fora (m³);Aterro (m³);Concreto (m³);Formas (m²);Escoramento;Profundo;Fase	Code;Alignment;Length (m);Upstream (m);Downstream (m);Slope (%);Excavation (m³);Backfill (m³);Bedding (m³);Spoil (m³);Embankment (m³);Concrete (m³);Formwork (m²);Shoring;Too deep;Phase
+Quantidades de drenagem	Drainage quantities
+Página {0} de {1}	Page {0} of {1}
+L (m)	L (m)
+i %	i %
+Vala m³	Trench m³
+Movimentado	Moved
+Executado até {0}	Done through {0}
+Concluído	Complete
+Intensidade	Intensity
+Vazão	Flow
+Talvegue	Thalweg
+Declividade	Slope
+PDF de quantidades	quantity PDF
+CSV de quantidades	quantity CSV
+Quantidades de drenagem (CSV)	Drainage quantities (CSV)
+Quantidades de drenagem (PDF)	Drainage quantities (PDF)
+Drenagem (IFC)	Drainage (IFC)
+Recolher filtros	Collapse filters
+Filtros	Filters
+Escavação por metro	Excavation per metre
+A vala passa de {0}: prever bombeamento ou queda.	The trench exceeds {0}: plan pumping or a drop structure.
+Declividade {0} %	Grade {0} %
+Mínima do trecho {0} %	Minimum of the reach {0} %
+Fora da superfície: o trecho foi interpolado. Confira o terreno.	Off the surface: the reach was interpolated. Check the ground.
+Não há eixo no projeto. Trace uma estrada para sugerir a drenagem.	There is no alignment in the project. Draw a road to suggest the drainage.
+Não há eixo no projeto. Trace uma estrada ou toque o ponto de lançamento.	There is no alignment in the project. Draw a road or tap the outlet point.
+Não há eixo de estrada. Os pontos, se houver, são onde a água sai da plataforma ou do terreno.	There is no road alignment. Any points are where water leaves the platform or the ground.
+Procurando talvegues em {0}…	Looking for thalwegs on {0}…
+Nenhum talvegue cruza {0}. Rode as bacias ou toque o ponto de lançamento.	No thalweg crosses {0}. Run the basins or tap the outlet point.
+{0} dispositivos sugeridos em {1}.	{0} devices suggested on {1}.
+Sugerir drenagem	Suggest drainage
+Métrico em português; imperial só em inglês dos EUA	Metric in Portuguese; imperial only for US English
+Montante {0} · jusante {1}	Upstream {0} · downstream {1}

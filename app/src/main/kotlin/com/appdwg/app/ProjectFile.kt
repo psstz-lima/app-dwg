@@ -213,6 +213,19 @@ class ProjectDoc(
     /** Survey states of the works timeline, in date order, and the one shown (−1: all). */
     val states: List<SurveyState> = emptyList(),
     val activeState: Int = -1,
+    /** Placed drainage. Absent from older project files, which still open. */
+    val drainage: List<com.appdwg.core.drainage.PlacedDevice> = emptyList(),
+    /** Basins tied to a placed device. Absent from older project files. */
+    val drainageBasins: List<com.appdwg.core.drainage.DeviceBasin> = emptyList(),
+    /** Construction phase of a placed device. Absent from older project files. */
+    val drainagePhases: List<com.appdwg.core.drainage.DevicePhase> = emptyList(),
+    /** Edited names of drainage alignments. Absent from older project files. */
+    val drainageNames: Map<String, String> = emptyMap(),
+    /**
+     * User drainage libraries merged onto the album, as a JSON list of library texts.
+     * Absent from older project files. The bundled album is not copied into the project.
+     */
+    val drainageCatalogJson: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -247,6 +260,15 @@ class ProjectDoc(
         if (edited.isNotEmpty()) put("edited", JSONArray(edited))
         if (hiddenFiles.isNotEmpty()) put("hiddenFiles", JSONArray(hiddenFiles))
         if (states.isNotEmpty()) { put("states", JSONArray(states.map { it.toJson() })); put("activeState", activeState) }
+        if (drainage.isNotEmpty()) put("drainage", JSONArray(com.appdwg.core.drainage.DrainageIo.toJson(drainage)))
+        if (drainageBasins.isNotEmpty()) put("drainageBasins", JSONArray(drainageBasins.map { basin ->
+            JSONObject().put("id", basin.deviceId).put("area", basin.areaM2).put("runoff", basin.runoff).put("minutes", basin.minutes)
+        }))
+        if (drainagePhases.isNotEmpty()) put("drainagePhases", JSONArray(drainagePhases.map { phase ->
+            JSONObject().put("id", phase.deviceId).put("phase", phase.phase)
+        }))
+        if (drainageNames.isNotEmpty()) put("drainageNames", JSONObject(drainageNames as Map<*, *>))
+        if (!drainageCatalogJson.isNullOrBlank()) put("drainageCatalog", drainageCatalogJson)
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -308,6 +330,27 @@ class ProjectDoc(
                 hiddenFiles = strings("hiddenFiles"),
                 states = o.optJSONArray("states")?.let { a -> List(a.length()) { SurveyState.fromJson(a.getJSONObject(it)) } }.orEmpty(),
                 activeState = o.optInt("activeState", -1),
+                drainage = o.optJSONArray("drainage")?.let { com.appdwg.core.drainage.DrainageIo.fromJson(it.toString()) }.orEmpty(),
+                drainageBasins = o.optJSONArray("drainageBasins")?.let { a ->
+                    List(a.length()) {
+                        val b = a.getJSONObject(it)
+                        com.appdwg.core.drainage.DeviceBasin(b.getString("id"), b.getDouble("area"), b.optDouble("runoff", 0.5), b.optDouble("minutes", 10.0))
+                    }
+                }.orEmpty(),
+                drainagePhases = o.optJSONArray("drainagePhases")?.let { a ->
+                    List(a.length()) {
+                        val p = a.getJSONObject(it)
+                        com.appdwg.core.drainage.DevicePhase(p.getString("id"), p.optInt("phase", 0))
+                    }.filter { it.phase > 0 }
+                }.orEmpty(),
+                drainageNames = o.optJSONObject("drainageNames")?.let { e ->
+                    e.keys().asSequence().associateWith { e.getString(it) }
+                }.orEmpty(),
+                drainageCatalogJson = when (val saved = if (o.has("drainageCatalog")) o.get("drainageCatalog") else null) {
+                    is String -> saved.takeIf { it.isNotBlank() }
+                    is JSONObject, is JSONArray -> saved.toString()
+                    else -> null
+                },
             )
         }
 

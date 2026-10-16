@@ -17,7 +17,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -64,6 +67,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -576,6 +580,27 @@ private fun ProjectScreen(
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
     var showBasin by remember(fileName) { mutableStateOf(false) }
+    var showDrainage by remember(fileName) { mutableStateOf(false) }
+    var drainageDraft by remember(fileName) { mutableStateOf<PlaceDraft?>(null) }
+    var drainageSelected by remember(fileName) { mutableStateOf<String?>(null) }
+    var drainageMoving by remember(fileName) { mutableStateOf(false) }
+    var drainageBuilt by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageBuilt?>(null) }
+    var drainageNetwork by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageGraph?>(null) }
+    var drainageFlows by remember(fileName) { mutableStateOf<Map<String, com.appdwg.core.drainage.ReachFlow>>(emptyMap()) }
+    var outletSoil by remember(fileName) { mutableStateOf(com.appdwg.core.drainage.OutletSoil.CLAY) }
+    var drainagePhaseThrough by remember(fileName) { mutableIntStateOf(0) }
+    var drainageMore by remember(fileName) { mutableStateOf(false) }
+    var dockAt by remember(fileName) { mutableStateOf(androidx.compose.ui.geometry.Offset(Float.NaN, Float.NaN)) }
+    var dockW by remember(fileName) { mutableStateOf(1) }
+    var dockH by remember(fileName) { mutableStateOf(1) }
+    var chipsAt by remember(fileName) { mutableStateOf(androidx.compose.ui.geometry.Offset(16f, 200f)) }
+    var chipsOpen by remember(fileName) { mutableStateOf(false) }
+    var suggestNote by remember(fileName) { mutableStateOf<String?>(null) }
+    var showDrainDevice by remember(fileName) { mutableStateOf(true) }
+    var showDrainCut by remember(fileName) { mutableStateOf(true) }
+    var showDrainBackfill by remember(fileName) { mutableStateOf(true) }
+    var showDrainFill by remember(fileName) { mutableStateOf(true) }
+    var drainGroundClear by remember(fileName) { mutableStateOf(false) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
@@ -667,6 +692,10 @@ private fun ProjectScreen(
             when (kind) {
                 ExportKind.DXF -> vm.exportDxf(uri, includeSurfaces, line, if (includeContours) contourDrawn ?: contourInterval.takeIf { it > 0 } ?: 1.0 else null, includeModels)
                 ExportKind.LANDXML -> vm.exportLandXml(uri)
+                ExportKind.PIPES -> vm.exportPipeNetwork(uri)
+                ExportKind.DRAIN_CSV -> vm.exportDrainCsv(uri)
+                ExportKind.DRAIN_PDF -> vm.exportDrainPdf(uri)
+                ExportKind.DRAIN_IFC -> vm.exportDrainIfc(uri)
                 ExportKind.POINTS -> vm.exportPoints(uri)
                 ExportKind.KML -> vm.exportKml(uri, line)
                 ExportKind.GEOJSON -> vm.exportGeoJson(uri, line)
@@ -678,6 +707,10 @@ private fun ProjectScreen(
             }
             showExport = true
         }
+    }
+    val ifcSaver = rememberLauncherForActivityResult(CreateIfcDocument(::driveStart)) { uri ->
+        pendingExport = null
+        if (uri != null) vm.exportDrainIfc(uri)
     }
     val window = androidx.activity.compose.LocalActivity.current?.window
     val baseName = fileName.substringBefore(".xml.aecc.pnt").substringBeforeLast('.')
@@ -733,14 +766,15 @@ private fun ProjectScreen(
     }
     val gpsInfo = remember(project, gpsPoint, frozenLayers) { gpsPoint?.let { PointQuery.at(project, it, frozenLayers.toSet()) } }
     LaunchedEffect(gpsPoint, gpsFollow) { if (gpsFollow && gpsPoint != null) { focus = gpsPoint; focusKey++ } }
-    val sectionAxis = project.alignments.getOrNull(sectionAlignment)
+    val axes = project.alignments + vm.drainageAxes
+    val sectionAxis = axes.getOrNull(sectionAlignment)
     val section = remember(project, sectionAxis, sectionStation, sectionHalfWidth, frozenLayers, showSection) {
         if (!showSection || sectionAxis == null) null
         else CrossSection.at(sectionAxis, sectionStation, project.surfaces.filter { it.name !in frozenLayers }, sectionHalfWidth)
     }
     // On the road's own axis, the profile shows (and edits) the PVIs typed for the road.
     val roadPvis = v.roadParams.pvis.sortedBy { it.station }.takeIf { it.size >= 2 && sectionAxis?.name?.endsWith(ROAD_SUFFIX) == true }
-    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile, roadPvis, v.roadParams.kValue) {
+    val longProfile = remember(project, sectionAxis, frozenLayers, showProfile, roadPvis, v.roadParams.kValue, vm.drainageAxes) {
         if (!showProfile || sectionAxis == null) null
         else {
             val axis = if (roadPvis == null) sectionAxis else com.appdwg.core.Alignment(sectionAxis.name, sectionAxis.startStation, sectionAxis.elements,
@@ -748,6 +782,29 @@ private fun ProjectScreen(
                     roadPvis[i].takeIf { it.curveLength > 0 } ?: pv
                 }))
             LongProfile.of(axis, project.surfaces.filter { it.name !in frozenLayers && !it.name.startsWith(ROAD_LABEL) })
+        }
+    }
+    val profileCrown = remember(longProfile, drainageBuilt) {
+        val drawn = longProfile ?: return@remember null
+        val run = drainageBuilt?.runProfiles?.find { it.name == drawn.alignment } ?: return@remember null
+        val samples = run.samples
+        if (samples.size < 2) return@remember null
+        DoubleArray(drawn.stations.size) { index ->
+            val station = drawn.stations[index]
+            val nextAt = samples.indexOfFirst { it.station >= station }.let { if (it < 0) samples.lastIndex else it }
+            val prevAt = (nextAt - 1).coerceAtLeast(0)
+            val a = samples[prevAt]
+            val b = samples[nextAt]
+            val t = if (b.station == a.station) 0.0 else ((station - a.station) / (b.station - a.station)).coerceIn(0.0, 1.0)
+            a.top + (b.top - a.top) * t
+        }
+    }
+    val drainSection = remember(sectionAxis, sectionStation, drainageBuilt, showSection) {
+        val built = drainageBuilt
+        if (!showSection || sectionAxis == null || built == null) null
+        else {
+            val run = built.runs.find { it.name == sectionAxis.name } ?: return@remember null
+            built.sections.filter { it.alignmentId == run.id }.minByOrNull { kotlin.math.abs(it.station - sectionStation) }
         }
     }
     val profileMark = remember(sectionAxis, profileCursor, showProfile) {
@@ -758,11 +815,13 @@ private fun ProjectScreen(
         if (measurePoints.isEmpty()) null
         else Measure.of(measurePoints, measurePoints.map { PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation })
     }
-    // The polygon being drawn: measure, a platform outline, or a grid area. The same points in plan and 3D.
+    // The polygon being drawn: measure, a platform outline, a grid area, or a drainage path. The same points in plan and 3D.
+    val draftPath = drainageDraft?.takeIf { !it.point && it.source != com.appdwg.core.drainage.PathSource.ALIGNMENT }?.points ?: emptyList()
     val areaPoly = when {
         measuring -> measurePoints
         drawingPlatform -> platformOutline
         genPick == GenPick.AREA_DRAW -> gen.drawnArea
+        draftPath.size >= 2 -> draftPath
         else -> emptyList()
     }
     val areaClosed = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
@@ -794,6 +853,84 @@ private fun ProjectScreen(
         drapeTris = built.tris
         surfacePending = false
     }
+    LaunchedEffect(vm.drainage, vm.drainageBasins, vm.drainagePhases, vm.drainageNames, drainagePhaseThrough, v.basinParams, drainageDraft, project, frozenLayers, vm.drainageCatalog) {
+        val draft = drainageDraft
+        val preview = draft?.placed()
+        val committed = vm.drainage
+        val shown = if (preview == null) committed else committed.filter { it.id != preview.id } + preview
+        val catalog = vm.drainageCatalog
+        val surfaces = project.surfaces.filter { s ->
+            s.name !in frozenLayers && s.triangleCount > 0 && project.surfaces.none { it.name == s.name + EDITED_SUFFIX }
+        }
+        val alignments = project.alignments
+        val terrain: (Double, Double) -> Double? = { x, y ->
+            val p = Point2(x, y)
+            surfaces.firstNotNullOfOrNull { it.elevationAt(p) }
+        }
+        val alignmentOf: (String) -> com.appdwg.core.Alignment? = { name -> alignments.firstOrNull { it.name == name } }
+        val basins = vm.drainageBasins
+        val rain = v.basinParams
+        val phases = vm.drainagePhases
+        val through = drainagePhaseThrough
+        val built = withContext(Dispatchers.Default) {
+            val drawn = com.appdwg.core.drainage.ConstructionPhase.visible(shown, phases, through)
+            val scene = com.appdwg.core.drainage.DrainageScene.build(drawn, { catalog.device(it) }, terrain, alignmentOf, vm.drainageNames)
+            val graph = com.appdwg.core.drainage.DrainageNetwork.analyze(
+                shown,
+                { placed -> catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) } },
+                { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::isOutlet) == true },
+                { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
+                terrain,
+                alignmentOf,
+                cellsOf = { placed ->
+                    com.appdwg.core.drainage.DrainageNetwork.parallelCells(catalog.device(placed.code), placed.params)
+                },
+            )
+            val flows = rain.idf?.let { com.appdwg.core.drainage.DrainageFlow.linked(basins, graph.links, it, rain.years) }.orEmpty()
+            Triple(scene, com.appdwg.core.drainage.DrainageFlow.applyCapacity(graph, flows), flows)
+        }
+        drainageBuilt = built.first
+        drainageNetwork = built.second
+        drainageFlows = built.third
+        vm.drainageAxes = built.first.runs.mapNotNull { run ->
+            com.appdwg.core.drainage.DrainAlignments.axis(run, built.first.runProfiles.find { it.alignmentId == run.id })
+        }
+        if (com.appdwg.app.BuildConfig.DEBUG) {
+            val scene = built.first
+            android.util.Log.i(
+                "GromaticDrain",
+                "scene objects=${scene.glyphs.size} deviceTris=${scene.triangles.size / 9} trenchTris=${scene.trench.size / 9} " +
+                    "backfillTris=${scene.backfillMesh.size / 9} beddingTris=${scene.beddingMesh.size / 9} fillTris=${scene.fillMesh.size / 9} waterTris=${scene.water.size / 9}",
+            )
+            fun num(value: Double, digits: Int): String =
+                if (value.isFinite()) "%.${digits}f".format(java.util.Locale.US, value) else "—"
+            for (row in scene.takeoff) {
+                val earth = row.earthMoved()
+                val perM = if (row.length > 0.05) earth / row.length else Double.NaN
+                val length = if (row.length > 0.05) num(row.length, 2) else "ponto"
+                android.util.Log.i(
+                    "GromaticDrain",
+                    "device ${row.code} tris=${row.drawnTriangles} L=$length " +
+                        "earthM3=${num(earth, 3)} earthPerM=${num(perM, 4)} slope=${num(row.gradeSlope, 4)}",
+                )
+            }
+            for (profile in scene.profiles) {
+                val grade = profile.hydraulic
+                val perM = if (grade.length > 1e-6 && grade.excavation.isFinite()) grade.excavation / grade.length else 0.0
+                android.util.Log.i(
+                    "GromaticDrain",
+                    "profile ${profile.code} L=${num(grade.length, 2)} up=${num(grade.invertUpstream, 3)} " +
+                        "down=${num(grade.invertDownstream, 3)} grade=${num(grade.actualSlope, 4)} " +
+                        "minSlope=${num(grade.minSlope, 4)} offSurface=${grade.offSurface} " +
+                        "tooDeep=${grade.tooDeep} cut=${num(grade.excavation, 2)} earthPerM=${num(perM, 4)} " +
+                        "deviceTris=${profile.deviceTriangles} trenchTris=${profile.trenchTriangles}",
+                )
+            }
+        }
+    }
+    LaunchedEffect(vm.drainage, drainageSelected) {
+        if (drainageSelected != null && vm.drainage.none { it.id == drainageSelected }) drainageSelected = null
+    }
     val g = LocalG.current
     val colors = PlanColors(
         background = g.planBg,
@@ -808,6 +945,7 @@ private fun ProjectScreen(
     )
     var planZoom by remember { mutableStateOf<ZoomRequest?>(null) }
     var planWidthPx by remember { mutableStateOf(0) }
+    var planHeightPx by remember { mutableStateOf(0) }
     val xdpi = androidx.compose.ui.platform.LocalResources.current.displayMetrics.xdpi
 
     var show3d by v::show3d
@@ -815,8 +953,20 @@ private fun ProjectScreen(
     var exaggeration by v::exaggeration
     val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } || project.models.isNotEmpty() }
     // Back leaves the tool in use (one at a time) before it leaves the project.
-    androidx.activity.compose.BackHandler(enabled = addingNote || addingPoints || measuring || editing || showAr || show3d || showSection || showProfile) {
+    androidx.activity.compose.BackHandler(
+        enabled = addingNote || addingPoints || measuring || editing || showAr || show3d || showSection || showProfile ||
+            drainageSelected != null || drainageDraft != null || drainageMore,
+    ) {
         when {
+            drainageMore -> drainageMore = false
+            drainageDraft != null -> {
+                drainageDraft = null
+                drainageMoving = false
+            }
+            drainageSelected != null -> {
+                drainageSelected = null
+                drainageMoving = false
+            }
             addingNote -> addingNote = false
             addingPoints -> addingPoints = false
             measuring -> measuring = false
@@ -852,17 +1002,18 @@ private fun ProjectScreen(
             add(RailTool(GIcon.CONTOURS, tr("Curvas"), showContours, feature = ProFeature.CONTOURS) { showContourDialog = true })
             add(RailTool(GIcon.IMAGE, tr("Imagem"), vm.drape != null && vm.drapeVisible, feature = ProFeature.IMAGE) { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true })
         }
-        add(RailTool(GIcon.COMPARE, tr("Comparar"), differenceOverlay != null, feature = ProFeature.COMPARE) { showCompare = true })
+        add(RailTool(GIcon.COMPARE, tr("Comparar"), showCompare, feature = ProFeature.COMPARE) { showCompare = true })
         if (project.surfaces.isNotEmpty()) {
             add(RailTool(GIcon.PLATFORM, tr("Plataforma"), drawingPlatform || vm.platform != null, feature = ProFeature.PLATFORM) { showPlatform = true })
-            add(RailTool(GIcon.ROAD, tr("Estrada"), drawingRoad || v.roadBuilt, feature = ProFeature.ROAD) { showRoad = true })
+            add(RailTool(GIcon.ROAD, tr("Estrada"), showRoad || drawingRoad, feature = ProFeature.ROAD) { showRoad = true })
         }
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel, feature = ProFeature.BULLETIN) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel, feature = ProFeature.SURFACE_EDIT) { showSurfaceEdit = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0, feature = ProFeature.ANALYSIS) { showAnalysis = true })
         if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões"), feature = ProFeature.ADVICE) { showAdvice = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet, feature = ProFeature.BASIN) { showBasin = true })
-        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null, feature = ProFeature.VOLUME) { showVolume = true })
+        add(RailTool(GIcon.DRAINAGE, tr("Drenagem"), showDrainage, feature = ProFeature.DRAINAGE) { showDrainage = true })
+        if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, showVolume, feature = ProFeature.VOLUME) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null, feature = ProFeature.AS_BUILT) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, tr("Modelos"), feature = ProFeature.MODELS) { showModels = true })
         add(RailTool(GIcon.NOTE, tr("Anotar"), addingNote, feature = ProFeature.NOTES) { addingNote = true; measuring = false; show3d = false })
@@ -882,9 +1033,12 @@ private fun ProjectScreen(
     }
     // The free version shows every tool with a padlock; touching one opens the Gromatic Pro screen.
     // Pro leaves each tool on its own action: nothing on the rail stays locked.
+    // The drainage library stays open so the album can be browsed. Placement and calculations
+    // inside it are still ProFeature.DRAINAGE.
     fun railTools(): List<RailTool> = allTools().map { tool ->
         val feature = tool.feature ?: return@map tool
-        if (proOpen(feature)) tool else tool.copy(active = false, locked = true, onClick = { vm.proRequested = true })
+        if (feature == ProFeature.DRAINAGE || proOpen(feature)) tool
+        else tool.copy(active = false, locked = true, onClick = { vm.proRequested = true })
     }
     val current = info
     @Composable
@@ -955,9 +1109,46 @@ private fun ProjectScreen(
         }
     }
 
+    fun drainageRadius(): Double {
+        val box = viewport
+        val span = if (box == null) 200.0 else maxOf(box.maxX - box.minX, box.maxY - box.minY)
+        return (span / 40.0).coerceIn(3.0, 80.0)
+    }
+    fun applyDrainageLine(ref: com.appdwg.core.LineRef) {
+        val draft = drainageDraft ?: return
+        when (ref) {
+            is com.appdwg.core.LineRef.Drawing -> {
+                val path = com.appdwg.core.PointGen.path(project, ref) ?: return
+                if (path.xs.size < 2) return
+                val layer = project.polylines.getOrNull(ref.index)?.layer ?: ref.index.toString()
+                drainageDraft = draft.copy(
+                    points = List(path.xs.size) { Point2(path.xs[it], path.ys[it]) },
+                    lineName = layer,
+                )
+            }
+            is com.appdwg.core.LineRef.Axis -> {
+                val name = project.alignments.getOrNull(ref.index)?.name ?: return
+                drainageDraft = draft.copy(source = com.appdwg.core.drainage.PathSource.ALIGNMENT, alignment = name, profile = draft.profile ?: name)
+            }
+        }
+    }
     val onPlanTap: (Point2) -> Unit = {
                         // Tapping the same snapped point twice would add a zero-length leg.
                         when {
+                            drainageDraft != null -> {
+                                val draft = drainageDraft!!
+                                when {
+                                    draft.point -> drainageDraft = draft.copy(x = it.x, y = it.y)
+                                    draft.source == com.appdwg.core.drainage.PathSource.POLYLINE ->
+                                        if (it != draft.points.lastOrNull()) drainageDraft = draft.copy(points = draft.points + it)
+                                    draft.source == com.appdwg.core.drainage.PathSource.LINE ->
+                                        com.appdwg.core.PointGen.nearestLine(project, it, drainageRadius(), hidden)?.let { ref -> applyDrainageLine(ref) }
+                                }
+                            }
+                            drainageMoving && drainageSelected != null -> {
+                                vm.moveDrainage(drainageSelected!!, it, drainageNetwork?.links.orEmpty())
+                                drainageMoving = false
+                            }
                             v.pickingOutlet -> {
                                 v.pickingOutlet = false
                                 val name = vm.analysisSurface ?: project.surfaces.firstOrNull()?.name
@@ -1004,8 +1195,17 @@ private fun ProjectScreen(
                             showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
                             !proOpen(ProFeature.TAP_INFO) -> {}
                             else -> {
-                                tapped = it; selectedPoint = null
-                                modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
+                                val glyphs = drainageBuilt?.glyphs.orEmpty()
+                                val hitId = if (glyphs.isEmpty()) null else com.appdwg.core.drainage.DrainageScene.hit(glyphs, it.x, it.y, drainageRadius())
+                                if (hitId != null) {
+                                    drainageSelected = hitId
+                                    drainageMoving = false
+                                    tapped = null
+                                    selectedPoint = null
+                                } else {
+                                    tapped = it; selectedPoint = null
+                                    modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
+                                }
                             }
                         }
     }
@@ -1017,9 +1217,12 @@ private fun ProjectScreen(
             Modifier.weight(1f).fillMaxHeight()
                 .then(if (g.floating) Modifier.padding(start = 12.dp, end = if (wide) 12.dp else 12.dp, bottom = 12.dp).clip(RoundedCornerShape(20.dp)) else Modifier)
                 .background(g.planBg)
-                .onSizeChanged { planWidthPx = it.width },
+                .onSizeChanged { planWidthPx = it.width; planHeightPx = it.height },
         ) {
                 val pickingArea = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
+                val placingDrainage = drainageMoving || drainageDraft?.let { draft ->
+                    draft.point || draft.source != com.appdwg.core.drainage.PathSource.ALIGNMENT
+                } == true
                 if (showAr) ArScreen(
                     project = project,
                     userPoints = vm.userPoints,
@@ -1039,11 +1242,14 @@ private fun ProjectScreen(
                         drape = drape3d,
                         modifier = Modifier.fillMaxSize(),
                         surfaceStyle = { v.styleOf(it) },
-                        onTap = if (pickingArea) onPlanTap else null,
-                        snap = pickingArea,
+                        onTap = if (pickingArea || placingDrainage || drainageBuilt?.glyphs?.isNotEmpty() == true) onPlanTap else null,
+                        snap = pickingArea || drainageMoving || drainageDraft?.let { it.point || it.source != com.appdwg.core.drainage.PathSource.ALIGNMENT } == true,
                         userPoints = vm.userPoints,
                         overlayLines = drapeLines,
                         overlayTris = if (areaClosed && areaPoly.size >= 3) drapeTris else DoubleArray(0),
+                        coloredSolids = if (showDrainDevice) drainageBuilt?.colored.orEmpty() else emptyList(),
+                        extraSolids = drainageLayers(drainageBuilt, showDrainCut, showDrainBackfill, showDrainFill, showDrainDevice),
+                        terrainAlpha = if (drainGroundClear) 0.35f else 1f,
                         onDrapeFailed = {
                             val lower = GlTexture.nextQuality(v.drapeQuality) ?: return@View3D
                             v.drapeQuality = lower
@@ -1067,8 +1273,9 @@ private fun ProjectScreen(
                     onTap = onPlanTap, // defined above; 3D uses the same vertex flow
                     modifier = Modifier.fillMaxSize(),
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
+                        else if (draftPath.isNotEmpty()) draftPath
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
-                    measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
+                    measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW) || draftPath.isNotEmpty()),
                     extraAlignments = listOfNotNull(vm.previewAlignment(v.roadParams)),
                     axisHidden = v.axisHidden,
                     measureIsAxis = drawingRoad && !measuring,
@@ -1077,8 +1284,10 @@ private fun ProjectScreen(
                     onHandleDrag = if (drawingRoad) { i, p -> v.roadParams.let { rp -> if (i in rp.pis.indices) v.roadParams = rp.copy(pis = rp.pis.toMutableList().apply { set(i, p) }) } } else null,
                     onHandleTap = { i -> selectedPi = if (selectedPi == i) null else i },
                     snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
+                        drainageMoving || drainageDraft?.let { it.point || it.source != com.appdwg.core.drainage.PathSource.ALIGNMENT } == true ||
                         (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS, EditPick.DRAW)),
                     selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||
+                        drainageDraft?.let { !it.point && it.source == com.appdwg.core.drainage.PathSource.LINE } == true ||
                         (editing && edit.pick == EditPick.SELECT),
                     selectedLines = if (editing) edit.selected else emptyList(),
                     previewLines = if (editing) edit.preview else emptyList(),
@@ -1089,7 +1298,14 @@ private fun ProjectScreen(
                     onNoteTap = if (measuring || addingPoints || editing || !proOpen(ProFeature.NOTE_OPEN)) null else { n -> openNote = n; tapped = null; selectedPoint = null },
                     basemap = vm.basemap.takeIf { it.enabled && !crs.isGeographic && !crs.local },
                     basemapCrs = crs,
+                    drainage = drainageBuilt?.glyphs.orEmpty(),
+                    selectedDrainage = drainageSelected,
+                    drainageAlerts = drainageNetwork?.issues?.map { it.deviceId }?.toSet().orEmpty(),
                     onLineSelected = { ref ->
+                        if (drainageDraft?.let { !it.point && it.source == com.appdwg.core.drainage.PathSource.LINE } == true) {
+                            applyDrainageLine(ref)
+                            return@PlanView
+                        }
                         roadTargetPick?.let { (i, side) ->
                             com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
                                 val line = List(pth.xs.size) { k -> Point2(pth.xs[k], pth.ys[k]) }
@@ -1150,7 +1366,7 @@ private fun ProjectScreen(
                     val views = buildList {
                         add(tr("Planta") to (!show3d && !showSection && !showProfile))
                         if (has3d) add("3D" to show3d)
-                        if (project.alignments.isNotEmpty()) { add(tr("Seção") to (showSection && !show3d)); add(tr("Perfil") to (showProfile && !show3d)) }
+                        if (axes.isNotEmpty()) { add(tr("Seção") to (showSection && !show3d)); add(tr("Perfil") to (showProfile && !show3d)) }
                     }
                     fun viewFeature(label: String): ProFeature? = when (label) {
                         "3D" -> ProFeature.VIEW_3D
@@ -1175,7 +1391,7 @@ private fun ProjectScreen(
                         }
                     })
                     // Vertical exaggeration helps read gentle terrain.
-                    if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 })
+                    if (show3d) GButton("Z ×$exaggeration", { exaggeration = exaggeration % 3 + 1 }, solid = true)
                     if (drape != null || vm.tiledRasters.isNotEmpty()) Box {
                         // Same three steps in plan and in 3D. Máxima is the file's own pixels.
                         var open by remember { mutableStateOf(false) }
@@ -1186,7 +1402,7 @@ private fun ProjectScreen(
                             tr("Máxima — cada pixel do arquivo"),
                         )
                         val imageLabel = if (show3d && drapeLoading) tr("Imagem: carregando {0}…", names[v.drapeQuality]) else tr("Imagem: {0}", names[v.drapeQuality])
-                        GButton(if (compact) names[v.drapeQuality] else imageLabel, { open = true }, icon = GIcon.IMAGE, description = imageLabel)
+                        GButton(if (compact) names[v.drapeQuality] else imageLabel, { open = true }, icon = GIcon.IMAGE, description = imageLabel, solid = true)
                         androidx.compose.material3.DropdownMenu(open, onDismissRequest = { open = false }) {
                             MenuTitle(tr("Detalhe da imagem"))
                             details.forEachIndexed { i, n -> MenuLine(n, checked = v.drapeQuality == i) { open = false; v.drapeQuality = i } }
@@ -1229,7 +1445,241 @@ private fun ProjectScreen(
                         strokeWidth = 2.dp,
                     )
                 }
-                if (show3d && !measuring && !drawingPlatform && genPick == null) {
+                if (show3d && drainageBuilt?.glyphs?.isNotEmpty() == true && drainageDraft == null) {
+                    DraggableCard(chipsAt, { chipsAt = it }, planWidthPx.toFloat(), planHeightPx.toFloat()) {
+                        if (!chipsOpen) {
+                            GButton(tr("Camadas"), { chipsOpen = true }, outlined = true)
+                        } else {
+                            Column {
+                                DrainLayerBar(
+                                    showDrainCut, showDrainDevice, showDrainBackfill, showDrainFill, drainGroundClear,
+                                    { showDrainCut = it }, { showDrainDevice = it }, { showDrainBackfill = it }, { showDrainFill = it }, { drainGroundClear = it },
+                                    Modifier,
+                                )
+                                GButton(tr("Recolher"), { chipsOpen = false }, outlined = true)
+                            }
+                        }
+                    }
+                }
+                val sideDock = wide && androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                val dock = Modifier
+                    .onSizeChanged { dockW = it.width; dockH = it.height }
+                    .offset {
+                        val maxX = (planWidthPx - dockW).toFloat().coerceAtLeast(0f)
+                        val maxY = (planHeightPx - dockH).toFloat().coerceAtLeast(0f)
+                        val cur = dockAt
+                        val x = (if (cur.x.isNaN()) maxX / 2f else cur.x).coerceIn(0f, maxX)
+                        val y = (if (cur.y.isNaN()) maxY else cur.y).coerceIn(0f, maxY)
+                        androidx.compose.ui.unit.IntOffset(kotlin.math.round(x).toInt(), kotlin.math.round(y).toInt())
+                    }
+                    .pointerInput(planWidthPx, planHeightPx) {
+                        detectDragGestures { change, drag ->
+                            change.consume()
+                            val maxX = (planWidthPx - size.width).toFloat().coerceAtLeast(0f)
+                            val maxY = (planHeightPx - size.height).toFloat().coerceAtLeast(0f)
+                            val cur = dockAt
+                            val x0 = if (cur.x.isNaN()) maxX / 2f else cur.x
+                            val y0 = if (cur.y.isNaN()) maxY else cur.y
+                            dockAt = androidx.compose.ui.geometry.Offset((x0 + drag.x).coerceIn(0f, maxX), (y0 + drag.y).coerceIn(0f, maxY))
+                        }
+                    }
+                    .widthIn(max = if (sideDock) 360.dp else 480.dp)
+                    .then(if (sideDock) Modifier.width(320.dp) else Modifier.fillMaxWidth())
+                    .heightIn(max = if (drainageMore) 520.dp else 220.dp)
+                    .pointerInput(Unit) { detectTapGestures { } }
+                if (drainageDraft != null) {
+                    val draft = drainageDraft!!
+                    val device = vm.drainageCatalog.device(draft.code)
+                    val commit = commit@{
+                        val placed = drainageDraft?.placed() ?: return@commit
+                        if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
+                        else {
+                            val snapped = com.appdwg.core.drainage.DrainageNetwork.snap(placed, drainageNetwork?.sockets.orEmpty())
+                            val base = vm.drainage.filter { it.id != snapped.id } + snapped
+                            vm.replaceDrainage(com.appdwg.core.drainage.DrainageNetwork.propagate(base, drainageNetwork?.links.orEmpty(), snapped.id))
+                            drainageSelected = snapped.id
+                            drainageDraft = null
+                            drainageMore = false
+                        }
+                    }
+                    Card(dock) {
+                        if (!drainageMore) {
+                            DrainagePickBar(
+                                title = tr("Lançar {0}", draft.code),
+                                detail = if (draft.point) {
+                                    if (draft.x == null) tr("Toque na planta ou no 3D para marcar o ponto. O toque encaixa em pontos e vértices próximos.")
+                                    else tr("Ponto marcado.")
+                                } else tr("Pontos do caminho: {0}", draft.points.size),
+                                canUndo = !draft.point && draft.points.isNotEmpty(),
+                                onUndo = { drainageDraft = draft.copy(points = draft.points.dropLast(1)) },
+                                onFinish = commit,
+                                onCancel = { drainageDraft = null; drainageMore = false },
+                                onMore = { drainageMore = true },
+                            )
+                        } else {
+                            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                                GButton(tr("Recolher"), { drainageMore = false }, outlined = true, modifier = Modifier.padding(8.dp))
+                                DrainagePlaceCard(
+                                    draft = draft,
+                                    alignments = project.alignments.map { it.name },
+                                    profiles = project.alignments.filter { it.profile != null }.map { it.name },
+                                    parameters = device?.parameters.orEmpty(),
+                                    onChange = { drainageDraft = it },
+                                    onUndoPoint = { drainageDraft = draft.copy(points = draft.points.dropLast(1)) },
+                                    onCommit = commit,
+                                    onCancel = { drainageDraft = null; drainageMore = false },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
+                } else if (drainageSelected != null) {
+                    val placed = vm.drainage.find { it.id == drainageSelected }
+                    val device = placed?.let { vm.drainageCatalog.device(it.code) }
+                    val rows = drainageBuilt?.takeoff.orEmpty()
+                    val glyph = drainageBuilt?.glyphs?.find { it.id == drainageSelected }
+                    val run = drainageBuilt?.runs?.find { drainageSelected in it.deviceIds || it.nodes.any { node -> node.deviceId == drainageSelected } }
+                    val profile = drainageBuilt?.profiles?.find { it.id == drainageSelected }
+                    val section = drainageBuilt?.sections?.find { it.deviceId == drainageSelected }
+                    val links = drainageNetwork?.links.orEmpty().filter { it.upstreamId == drainageSelected || it.downstreamId == drainageSelected }
+                    Card(dock) {
+                        if (!drainageMore) {
+                            DrainagePickBar(
+                                title = placed?.code ?: "",
+                                detail = device?.name ?: "",
+                                canUndo = false,
+                                onUndo = {},
+                                onFinish = { drainageSelected = null; drainageMoving = false },
+                                onCancel = {},
+                                onMore = { drainageMore = true },
+                                finishLabel = tr("Fechar"),
+                                onEdit = {
+                                    if (placed != null && device != null) {
+                                        drainageDraft = placed.toDraft(device.name)
+                                        drainageMoving = false
+                                        drainageSelected = null
+                                        drainageMore = false
+                                    }
+                                },
+                                onDelete = {
+                                    drainageSelected?.let { vm.deleteDrainage(it) }
+                                    drainageSelected = null
+                                    drainageMoving = false
+                                    drainageMore = false
+                                },
+                            )
+                        } else Column(Modifier.heightIn(max = 520.dp).verticalScroll(remember(drainageSelected) { androidx.compose.foundation.ScrollState(0) })) {
+                            GButton(tr("Recolher"), { drainageMore = false }, outlined = true, modifier = Modifier.padding(8.dp))
+                        DrainageSelectionCard(
+                            code = placed?.code ?: "",
+                            name = device?.name ?: placed?.code.orEmpty(),
+                            simplified = glyph?.simplified == true,
+                            row = rows.find { it.id == drainageSelected },
+                            total = if (rows.isEmpty()) null else com.appdwg.core.drainage.DrainageTakeoff.total(rows),
+                            moving = drainageMoving,
+                            canUndo = vm.canUndoDrainage,
+                            isPro = proOpen(ProFeature.DRAINAGE),
+                            onEdit = {
+                                if (placed != null && device != null) {
+                                    drainageDraft = placed.toDraft(device.name)
+                                    drainageMoving = false
+                                    drainageSelected = null
+                                }
+                            },
+                            onMove = { drainageMoving = !drainageMoving },
+                            onDelete = {
+                                drainageSelected?.let { vm.deleteDrainage(it) }
+                                drainageSelected = null
+                                drainageMoving = false
+                            },
+                            onUndo = { vm.undoDrainage() },
+                            onPro = { vm.proRequested = true },
+                            onClose = { drainageSelected = null; drainageMoving = false },
+                            modifier = Modifier.fillMaxWidth(),
+                            notes = drainageNotes(drainageNetwork, drainageSelected ?: ""),
+                            basinSummary = drainageFlows[drainageSelected]?.let { flow ->
+                                tr(
+                                    "Vazão da bacia: {0} m³/s. Acumulada: {1} m³/s. Capacidade: {2} m³/s.",
+                                    StationFormat.decimal(flow.local, 3),
+                                    StationFormat.decimal(flow.accumulated, 3),
+                                    StationFormat.decimal(drainageNetwork?.capacity?.get(drainageSelected) ?: 0.0, 3),
+                                ) + (if (flow.tooLarge) " " + tr("Bacia grande para o método racional.") else "") +
+                                    (culvertLine(placed, flow.accumulated)?.let { " $it" } ?: "")
+                            },
+                            onLinkBasin = link@{ area, minutes ->
+                                val id = drainageSelected ?: return@link
+                                val size = StationFormat.number(area)
+                                val tc = StationFormat.number(minutes) ?: com.appdwg.core.Hydrology.MIN_TC_MINUTES
+                                when {
+                                    v.basinParams.idf == null -> vm.report(tr("Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão."))
+                                    size == null || size <= 0.0 -> vm.report(tr("Informe um número."))
+                                    else -> vm.setDrainageBasin(id, size, v.basinParams.runoff, tc)
+                                }
+                            },
+                            soil = outletSoil,
+                            onSoil = if (proOpen(ProFeature.DRAINAGE) && (drainageFlows[drainageSelected]?.accumulated ?: 0.0) > 0.0) ({ outletSoil = it }) else null,
+                            protection = protectionLine(placed, vm.drainageCatalog, drainageFlows[drainageSelected]?.accumulated ?: 0.0, outletSoil),
+                            subsurface = if (proOpen(ProFeature.DRAINAGE)) subsurfaceLine(device, placed) else null,
+                            phase = vm.drainagePhases.find { it.deviceId == drainageSelected }?.phase ?: 0,
+                            phaseThrough = drainagePhaseThrough,
+                            onPhase = if (proOpen(ProFeature.DRAINAGE) && drainageSelected != null) ({ vm.setDrainagePhase(drainageSelected!!, it) }) else null,
+                            onPhaseThrough = if (proOpen(ProFeature.DRAINAGE)) ({ drainagePhaseThrough = it }) else null,
+                            profile = profile,
+                            run = run,
+                            section = section,
+                            connected = links.map { if (it.upstreamId == drainageSelected) it.downstreamId else it.upstreamId },
+                            onRename = run?.let { alignment -> { name -> vm.renameDrainageAlignment(alignment.id, name) } },
+                            onReverse = run?.let { alignment ->
+                                {
+                                    val downStart = profile?.hydraulic?.downstreamAtStart == true
+                                    vm.reverseDrainageFlow(alignment.deviceIds.toSet(), downStart)
+                                }
+                            },
+                            onExport = { kind ->
+                                val exportKind = when (kind) {
+                                    "csv" -> ExportKind.DRAIN_CSV
+                                    "pdf" -> ExportKind.DRAIN_PDF
+                                    "ifc" -> ExportKind.DRAIN_IFC
+                                    else -> ExportKind.PIPES
+                                }
+                                if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
+                                else {
+                                    pendingExport = exportKind
+                                    driveNext.set(exportToDrive)
+                                    if (exportKind == ExportKind.DRAIN_IFC) ifcSaver.launch(DownloadNames.ifcName(baseName))
+                                    else exportSaver.launch(baseName + exportKind.suffix)
+                                }
+                            },
+                            onOpenProfile = run?.let { alignment ->
+                                {
+                                    val index = axes.indexOfFirst { it.name == alignment.name }
+                                    if (index >= 0) {
+                                        sectionAlignment = index
+                                        profileCursor = 0.0
+                                        showProfile = true
+                                        showSection = false
+                                        show3d = false
+                                        drainageMore = false
+                                    }
+                                }
+                            },
+                            onOpenSection = run?.let { alignment ->
+                                {
+                                    val index = axes.indexOfFirst { it.name == alignment.name }
+                                    if (index >= 0) {
+                                        sectionAlignment = index
+                                        sectionStation = 0.0
+                                        showSection = true
+                                        showProfile = false
+                                        show3d = false
+                                        drainageMore = false
+                                    }
+                                }
+                            },
+                        )
+                        }
+                    }
+                } else if (show3d && !measuring && !drawingPlatform && genPick == null) {
                     Text(
                         tr("1 dedo gira · 2 dedos movem · pinça aproxima"),
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
@@ -1340,30 +1790,36 @@ private fun ProjectScreen(
                         editPvis = roadPvis,
                         onPvis = { list -> v.roadParams = v.roadParams.copy(pvis = list); vm.redesignSoon() },
                         onRecalc = { vm.designRoad() },
+                        crown = profileCrown,
                     )
                 } else if (showSection && sectionAxis != null) {
                     SectionPanel(
                         section = section,
-                        alignmentNames = project.alignments.map { it.name },
+                        alignmentNames = axes.map { it.name },
                         alignmentIndex = sectionAlignment,
-                        onAlignment = { sectionAlignment = it; sectionStation = project.alignments[it].startStation },
+                        onAlignment = { sectionAlignment = it; sectionStation = axes[it].startStation },
                         station = section?.station ?: sectionStation,
                         onStation = { sectionStation = it.coerceIn(sectionAxis.startStation, sectionAxis.endStation) },
                         halfWidth = sectionHalfWidth,
                         onHalfWidth = { sectionHalfWidth = it },
                         onClose = { showSection = false },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp).fillMaxWidth().fillMaxHeight(if (compact) 0.6f else 0.45f),
+                        deviceRing = drainSection?.device.orEmpty(),
+                        trenchRing = drainSection?.trench.orEmpty(),
                     )
                 } else if (!wide || full || !vm.themes.panelOpen) {
                     NarrowCards()
                 }
 
             if (vm.timelineShown && vm.states.size > 1) TimelineBar(vm, Modifier.align(Alignment.TopCenter).padding(top = 80.dp, start = 8.dp, end = 8.dp).widthIn(max = 900.dp))
-            else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
-                FitRow(Modifier.padding(start = 12.dp)) {
-                    Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
-                    OutlinedButton(onClick = { showAdvice = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Ver sugestões")) }
-                    OutlinedButton(onClick = { adviceCard = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
+            else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 72.dp).widthIn(max = 360.dp)) {
+                // The text on top and the buttons on their own line, with room to the card's edges.
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(tr("Sugestão: {0}", advice.first().title), style = MaterialTheme.typography.bodyMedium)
+                    FitRow(Modifier.align(Alignment.End)) {
+                        OutlinedButton(onClick = { adviceCard = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
+                        OutlinedButton(onClick = { showAdvice = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Ver sugestões")) }
+                    }
                 }
             }
             if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
@@ -1653,6 +2109,64 @@ private fun ProjectScreen(
         }
     }, onDismiss = { showAdvice = false; adviceCard = false })
 
+    if (showDrainage) DrainageLibraryDialog(
+        isPro,
+        onPro = { vm.proRequested = true },
+        onDismiss = { showDrainage = false },
+        catalog = vm.drainageCatalog,
+        catalogReady = vm.drainageCatalogReady,
+        catalogNote = vm.drainageCatalogNote,
+        onPlace = { catalog, device ->
+        if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
+        else {
+            vm.useDrainageCatalog(catalog)
+            measuring = false
+            drawingPlatform = false
+            drawingRoad = false
+            genPick = null
+            addingNote = false
+            editing = false
+            addingPoints = false
+            showSection = false
+            showProfile = false
+            tapped = null
+            selectedPoint = null
+            drainageMoving = false
+            drainageSelected = null
+            drainageDraft = draftFor(device)
+            drainageMore = false
+            showDrainage = false
+        }
+    }, onImported = { catalog, json ->
+        vm.useDrainageCatalog(catalog, json)
+    }, suggestNote = suggestNote, onSuggestCulverts = {
+        val axis = project.alignments.firstOrNull { it.name.endsWith(ROAD_SUFFIX) && it.vertices.size >= 2 }
+            ?: project.alignments.firstOrNull { it.vertices.size >= 2 }
+        val line = axis?.vertices.orEmpty()
+        val rain = v.basinParams
+        val idf = rain.idf
+        val gutter = vm.drainageCatalog.devices.firstOrNull { device ->
+            val text = (device.code + " " + device.name).lowercase()
+            "grama" in text && ("valeta" in text || "sarjeta" in text)
+        }?.code
+        when {
+            !proOpen(ProFeature.DRAINAGE) -> vm.proRequested = true
+            line.size < 2 -> suggestNote = tr("Não há eixo no projeto. Trace uma estrada para sugerir a drenagem.")
+            idf == null -> suggestNote = tr("Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão.")
+            else -> {
+                suggestNote = tr("Procurando talvegues em {0}…", axis?.name ?: "")
+                vm.placeThalwegCulverts(line, rain.minArea, rain.runoff, idf, rain.years, com.appdwg.core.Hydrology.MIN_TC_MINUTES, gutter) { count ->
+                    suggestNote = if (count == 0) {
+                        tr("Nenhum talvegue cruza {0}. Rode as bacias ou toque o ponto de lançamento.", axis?.name ?: "")
+                    } else {
+                        tr("{0} dispositivos sugeridos em {1}.", count, axis?.name ?: "")
+                    }
+                    if (count > 0) showDrainage = false
+                }
+            }
+        }
+    })
+
     if (showBasin) BasinDialog(vm, project, onPick = {
         showBasin = false; v.pickingOutlet = true; measuring = false; show3d = false; tapped = null
     }, onDismiss = { showBasin = false })
@@ -1855,10 +2369,19 @@ private fun ProjectScreen(
             onIncludeModels = { includeModels = it },
             crs = crs,
             onCrs = { showExport = false; showCrs = true },
-            onExport = { kind ->
+            onExport = export@{ kind ->
+                if ((kind == ExportKind.PIPES || kind == ExportKind.DRAIN_CSV || kind == ExportKind.DRAIN_PDF || kind == ExportKind.DRAIN_IFC) && !proOpen(ProFeature.DRAINAGE)) {
+                    vm.proRequested = true
+                    return@export
+                }
                 showExport = false
                 if (kind == ExportKind.PNG || kind == ExportKind.PDF) captureFor = kind
-                else { pendingExport = kind; driveNext.set(exportToDrive); exportSaver.launch(baseName + kind.suffix) }
+                else {
+                    pendingExport = kind
+                    driveNext.set(exportToDrive)
+                    if (kind == ExportKind.DRAIN_IFC) ifcSaver.launch(DownloadNames.ifcName(baseName))
+                    else exportSaver.launch(baseName + kind.suffix)
+                }
             },
             toDrive = if (hasDrive) exportToDrive else null,
             onToDrive = { exportToDrive = it },
@@ -2018,6 +2541,7 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
 }
 
 /** Results of the measurement being taken, with undo, clear and done. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MeasureCard(
     m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier,
@@ -2061,7 +2585,11 @@ private fun MeasureCard(
                 else if (pending) Text(tr("Calculando na superfície…"), style = MaterialTheme.typography.bodySmall)
             }
             if (saved > 0) Text(tr("{0} medição(ões) salva(s) na planta (M1, M2…).", saved), style = MaterialTheme.typography.bodySmall)
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 if (m != null) {
                     OutlinedButton(onClick = onUndo, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desfazer")) }
                     OutlinedButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Limpar")) }
@@ -2152,10 +2680,64 @@ private fun surfaceMeasure(surfaces: List<com.appdwg.core.Surface>, poly: List<P
 
 @Composable
 private fun Line(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
+    SpecRow(label, value)
+}
+
+/** 3D earthwork layers of the drainage scene. Water rides with the device. */
+private fun drainageLayers(
+    built: com.appdwg.core.drainage.DrainageBuilt?,
+    cut: Boolean,
+    backfill: Boolean,
+    fill: Boolean,
+    device: Boolean,
+): List<Pair<DoubleArray, Int>> {
+    built ?: return emptyList()
+    val layers = ArrayList<Pair<DoubleArray, Int>>()
+    if (cut && built.trench.isNotEmpty()) layers += built.trench to 0x668A6240
+    if (cut && built.beddingMesh.isNotEmpty()) layers += built.beddingMesh to 0x66C4A46A
+    if (backfill && built.backfillMesh.isNotEmpty()) layers += built.backfillMesh to 0x666E5340
+    if (fill && built.fillMesh.isNotEmpty()) layers += built.fillMesh to 0x66A08A55
+    if (device && built.water.isNotEmpty()) layers += built.water to 0x3A7FBF
+    return layers
+}
+
+/** Layer chips for the drainage model. Each chip is a 48 dp target. */
+@Composable
+private fun DrainLayerBar(
+    cut: Boolean,
+    device: Boolean,
+    backfill: Boolean,
+    fill: Boolean,
+    clearGround: Boolean,
+    onCut: (Boolean) -> Unit,
+    onDevice: (Boolean) -> Unit,
+    onBackfill: (Boolean) -> Unit,
+    onFill: (Boolean) -> Unit,
+    onClear: (Boolean) -> Unit,
+    modifier: Modifier,
+) {
+    Row(modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        LayerChip(tr("Escavação"), cut) { onCut(!cut) }
+        LayerChip(tr("Dispositivo"), device) { onDevice(!device) }
+        LayerChip(tr("Reaterro"), backfill) { onBackfill(!backfill) }
+        LayerChip(tr("Aterro"), fill) { onFill(!fill) }
+        LayerChip(tr("Terreno transparente"), clearGround) { onClear(!clearGround) }
     }
+}
+
+@Composable
+internal fun LayerChip(label: String, on: Boolean, onClick: () -> Unit) {
+    val g = LocalG.current
+    Text(
+        label,
+        modifier = Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(20.dp))
+            .background(if (on) g.accent else g.card)
+            .toggleable(value = on, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = { onClick() })
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        color = if (on) g.onAccent else g.text,
+        style = MaterialTheme.typography.labelLarge,
+        maxLines = 1,
+    )
 }
 
 private fun summary(p: LandXmlProject): String = buildList {

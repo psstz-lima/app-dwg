@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -182,11 +183,9 @@ fun RoadDialog(
                         FitRow() {
                             numField(rp.kValue, tr("K das curvas verticais")) { rp = rp.copy(kValue = it) }
                             OutlinedButton(enabled = axis != null, onClick = {
-                                // PVIs on the terrain every 100 m, a starting point to adjust.
                                 val a = axis!!
                                 val terrain = project.surfaces.firstOrNull { it.name == rp.terrain } ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) }
-                                val stas = (generateSequence(a.startStation) { it + 100.0 }.takeWhile { it < a.endStation } + a.endStation).toList()
-                                rp = rp.copy(pvis = stas.map { s -> Profile.Pvi(s, a.pointAt(s)?.let { terrain?.elevationAt(it) } ?: 0.0) })
+                                rp = rp.copy(pvis = terrainGradePvis(a) { terrain?.elevationAt(it) })
                             }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Gerar PVIs no terreno (a cada 100 m)")) }
                             if (axis?.profile != null) OutlinedButton(onClick = { rp = rp.copy(pvis = axis.profile!!.pvis) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Copiar greide do arquivo")) }
                         }
@@ -198,7 +197,10 @@ fun RoadDialog(
                             }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Sugerir greide")) }
                         }
                         vm.gradeSuggestions.forEach { g ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { rp = rp.copy(pvis = g.pvis) },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(if (g.kind == com.appdwg.core.GradeSuggestion.Kind.BALANCED) tr("Corte igual ao aterro") else tr("Menor movimento de terra"),
                                         style = MaterialTheme.typography.bodyMedium)
@@ -357,8 +359,10 @@ private fun SlopeEditor(title: String, r: SlopeRule, onChange: (SlopeRule) -> Un
 
 @Composable
 private fun RoadResult(r: CorridorResult, swell: Double, onServiceNote: () -> Unit, onServiceNotePdf: () -> Unit, onBulletin: () -> Unit) {
-    Text(tr("Eixo {0}: {1}, {2} seções", r.alignment.name, StationFormat.length(r.alignment.length), r.sections.size), style = MaterialTheme.typography.labelLarge)
-    Text(tr("Corte {0} · Aterro {1} · Saldo final (Brückner) {2}", StationFormat.volume(r.totalCut), StationFormat.volume(r.totalFill), StationFormat.volume(r.volumes.last().accumulated)))
+    SpecHeader(tr("Eixo {0}: {1}, {2} seções", r.alignment.name, StationFormat.length(r.alignment.length), r.sections.size))
+    SpecRow(tr("Corte"), StationFormat.volume(r.totalCut))
+    SpecRow(tr("Aterro"), StationFormat.volume(r.totalFill))
+    SpecRow(tr("Saldo"), StationFormat.volume(r.volumes.last().accumulated))
     Text(tr("Superfícies \"{0}\" (acabada) e \"{1} (terraplenagem)\" e o eixo com greide já estão no projeto: use Seção, Perfil e Comparar.", ROAD_LABEL, ROAD_LABEL),
         style = MaterialTheme.typography.bodySmall)
     FitRow() {
@@ -385,7 +389,10 @@ private fun RoadResult(r: CorridorResult, swell: Double, onServiceNote: () -> Un
     HorizontalDivider()
     Text(tr("Estaca · corte · aterro · acumulado"), style = MaterialTheme.typography.labelMedium)
     r.volumes.filterIndexed { i, _ -> i % maxOf(1, r.volumes.size / 40) == 0 || i == r.volumes.size - 1 }.forEach { row ->
-        Text("${StationFormat.estaca(row.station)} · ${f(row.cut, 1)} · ${f(row.fill, 1)} · ${f(row.accumulated, 1)}", style = MaterialTheme.typography.bodySmall)
+        SpecRow(
+            StationFormat.estaca(row.station),
+            StationFormat.volume(row.cut) + " · " + StationFormat.volume(row.fill) + " · " + StationFormat.volume(row.accumulated),
+        )
     }
 }
 
@@ -395,22 +402,20 @@ private fun HaulSummary(r: CorridorResult, swell: Double, onBulletin: () -> Unit
     val m = remember(r, swell) { com.appdwg.core.MassHaul.of(r.volumes, swell) }
     HorizontalDivider()
     Text(androidx.compose.ui.res.stringResource(R.string.haul_title), style = MaterialTheme.typography.labelLarge)
-    Text(androidx.compose.ui.res.stringResource(R.string.haul_summary, StationFormat.volume(m.hauled), haulMoment(m.moment), StationFormat.length(m.dmt, 0)),
-        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-    Text(androidx.compose.ui.res.stringResource(R.string.haul_local, StationFormat.volume(m.lateral), StationFormat.volume(m.spoil), StationFormat.volume(m.borrow)), style = MaterialTheme.typography.bodySmall)
+    FactLine(androidx.compose.ui.res.stringResource(R.string.haul_summary, StationFormat.volume(m.hauled), haulMoment(m.moment), StationFormat.length(m.dmt, 0)))
+    FactLine(androidx.compose.ui.res.stringResource(R.string.haul_local, StationFormat.volume(m.lateral), StationFormat.volume(m.spoil), StationFormat.volume(m.borrow)))
     if (m.bands.isNotEmpty()) {
         Text(androidx.compose.ui.res.stringResource(R.string.haul_bands), style = MaterialTheme.typography.labelMedium)
         m.bands.forEach { b ->
-            Text(androidx.compose.ui.res.stringResource(R.string.haul_band_row, b.label, StationFormat.volume(b.volume), StationFormat.length(if (b.volume > 0) b.moment / b.volume else 0.0, 0)),
-                style = MaterialTheme.typography.bodySmall)
+            FactLine(androidx.compose.ui.res.stringResource(R.string.haul_band_row, b.label, StationFormat.volume(b.volume), StationFormat.length(if (b.volume > 0) b.moment / b.volume else 0.0, 0)))
         }
     }
     if (m.waves.isNotEmpty()) {
         Text(androidx.compose.ui.res.stringResource(R.string.haul_waves), style = MaterialTheme.typography.labelMedium)
         val fwd = androidx.compose.ui.res.stringResource(R.string.haul_forward); val back = androidx.compose.ui.res.stringResource(R.string.haul_back)
         m.waves.take(40).forEach { w ->
-            Text(androidx.compose.ui.res.stringResource(R.string.haul_wave_row, StationFormat.estaca(w.start), StationFormat.estaca(w.end), StationFormat.volume(w.volume),
-                StationFormat.length(w.dmt, 0), if (w.forward) fwd else back), style = MaterialTheme.typography.bodySmall)
+            FactLine(androidx.compose.ui.res.stringResource(R.string.haul_wave_row, StationFormat.estaca(w.start), StationFormat.estaca(w.end), StationFormat.volume(w.volume),
+                StationFormat.length(w.dmt, 0), if (w.forward) fwd else back))
         }
     }
     OutlinedButton(onClick = onBulletin, modifier = Modifier.heightIn(min = 48.dp)) { Text(androidx.compose.ui.res.stringResource(R.string.haul_bulletin)) }

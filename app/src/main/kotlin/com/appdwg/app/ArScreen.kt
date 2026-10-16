@@ -374,30 +374,40 @@ private class ArCameraRenderer(private val context: Context, private val onFaile
     }
 
     private fun build(): Int {
-        val vertex = compile(GLES20.GL_VERTEX_SHADER, """
-            attribute vec4 aPos;
-            attribute vec2 aTex;
-            varying vec2 vTex;
-            void main() { gl_Position = aPos; vTex = aTex; }
-        """.trimIndent())
-        val fragment = compile(GLES20.GL_FRAGMENT_SHADER, """
-            #extension GL_OES_EGL_image_external : require
-            precision mediump float;
-            varying vec2 vTex;
-            uniform samplerExternalOES uTex;
-            void main() { gl_FragColor = texture2D(uTex, vTex); }
-        """.trimIndent())
+        val vertex = compile(GLES20.GL_VERTEX_SHADER, GlShaders.AR_VERTEX)
+        val fragment = compile(GLES20.GL_FRAGMENT_SHADER, GlShaders.AR_FRAGMENT)
+        if (vertex == 0 || fragment == 0) return 0
         val id = GLES20.glCreateProgram()
         GLES20.glAttachShader(id, vertex)
         GLES20.glAttachShader(id, fragment)
         GLES20.glLinkProgram(id)
+        val linked = IntArray(1)
+        GLES20.glGetProgramiv(id, GLES20.GL_LINK_STATUS, linked, 0)
+        val info = GLES20.glGetProgramInfoLog(id)
+        if (linked[0] == 0) {
+            android.util.Log.e("Gromatic", "AR program link failed:\n$info")
+            GLES20.glDeleteProgram(id)
+            return 0
+        }
+        if (info.isNotBlank()) android.util.Log.i("Gromatic", "AR program link:\n$info")
         return id
     }
 
     private fun compile(type: Int, source: String): Int {
         val id = GLES20.glCreateShader(type)
+        if (id == 0) {
+            android.util.Log.e("Gromatic", "AR glCreateShader failed")
+            return 0
+        }
         GLES20.glShaderSource(id, source)
         GLES20.glCompileShader(id)
+        val status = IntArray(1)
+        GLES20.glGetShaderiv(id, GLES20.GL_COMPILE_STATUS, status, 0)
+        if (status[0] == 0) {
+            android.util.Log.e("Gromatic", "AR shader compile failed:\n" + GLES20.glGetShaderInfoLog(id))
+            GLES20.glDeleteShader(id)
+            return 0
+        }
         return id
     }
 

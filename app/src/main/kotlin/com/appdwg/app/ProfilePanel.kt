@@ -73,6 +73,8 @@ fun ProfilePanel(
     editPvis: List<com.appdwg.core.Profile.Pvi>? = null,
     onPvis: (List<com.appdwg.core.Profile.Pvi>) -> Unit = {},
     onRecalc: () -> Unit = {},
+    /** Invert's crown, or another line in the same stations as [profile]. */
+    crown: DoubleArray? = null,
 ) {
     var selected by remember { mutableStateOf<Int?>(null) }
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
@@ -102,8 +104,7 @@ fun ProfilePanel(
                         OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation + 0.1) }) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("+" + StationFormat.decimal(0.1, 2)) }
                         OutlinedButton(onClick = { onPvis(editPvis.toMutableList().also { l -> l[i] = l[i].copy(elevation = l[i].elevation - 0.1) }) }, modifier = Modifier.heightIn(min = 48.dp)) { Text("−" + StationFormat.decimal(0.1, 2)) }
                         OutlinedButton(onClick = { onPvis(editPvis.filterIndexed { j, _ -> j != i }); selected = null }, enabled = editPvis.size > 2, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Remover PVI")) }
-                        Text("PVI ${i + 1}: ${StationFormat.estaca(editPvis[i].station)} · ${StationFormat.lengthValue(editPvis[i].elevation)}",
-                            style = MaterialTheme.typography.labelMedium)
+                        SpecRow("PVI ${i + 1}", StationFormat.estaca(editPvis[i].station) + " · " + StationFormat.length(editPvis[i].elevation, 3))
                         if (i > 0 && i < editPvis.size - 1) {
                             // Vertical curve length of this PVI; 0 takes it from K.
                             var lt by remember(i, editPvis[i].curveLength) { mutableStateOf(StationFormat.lengthValue(editPvis[i].curveLength, 1)) }
@@ -118,7 +119,7 @@ fun ProfilePanel(
                 }
                 OutlinedButton(onClick = onRecalc, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Recalcular estrada")) }
             }
-            ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected) { selected = it }
+            ProfileChart(profile, cursor, onCursor, range, Modifier.fillMaxWidth().weight(1f), editPvis, onPvis, selected, { selected = it }, crown)
         }
     }
 }
@@ -134,6 +135,7 @@ private fun ProfileChart(
     onPvis: (List<com.appdwg.core.Profile.Pvi>) -> Unit = {},
     selected: Int? = null,
     onSelect: (Int?) -> Unit = {},
+    crown: DoubleArray? = null,
 ) {
     // Mapping of the last drawing (left, right, top, bottom, zMin, zMax), so gestures can turn
     // touches into station and elevation; frozen while a PVI is dragged.
@@ -198,7 +200,7 @@ private fun ProfileChart(
     ) {
         val left = 64.dp.toPx()
         val right = size.width - 16.dp.toPx()
-        val top = 28.dp.toPx()
+        val top = 52.dp.toPx()
         val bottom = size.height - 24.dp.toPx()
         if (right <= left || bottom <= top) return@Canvas
         val i0 = ((s0 - p.start) / (p.end - p.start) * (p.stations.size - 1)).toInt().coerceIn(0, p.stations.size - 1)
@@ -207,6 +209,7 @@ private fun ProfileChart(
         for (i in i0..i1) {
             p.lines.forEach { l -> l.elevations[i].takeIf { !it.isNaN() }?.let(values::add) }
             p.design?.get(i)?.takeIf { !it.isNaN() }?.let(values::add)
+            crown?.getOrNull(i)?.takeIf { !it.isNaN() }?.let(values::add)
         }
         if (values.isEmpty()) {
             text(tr("Sem superfície nem greide neste trecho."), left, (top + bottom) / 2, fg)
@@ -257,7 +260,10 @@ private fun ProfileChart(
         }
         p.lines.forEachIndexed { k, l -> drawSeries(l.elevations, TERRAIN_COLORS[k % TERRAIN_COLORS.size], 3f) }
         p.design?.let { drawSeries(it, GRADE_COLOR, 3.5f) }
-        // PVIs with their station and, between them, the grade in percent.
+        crown?.let { drawSeries(it, Color(0xFF1565C0), 2.5f) }
+        // One grade label per reach, and never on top of the previous label.
+        var labelX = -1e9f
+        val labelGap = 72.dp.toPx()
         p.pvis.forEachIndexed { k, v ->
             if (v.station in s0..s1) {
                 drawCircle(GRADE_COLOR, if (editPvis != null) 10f else 6f, Offset(x(v.station), y(v.elevation)))
@@ -268,8 +274,12 @@ private fun ProfileChart(
                 val a = p.pvis[k - 1]
                 val mid = (a.station + v.station) / 2
                 if (mid in s0..s1 && v.station != a.station) {
-                    val g = (v.elevation - a.elevation) / (v.station - a.station) * 100
-                    text((if (g >= 0) "+" else "−") + StationFormat.decimal(abs(g), 2) + " %", x(mid) - 20f, y((a.elevation + v.elevation) / 2) - 12f, GRADE_COLOR, small = true)
+                    val lx = x(mid) - 20f
+                    if (lx >= labelX + labelGap) {
+                        val g = (v.elevation - a.elevation) / (v.station - a.station) * 100
+                        text((if (g >= 0) "+" else "−") + StationFormat.decimal(abs(g), 2) + " %", lx, y((a.elevation + v.elevation) / 2) - 12f, GRADE_COLOR, small = true)
+                        labelX = lx
+                    }
                 }
             }
         }
@@ -294,8 +304,28 @@ private fun ProfileChart(
         }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (s1 - s0))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)
-        text(parts.joinToString(" · "), left, 18.dp.toPx(), fg)
+        chartReadout(parts.joinToString(" · "), left, 16.dp.toPx(), size.width - left - 8.dp.toPx(), fg)
     }
+}
+
+internal fun DrawScope.chartReadout(t: String, x: Float, y: Float, maxWidth: Float, color: Color) {
+    val paint = Paint().apply {
+        isAntiAlias = true
+        textSize = 13.sp.toPx()
+        this.color = color.toArgb()
+    }
+    val width = maxWidth.coerceAtLeast(48f)
+    var line = ""
+    var yy = y
+    for (word in t.split(' ')) {
+        val trial = if (line.isEmpty()) word else "$line $word"
+        if (paint.measureText(trial) > width && line.isNotEmpty()) {
+            drawContext.canvas.nativeCanvas.drawText(line, x, yy, paint)
+            yy += paint.textSize * 1.2f
+            line = word
+        } else line = trial
+    }
+    if (line.isNotEmpty()) drawContext.canvas.nativeCanvas.drawText(line, x, yy, paint)
 }
 
 private fun DrawScope.text(t: String, x: Float, y: Float, color: Color, small: Boolean = false) {

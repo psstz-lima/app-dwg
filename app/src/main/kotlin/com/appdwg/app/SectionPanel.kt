@@ -88,6 +88,9 @@ fun SectionPanel(
     onHalfWidth: (Double) -> Unit,
     onClose: () -> Unit,
     modifier: Modifier,
+    /** Device and trench outlines in section coordinates (offset, elevation). */
+    deviceRing: List<com.appdwg.core.drainage.SectionPoint> = emptyList(),
+    trenchRing: List<com.appdwg.core.drainage.SectionPoint> = emptyList(),
 ) {
     // Taps on the panel must not reach the plan underneath.
     Card(modifier.pointerInput(Unit) { detectTapGestures { } }) {
@@ -122,7 +125,7 @@ fun SectionPanel(
             if (section == null) {
                 Text(tr("Sem seção nesta estaca."), Modifier.padding(16.dp))
             } else {
-                SectionChart(section, Modifier.fillMaxWidth().weight(1f))
+                SectionChart(section, Modifier.fillMaxWidth().weight(1f), deviceRing, trenchRing)
             }
         }
     }
@@ -159,7 +162,12 @@ private fun StationField(station: Double, onStation: (Double) -> Unit) {
 }
 
 @Composable
-private fun SectionChart(s: CrossSection, modifier: Modifier) {
+private fun SectionChart(
+    s: CrossSection,
+    modifier: Modifier,
+    deviceRing: List<com.appdwg.core.drainage.SectionPoint> = emptyList(),
+    trenchRing: List<com.appdwg.core.drainage.SectionPoint> = emptyList(),
+) {
     val fg = MaterialTheme.colorScheme.onSurface
     val grid = MaterialTheme.colorScheme.outlineVariant
     // Offset under the finger, for reading elevations; starts on the axis.
@@ -187,11 +195,12 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
     ) {
         val left = 64.dp.toPx()
         val right = size.width - 16.dp.toPx()
-        val top = 28.dp.toPx()
+        val top = 52.dp.toPx()
         val bottom = size.height - 24.dp.toPx()
         if (right <= left || bottom <= top) return@Canvas
 
-        val values = s.lines.flatMap { l -> l.elevations.filter { !it.isNaN() } } + listOfNotNull(s.design)
+        val values = s.lines.flatMap { l -> l.elevations.filter { !it.isNaN() } } + listOfNotNull(s.design) +
+            deviceRing.map { it.y } + trenchRing.map { it.y }
         if (values.isEmpty()) {
             text(tr("A seção não cruza nenhuma superfície."), left, (top + bottom) / 2, fg)
             return@Canvas
@@ -240,6 +249,15 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
             }
             drawPath(path, SECTION_COLORS[k % SECTION_COLORS.size], style = Stroke(width = 3f))
         }
+        fun ring(points: List<com.appdwg.core.drainage.SectionPoint>, color: Color, width: Float) {
+            if (points.size < 2) return
+            val path = Path()
+            points.forEachIndexed { i, p -> if (i == 0) path.moveTo(x(p.x), y(p.y)) else path.lineTo(x(p.x), y(p.y)) }
+            path.close()
+            drawPath(path, color, style = Stroke(width = width))
+        }
+        ring(trenchRing, Color(0xFF8D6E63), 2f)
+        ring(deviceRing, Color(0xFF1565C0), 3f)
         s.design?.let { d ->
             drawLine(DESIGN_COLOR, Offset(x(0.0) - 24f, y(d)), Offset(x(0.0) + 24f, y(d)), strokeWidth = 4f)
             drawCircle(DESIGN_COLOR, 6f, Offset(x(0.0), y(d)))
@@ -262,7 +280,7 @@ private fun SectionChart(s: CrossSection, modifier: Modifier) {
         s.cutFill?.let { parts += (if (it >= 0) tr("Aterro ") else tr("Corte ")) + StationFormat.length(abs(it), 3) }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (2 * halfWidth))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)
-        text(tr("Estaca {0} · ", StationFormat.estaca(s.station)) + parts.joinToString(" · "), left, 18.dp.toPx(), fg)
+        chartReadout(tr("Estaca {0} · ", StationFormat.estaca(s.station)) + parts.joinToString(" · "), left, 16.dp.toPx(), size.width - 8.dp.toPx(), fg)
     }
 }
 

@@ -13,7 +13,11 @@ class IdfEntry(val place: String, val state: String, val idf: Idf, val author: S
  */
 object IdfCatalog {
     val entries: List<IdfEntry> by lazy {
-        val stream = IdfCatalog::class.java.getResourceAsStream("idf/brasil.tsv") ?: return@lazy emptyList()
+        // Absolute path: R8 repackages this class, and a relative name would miss the table.
+        val path = "com/appdwg/core/idf/brasil.tsv"
+        val stream = IdfCatalog::class.java.classLoader?.getResourceAsStream(path)
+            ?: IdfCatalog::class.java.getResourceAsStream("/$path")
+            ?: return@lazy emptyList()
         stream.bufferedReader(Charsets.UTF_8).useLines { lines ->
             lines.filter { it.isNotBlank() && !it.startsWith("#") }.mapNotNull { line ->
                 val f = line.split('\t')

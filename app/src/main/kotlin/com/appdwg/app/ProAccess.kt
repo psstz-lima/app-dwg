@@ -4,8 +4,9 @@ import com.android.billingclient.api.Purchase
 
 /**
  * Every capability that stays closed until Gromatic Pro is active.
- * Free keeps the 2D plan, files up to [FreeLimits.MAX_FILE_BYTES], zoom, units, language and theme.
- * Pro opens the whole list: [ProAccess.allows] is true for every entry when Pro is active.
+ * Free keeps the 2D plan, files up to [FreeLimits.MAX_FILE_BYTES], zoom, units, language, theme
+ * and the drainage device library. Pro opens the whole list: [ProAccess.allows] is true for every
+ * entry when Pro is active. Placing a device and running its calculations is [ProFeature.DRAINAGE].
  */
 enum class ProFeature(val id: String, val label: String) {
     MEASURE("measure", "Medir área e comprimentos"),
@@ -22,6 +23,7 @@ enum class ProFeature(val id: String, val label: String) {
     ANALYSIS("analysis", "Análise e declividade"),
     ADVICE("advice", "Sugestões"),
     BASIN("basin", "Bacias"),
+    DRAINAGE("drainage", "Drenagem"),
     VOLUME("volume", "Volume"),
     AS_BUILT("as_built", "As-built"),
     MODELS("models", "Modelos"),

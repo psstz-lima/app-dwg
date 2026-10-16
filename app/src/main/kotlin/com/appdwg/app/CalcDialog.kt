@@ -81,7 +81,7 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
     fun results(points: List<Point2>) {
         points.forEachIndexed { i, p ->
             FitRow() {
-                Text(tr("Ponto{0}: E {1} · N {2}", if (points.size > 1) " ${i + 1}" else "", f3(p.x), f3(p.y)), style = MaterialTheme.typography.bodyLarge)
+                SpecRow(if (points.size > 1) tr("Ponto {0}", i + 1) else tr("Ponto"), "E ${f3(p.x)} · N ${f3(p.y)}")
                 OutlinedButton(onClick = {
                     val n = PointFile.nextNumber(vm.userPoints)
                     vm.savePoint(null, CogoPoint(n, "CALC", p.x, p.y, project.surfaces.firstNotNullOfOrNull { it.elevationAt(p) } ?: Double.NaN))
@@ -110,9 +110,18 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                             val za = a.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(a.first) }
                             val zb = b.second ?: project.surfaces.firstNotNullOfOrNull { it.elevationAt(b.first) }
                             val inv = Cogo.inverse(a.first, b.first, za, zb)
-                            Text(tr("Distância {0} {1} · Azimute {2} ({3}°)", f3(inv.distance), StationFormat.lengthUnit, Measure.dms(inv.azimuth), StationFormat.decimal(inv.azimuth, 6)))
-                            Text("ΔE ${f3(b.first.x - a.first.x)} · ΔN ${f3(b.first.y - a.first.y)}" +
-                                (inv.rise?.let { tr(" · Desnível {0} · Inclinada {1} · Rampa {2} %", f3(it), f3(inv.slopeDistance!!), StationFormat.decimal(inv.gradePercent!!, 2)) } ?: ""))
+                            SpecHeader(tr("Inverso"))
+                            SpecRow(tr("Distância"), StationFormat.length(inv.distance, 3))
+                            SpecRow(tr("Azimute"), Measure.dms(inv.azimuth) + " (" + StationFormat.decimal(inv.azimuth, 6) + "°)")
+                            SpecRow("ΔE", f3(b.first.x - a.first.x))
+                            SpecRow("ΔN", f3(b.first.y - a.first.y))
+                            inv.rise?.let { rise ->
+                                SpecRow(tr("Desnível"), (if (rise >= 0) "+" else "−") + StationFormat.length(kotlin.math.abs(rise), 3))
+                                inv.slopeDistance?.let { SpecRow(tr("Comprimento inclinado"), StationFormat.length(it, 3)) }
+                                inv.gradePercent?.let { grade ->
+                                    SpecRow(tr("Inclinação"), (if (grade >= 0) "+" else "−") + StationFormat.decimal(kotlin.math.abs(grade), 2) + " %")
+                                }
+                            }
                         }
                     }
                     CalcTab.RADIATE -> {
@@ -149,17 +158,20 @@ fun CalcDialog(vm: ProjectViewModel, project: LandXmlProject, onDismiss: () -> U
                         val list = areaPts.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { resolve(it, project, pts) }
                         if (list.size >= 2 && list.all { it != null }) {
                             val m = Measure.of(list.map { it!!.first }, list.map { it!!.second })
-                            Text(tr("Perímetro {0} {1}", m.perimeter?.let { f3(it) } ?: f3(m.length), StationFormat.lengthUnit) + (m.area?.let { tr(" · Área {0}", Measure.area(it)) } ?: ""))
+                            SpecRow(tr("Perímetro"), StationFormat.length(m.perimeter ?: m.length, 3))
+                            m.area?.let { SpecRow(tr("Área"), Measure.area(it)) }
                         } else if (list.isNotEmpty()) Text(tr("Algum ponto não foi encontrado."), style = MaterialTheme.typography.bodySmall)
                     }
                     CalcTab.CONVERT -> {
                         OutlinedTextField(conv, { conv = it }, label = { Text(tr("Valor (estaca \"12+5,4\", metros, ângulo \"45 30 15\", rampa %)")) }, modifier = Modifier.fillMaxWidth())
                         val parts = conv.trim().split(Regex("[\\s°'\"]+")).mapNotNull { num(it) }
-                        StationFormat.parse(conv)?.let { m -> Text(tr("Estaca {0} = {1}", StationFormat.estaca(m), StationFormat.length(m, 3))) }
+                        StationFormat.parse(conv)?.let { m -> SpecRow(tr("Estaca"), StationFormat.estaca(m) + " = " + StationFormat.length(m, 3)) }
                         if (parts.isNotEmpty()) {
                             val deg = Cogo.fromDms(parts[0], parts.getOrElse(1) { 0.0 }, parts.getOrElse(2) { 0.0 })
-                            Text(tr("Ângulo: {0}° = {1} = {2} gon", StationFormat.decimal(deg, 6), Measure.dms(deg), StationFormat.decimal(Cogo.toGon(deg), 6)))
-                            if (parts.size == 1 && parts[0] != 0.0) Text(tr("Rampa {0} % = talude {1}:1 (H:V)", StationFormat.decimal(parts[0], 3), StationFormat.decimal(Cogo.percentToRatio(parts[0]), 3)))
+                            SpecRow(tr("Ângulo"), StationFormat.decimal(deg, 6) + "° = " + Measure.dms(deg) + " = " + StationFormat.decimal(Cogo.toGon(deg), 6) + " gon")
+                            if (parts.size == 1 && parts[0] != 0.0) {
+                                SpecRow(tr("Inclinação"), StationFormat.decimal(parts[0], 3) + " % = " + StationFormat.decimal(Cogo.percentToRatio(parts[0]), 3) + ":1")
+                            }
                         }
                     }
                 }

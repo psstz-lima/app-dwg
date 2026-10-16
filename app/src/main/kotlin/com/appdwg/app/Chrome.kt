@@ -30,13 +30,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
@@ -100,11 +105,13 @@ fun AppMark(modifier: Modifier = Modifier, description: String = "Gromatic") {
 /** Button in the theme's style: filled with the accent, or outlined/tonal. */
 /** [outlined] keeps a border in every theme (Terra draws its buttons without one otherwise). */
 @Composable
-fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null, description: String? = null) {
+fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null, description: String? = null, solid: Boolean = false) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val bg = when {
         primary -> g.accent
+        // Over the drawing or a picture: an opaque card, so the label stays readable.
+        solid -> g.card.copy(alpha = 1f)
         g.choice == ThemeChoice.EARTH -> g.chip
         else -> Color.Transparent
     }
@@ -157,6 +164,51 @@ fun FitRow(
         verticalArrangement = Arrangement.spacedBy(spacedBy),
         itemVerticalAlignment = verticalAlignment,
     ) { content(this) }
+}
+
+/** Section title above a spec table. */
+@Composable
+fun SpecHeader(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier.padding(top = 8.dp, bottom = 2.dp),
+        style = MaterialTheme.typography.titleSmall,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** Label and value on one card row: the shared look of results, measurements and properties. */
+@Composable
+fun SpecRow(label: String, value: String, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (g.dark) g.card else g.chip)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = g.muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        if (value.isNotEmpty()) Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** A result sentence on the same card as [SpecRow], when the line is not a label/value pair. */
+@Composable
+fun FactLine(text: String, modifier: Modifier = Modifier) {
+    val g = LocalG.current
+    Text(
+        text,
+        modifier.fillMaxWidth().padding(vertical = 2.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (g.dark) g.card else g.chip)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        maxLines = 6,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /** Icon button for a crowded bar. The icon does not grow with the font scale; the description does the talking. */
@@ -285,6 +337,49 @@ fun ToolBar(tools: List<RailTool>, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * A card the finger can drag, kept inside [modifier]'s box. [at] is remembered by the caller.
+ * NaN means "not placed yet": the card starts centred on the bottom edge.
+ */
+@Composable
+fun DraggableCard(
+    at: androidx.compose.ui.geometry.Offset,
+    onAt: (androidx.compose.ui.geometry.Offset) -> Unit,
+    parentW: Float,
+    parentH: Float,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var widthPx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(1) }
+    var heightPx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(1) }
+    Box(
+        modifier
+            .onSizeChanged { widthPx = it.width; heightPx = it.height }
+            .offset {
+                val maxX = (parentW - widthPx).coerceAtLeast(0f)
+                val maxY = (parentH - heightPx).coerceAtLeast(0f)
+                val x = (if (at.x.isNaN()) maxX / 2f else at.x).coerceIn(0f, maxX)
+                val y = (if (at.y.isNaN()) maxY else at.y).coerceIn(0f, maxY)
+                androidx.compose.ui.unit.IntOffset(x.roundToInt(), y.roundToInt())
+            }
+            .pointerInput(parentW, parentH) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    val maxX = (parentW - size.width).coerceAtLeast(0f)
+                    val maxY = (parentH - size.height).coerceAtLeast(0f)
+                    val x0 = if (at.x.isNaN()) maxX / 2f else at.x
+                    val y0 = if (at.y.isNaN()) maxY else at.y
+                    onAt(
+                        androidx.compose.ui.geometry.Offset(
+                            (x0 + drag.x).coerceIn(0f, maxX),
+                            (y0 + drag.y).coerceIn(0f, maxY),
+                        ),
+                    )
+                }
+            },
+    ) { content() }
+}
+
 /** Vertical tool rail with icon and label, scrolling when the tools do not fit. */
 @Composable
 fun ToolRail(tools: List<RailTool>, modifier: Modifier = Modifier) {
@@ -303,7 +398,7 @@ fun ToolRail(tools: List<RailTool>, modifier: Modifier = Modifier) {
                     Offset(0f, size.height - h), Size(size.width, h))
                 if (scroll.canScrollBackward) drawRect(Brush.verticalGradient(listOf(g.rail, Color.Transparent), 0f, h), Offset.Zero, Size(size.width, h))
             }
-            .verticalScroll(scroll).padding(vertical = 8.dp),
+            .verticalScroll(scroll).padding(top = 48.dp, bottom = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
