@@ -10,7 +10,7 @@ class CulvertTest {
     @Test
     fun aOneMetreBoxMatchesInletAndOutletControl() {
         val barrel = CulvertBarrel(CulvertBarrel.Shape.BOX, 1.0, 1.0, 1)
-        val head = Culvert.headwater(barrel, 1.0, 20.0, 0.01, 0.5, allowable = 1.5, manningN = 0.013)
+        val head = Culvert.headwater(barrel, 1.0, 20.0, 0.01, 0.5, 1.5)
         assertEquals(0.95, head.inlet, 0.03)
         assertEquals(0.58, head.outlet, 0.03)
         assertEquals(head.inlet, head.headwater, 1e-9)

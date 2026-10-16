@@ -29,6 +29,16 @@ class ThalwegTest {
     }
 
     @Test
+    fun theBarrelCrossesTheAlignment() {
+        val road = listOf(Point2(0.0, 0.0), Point2(100.0, 0.0))
+        val (a, b) = ThalwegCulverts.barrelAcross(road, 40.0, 0.0)
+        assertEquals(40.0, a.x, 1e-9)
+        assertEquals(40.0, b.x, 1e-9)
+        assertEquals(-7.5, a.y, 1e-9)
+        assertEquals(7.5, b.y, 1e-9)
+    }
+
+    @Test
     fun aTubularCulvertGetsAClosedPipeSection() {
         val section = CatalogLoader.bundled().device("BSTC 60")!!.section!!
         val expected = PI * 0.3 * 0.3

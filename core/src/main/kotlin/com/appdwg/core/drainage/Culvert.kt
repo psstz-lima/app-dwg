@@ -61,12 +61,10 @@ object Culvert {
         slope: Double,
         tailwater: Double,
         allowable: Double,
-        manningN: Double = 0.013,
-        entranceLoss: Double = KE_SQUARE,
     ): CulvertHead {
         val q = discharge.coerceAtLeast(0.0) / barrel.barrels.coerceAtLeast(1)
         val inlet = inletControl(barrel, q, slope)
-        val outlet = outletControl(barrel, q, length, slope, tailwater, manningN, entranceLoss)
+        val outlet = outletControl(barrel, q, length, slope, tailwater, 0.013, KE_SQUARE)
         val hw = maxOf(inlet, outlet)
         val velocity = if (barrel.area > 0.0) q / barrel.area else 0.0
         return CulvertHead(inlet, outlet, hw, velocity, hw > allowable + 1e-6)
@@ -79,11 +77,10 @@ object Culvert {
         slope: Double,
         tailwater: Double,
         allowable: Double,
-        manningN: Double = 0.013,
     ): Pair<CulvertBarrel, CulvertHead> {
-        var best = CANDIDATES.first() to headwater(CANDIDATES.first(), discharge, length, slope, tailwater, allowable, manningN)
+        var best = CANDIDATES.first() to headwater(CANDIDATES.first(), discharge, length, slope, tailwater, allowable)
         for (barrel in CANDIDATES) {
-            val head = headwater(barrel, discharge, length, slope, tailwater, allowable, manningN)
+            val head = headwater(barrel, discharge, length, slope, tailwater, allowable)
             if (!head.overtopped) return barrel to head
             if (head.headwater < best.second.headwater) best = barrel to head
         }

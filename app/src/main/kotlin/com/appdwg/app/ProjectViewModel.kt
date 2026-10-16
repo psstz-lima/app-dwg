@@ -1169,7 +1169,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         minutes: Double,
         onEmpty: () -> Unit,
     ) {
-        val grid = flowGrid
+        val grid = basinFlow?.second ?: flowGrid
         if (grid == null || line.size < 2) {
             onEmpty()
             return
@@ -1180,14 +1180,14 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     com.appdwg.core.Hydrology.crossings(grid, line, minArea),
                     runoff, idf, years, minutes,
                 ).map { crossing ->
-                    val half = 7.5
+                    val (start, end) = com.appdwg.core.drainage.ThalwegCulverts.barrelAcross(line, crossing.x, crossing.y)
                     com.appdwg.core.drainage.PlacedDevice.Linear(
                         java.util.UUID.randomUUID().toString(),
                         bstcCode(crossing.barrel.rise),
                         com.appdwg.core.drainage.PathSource.POLYLINE,
                         null,
-                        listOf(crossing.x - half, crossing.x + half),
-                        listOf(crossing.y, crossing.y),
+                        listOf(start.x, end.x),
+                        listOf(start.y, end.y),
                         com.appdwg.core.drainage.DeviceSide.AXIS,
                         0.0, null, null,
                         com.appdwg.core.drainage.GradeSpec(com.appdwg.core.drainage.GradeMode.SLOPE, z0 = 0.0, slope = -0.01),
