@@ -195,7 +195,7 @@ private fun SectionChart(
     ) {
         val left = 64.dp.toPx()
         val right = size.width - 16.dp.toPx()
-        val top = 28.dp.toPx()
+        val top = 52.dp.toPx()
         val bottom = size.height - 24.dp.toPx()
         if (right <= left || bottom <= top) return@Canvas
 
@@ -280,7 +280,7 @@ private fun SectionChart(
         s.cutFill?.let { parts += (if (it >= 0) tr("Aterro ") else tr("Corte ")) + StationFormat.length(abs(it), 3) }
         val exaggeration = ((bottom - top) / (zMax - zMin)) / ((right - left) / (2 * halfWidth))
         parts += "V/H ×" + StationFormat.decimal(exaggeration, 1)
-        text(tr("Estaca {0} · ", StationFormat.estaca(s.station)) + parts.joinToString(" · "), left, 18.dp.toPx(), fg)
+        chartReadout(tr("Estaca {0} · ", StationFormat.estaca(s.station)) + parts.joinToString(" · "), left, 16.dp.toPx(), size.width - 8.dp.toPx(), fg)
     }
 }
 

@@ -453,18 +453,7 @@ object Sweep {
     }
 
     /** True when the edge that closes the ring is the free water surface, not a wall. */
-    private fun freeSurface(ring: List<SectionPoint>): Boolean {
-        if (ring.size < 3) return false
-        val a = ring.last()
-        val b = ring.first()
-        val dx = abs(b.x - a.x)
-        val dy = abs(b.y - a.y)
-        val top = ring.maxOf { it.y }
-        val mid = (a.y + b.y) / 2.0
-        val height = top - ring.minOf { it.y }
-        val nearTop = mid >= top - 0.02 || mid >= top - height * 0.15
-        return nearTop && dx > 1e-3 && dx >= dy
-    }
+    private fun freeSurface(ring: List<SectionPoint>): Boolean = DeviceLook.waterSurface(ring)
 
     private fun local(ox: Double, oy: Double, lx: Double, ly: Double, dx: Double, dy: Double, skew: Double): Point2 {
         val sx = lx + ly * skew
@@ -802,6 +791,12 @@ data class DeviceTakeoff(
         cutDepth = listOf(cutDepth, other.cutDepth).filter { it.isFinite() }.maxOrNull() ?: Double.NaN,
         drawnTriangles = drawnTriangles + other.drawnTriangles,
     )
+
+    /**
+     * Earth shown for this row. A buried device's cut is [trench]; a surface device keeps the
+     * catalog excavation and has no trench. Adding the two fields would count a buried device twice.
+     */
+    fun earthMoved(): Double = if (trench > 1e-9) trench else excavation
 }
 
 object DrainageTakeoff {
@@ -835,7 +830,12 @@ object DrainageTakeoff {
         return DeviceTakeoff(id, device.code, if (point) 0.0 else length, concrete, excavation, formwork, formworkKnown)
     }
 
-    fun total(rows: List<DeviceTakeoff>): DeviceTakeoff = rows.fold(DeviceTakeoff("", "", 0.0, 0.0, 0.0, 0.0, false), DeviceTakeoff::plus)
+    fun total(rows: List<DeviceTakeoff>): DeviceTakeoff {
+        val folded = rows.fold(DeviceTakeoff("", "", 0.0, 0.0, 0.0, 0.0, false), DeviceTakeoff::plus)
+        // excavation holds every device's shown cut. trench stays 0 so a later "trench else excavation"
+        // still sees the surface devices that a summed trench would hide.
+        return folded.copy(excavation = rows.sumOf { it.earthMoved() }, trench = 0.0)
+    }
 }
 
 /** Arrows along [invert], capped so a long device does not draw one per metre. */

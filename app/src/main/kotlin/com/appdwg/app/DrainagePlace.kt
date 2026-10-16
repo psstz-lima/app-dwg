@@ -24,16 +24,16 @@ import com.appdwg.core.drainage.Subsurface
 import com.appdwg.core.drainage.resolveSection
 import com.appdwg.core.tr
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -256,7 +256,11 @@ fun DrainagePlaceCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Scroll only engages when this card is given a finite height (the phone test, a short dock).
+    // The tablet dock already measures the card with unbounded height, so this scroll stays at rest
+    // and the parent column is the one that moves. Buttons then keep their 48 dp target instead of
+    // being crushed by the leftover height FlowRow would otherwise pass down.
+    Column(modifier.padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(tr("Lançar {0}", draft.code), style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(draft.name, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (draft.point) {
@@ -270,9 +274,9 @@ fun DrainagePlaceCard(
         } else {
             Text(tr("Caminho"), style = MaterialTheme.typography.labelLarge)
             ChoiceRow {
-                Choice(draft.source == PathSource.POLYLINE, tr("Desenhar")) { onChange(draft.copy(source = PathSource.POLYLINE)) }
-                Choice(draft.source == PathSource.ALIGNMENT, tr("Eixo")) { onChange(draft.copy(source = PathSource.ALIGNMENT)) }
-                Choice(draft.source == PathSource.LINE, tr("Linha existente")) { onChange(draft.copy(source = PathSource.LINE)) }
+                PlaceChip(draft.source == PathSource.POLYLINE, tr("Desenhar")) { onChange(draft.copy(source = PathSource.POLYLINE)) }
+                PlaceChip(draft.source == PathSource.ALIGNMENT, tr("Eixo")) { onChange(draft.copy(source = PathSource.ALIGNMENT)) }
+                PlaceChip(draft.source == PathSource.LINE, tr("Linha existente")) { onChange(draft.copy(source = PathSource.LINE)) }
             }
             when (draft.source) {
                 PathSource.POLYLINE -> Text(
@@ -283,7 +287,7 @@ fun DrainagePlaceCard(
                 PathSource.ALIGNMENT -> {
                     if (alignments.isEmpty()) Text(tr("Nenhum eixo no projeto."), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     ChoiceRow {
-                        for (name in alignments) Choice(draft.alignment == name, name) {
+                        for (name in alignments) PlaceChip(draft.alignment == name, name) {
                             onChange(draft.copy(alignment = name, profile = draft.profile ?: name))
                         }
                     }
@@ -295,9 +299,9 @@ fun DrainagePlaceCard(
             }
             Text(tr("Lado"), style = MaterialTheme.typography.labelLarge)
             ChoiceRow {
-                Choice(draft.side == DeviceSide.LEFT, tr("Esquerda")) { onChange(draft.copy(side = DeviceSide.LEFT)) }
-                Choice(draft.side == DeviceSide.AXIS, tr("No eixo")) { onChange(draft.copy(side = DeviceSide.AXIS)) }
-                Choice(draft.side == DeviceSide.RIGHT, tr("Direita")) { onChange(draft.copy(side = DeviceSide.RIGHT)) }
+                PlaceChip(draft.side == DeviceSide.LEFT, tr("Esquerda")) { onChange(draft.copy(side = DeviceSide.LEFT)) }
+                PlaceChip(draft.side == DeviceSide.AXIS, tr("No eixo")) { onChange(draft.copy(side = DeviceSide.AXIS)) }
+                PlaceChip(draft.side == DeviceSide.RIGHT, tr("Direita")) { onChange(draft.copy(side = DeviceSide.RIGHT)) }
             }
             NumberField(tr("Afastamento (m)"), draft.offset) { onChange(draft.copy(offset = it)) }
             NumberField(tr("Estaca inicial"), draft.start) { onChange(draft.copy(start = it)) }
@@ -305,14 +309,14 @@ fun DrainagePlaceCard(
         }
         Text(tr("Cota"), style = MaterialTheme.typography.labelLarge)
         ChoiceRow {
-            Choice(draft.grade == GradeMode.HYDRAULIC, tr("Greide hidráulico")) { onChange(draft.copy(grade = GradeMode.HYDRAULIC)) }
-            Choice(draft.grade == GradeMode.SURFACE_TOP, tr("Terreno (topo)")) { onChange(draft.copy(grade = GradeMode.SURFACE_TOP)) }
-            Choice(draft.grade == GradeMode.SURFACE_INVERT, tr("Fundo no terreno")) { onChange(draft.copy(grade = GradeMode.SURFACE_INVERT)) }
+            PlaceChip(draft.grade == GradeMode.HYDRAULIC, tr("Greide hidráulico")) { onChange(draft.copy(grade = GradeMode.HYDRAULIC)) }
+            PlaceChip(draft.grade == GradeMode.SURFACE_TOP, tr("Terreno (topo)")) { onChange(draft.copy(grade = GradeMode.SURFACE_TOP)) }
+            PlaceChip(draft.grade == GradeMode.SURFACE_INVERT, tr("Fundo no terreno")) { onChange(draft.copy(grade = GradeMode.SURFACE_INVERT)) }
             if (!draft.point) {
-                Choice(draft.grade == GradeMode.FIXED, tr("Greide fixo")) { onChange(draft.copy(grade = GradeMode.FIXED)) }
-                Choice(draft.grade == GradeMode.SLOPE, tr("Declividade constante")) { onChange(draft.copy(grade = GradeMode.SLOPE)) }
+                PlaceChip(draft.grade == GradeMode.FIXED, tr("Greide fixo")) { onChange(draft.copy(grade = GradeMode.FIXED)) }
+                PlaceChip(draft.grade == GradeMode.SLOPE, tr("Declividade constante")) { onChange(draft.copy(grade = GradeMode.SLOPE)) }
             }
-            Choice(draft.grade == GradeMode.PROFILE, tr("Acompanhar greide")) { onChange(draft.copy(grade = GradeMode.PROFILE)) }
+            PlaceChip(draft.grade == GradeMode.PROFILE, tr("Acompanhar greide")) { onChange(draft.copy(grade = GradeMode.PROFILE)) }
         }
         when (draft.grade) {
             GradeMode.SURFACE_INVERT -> NumberField(tr("Profundidade (m)"), draft.depth) { onChange(draft.copy(depth = it)) }
@@ -327,7 +331,7 @@ fun DrainagePlaceCard(
             GradeMode.PROFILE -> {
                 if (profiles.isEmpty()) Text(tr("Nenhum greide no projeto."), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 ChoiceRow {
-                    for (name in profiles) Choice(draft.profile == name, name) { onChange(draft.copy(profile = name)) }
+                    for (name in profiles) PlaceChip(draft.profile == name, name) { onChange(draft.copy(profile = name)) }
                 }
             }
             GradeMode.HYDRAULIC -> {
@@ -335,9 +339,9 @@ fun DrainagePlaceCard(
                 NumberField(tr("Cobertura mínima (m)"), draft.minCover) { onChange(draft.copy(minCover = it)) }
                 NumberField(tr("Profundidade máxima (m)"), draft.maxDepth) { onChange(draft.copy(maxDepth = it)) }
                 ChoiceRow {
-                    Choice(draft.buried, tr("Enterrado")) { onChange(draft.copy(buried = !draft.buried)) }
-                    Choice(draft.flowAuto, tr("Fluxo automático")) { onChange(draft.copy(flowAuto = !draft.flowAuto)) }
-                    if (!draft.flowAuto) Choice(draft.flowToStart, tr("Fluxo para o início")) { onChange(draft.copy(flowToStart = !draft.flowToStart)) }
+                    PlaceChip(draft.buried, tr("Enterrado")) { onChange(draft.copy(buried = !draft.buried)) }
+                    PlaceChip(draft.flowAuto, tr("Fluxo automático")) { onChange(draft.copy(flowAuto = !draft.flowAuto)) }
+                    if (!draft.flowAuto) PlaceChip(draft.flowToStart, tr("Fluxo para o início")) { onChange(draft.copy(flowToStart = !draft.flowToStart)) }
                 }
             }
             GradeMode.SURFACE_TOP -> Unit
@@ -352,9 +356,9 @@ fun DrainagePlaceCard(
             }
         }
         ChoiceRow {
-            if (!draft.point && draft.points.isNotEmpty()) Choice(false, tr("Desfazer")) { onUndoPoint() }
-            Choice(false, tr("Cancelar")) { onCancel() }
-            Choice(true, tr("Concluir")) { onCommit() }
+            if (!draft.point && draft.points.isNotEmpty()) PlaceChip(false, tr("Desfazer")) { onUndoPoint() }
+            PlaceChip(false, tr("Cancelar")) { onCancel() }
+            PlaceChip(true, tr("Concluir")) { onCommit() }
         }
     }
 }
@@ -371,19 +375,25 @@ fun DrainagePickBar(
     onMore: () -> Unit,
     modifier: Modifier = Modifier,
     finishLabel: String = tr("Concluir"),
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     Column(modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(detail, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (canUndo) Choice(false, tr("Desfazer")) { onUndo() }
-            Choice(true, finishLabel) { onFinish() }
-            Choice(false, tr("Cancelar")) { onCancel() }
-            Choice(false, tr("Mais")) { onMore() }
+        // Desfazer stays in the row even before the first point, so Concluir does not jump.
+        // A selected device offers Editar and Excluir. The buttons wrap instead of clipping Mais.
+        ActionWrap {
+            if (onEdit != null || onDelete != null) {
+                PlaceChip(true, finishLabel) { onFinish() }
+                if (onEdit != null) PlaceChip(false, tr("Editar")) { onEdit() }
+                if (onDelete != null) PlaceChip(false, tr("Excluir")) { onDelete() }
+            } else {
+                PlaceChip(false, tr("Desfazer"), enabled = canUndo) { if (canUndo) onUndo() }
+                PlaceChip(true, finishLabel) { onFinish() }
+                PlaceChip(false, tr("Cancelar")) { onCancel() }
+            }
+            PlaceChip(false, tr("Mais")) { onMore() }
         }
     }
 }
@@ -426,7 +436,7 @@ fun DrainageSelectionCard(
     onOpenProfile: (() -> Unit)? = null,
     onOpenSection: (() -> Unit)? = null,
 ) {
-    Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.padding(12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(name, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (simplified) Text(tr("Geometria simplificada"), maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -434,8 +444,8 @@ fun DrainageSelectionCard(
         if (!isPro) {
             Text(tr("O Pro libera o lançamento e os cálculos."), maxLines = 3, overflow = TextOverflow.Ellipsis)
             ChoiceRow {
-                Choice(true, tr("Conhecer o Gromatic Pro…")) { onPro() }
-                Choice(false, tr("Fechar")) { onClose() }
+                PlaceChip(true, tr("Conhecer o Gromatic Pro…")) { onPro() }
+                PlaceChip(false, tr("Fechar")) { onClose() }
             }
             return
         }
@@ -451,11 +461,11 @@ fun DrainageSelectionCard(
         if (onSoil != null && soil != null) {
             Text(tr("Solo da saída"), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             ChoiceRow {
-                Choice(soil == OutletSoil.SILT, tr("Silte")) { onSoil(OutletSoil.SILT) }
-                Choice(soil == OutletSoil.SAND, tr("Areia")) { onSoil(OutletSoil.SAND) }
-                Choice(soil == OutletSoil.CLAY, tr("Argila")) { onSoil(OutletSoil.CLAY) }
-                Choice(soil == OutletSoil.GRAVEL, tr("Pedregulho")) { onSoil(OutletSoil.GRAVEL) }
-                Choice(soil == OutletSoil.ROCK, tr("Rocha")) { onSoil(OutletSoil.ROCK) }
+                PlaceChip(soil == OutletSoil.SILT, tr("Silte")) { onSoil(OutletSoil.SILT) }
+                PlaceChip(soil == OutletSoil.SAND, tr("Areia")) { onSoil(OutletSoil.SAND) }
+                PlaceChip(soil == OutletSoil.CLAY, tr("Argila")) { onSoil(OutletSoil.CLAY) }
+                PlaceChip(soil == OutletSoil.GRAVEL, tr("Pedregulho")) { onSoil(OutletSoil.GRAVEL) }
+                PlaceChip(soil == OutletSoil.ROCK, tr("Rocha")) { onSoil(OutletSoil.ROCK) }
             }
         }
         protection?.let { Text(it, maxLines = 4, overflow = TextOverflow.Ellipsis) }
@@ -463,23 +473,23 @@ fun DrainageSelectionCard(
         if (onPhase != null) {
             Text(tr("Fase"), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             ChoiceRow {
-                Choice(phase <= 0, tr("Sem fase")) { onPhase(0) }
-                for (n in 1..4) Choice(phase == n, n.toString()) { onPhase(n) }
+                PlaceChip(phase <= 0, tr("Sem fase")) { onPhase(0) }
+                for (n in 1..4) PlaceChip(phase == n, n.toString()) { onPhase(n) }
             }
         }
         if (onPhaseThrough != null) {
             Text(tr("Ver até a fase"), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             ChoiceRow {
-                Choice(phaseThrough <= 0, tr("Todas")) { onPhaseThrough(0) }
-                for (n in 1..4) Choice(phaseThrough == n, n.toString()) { onPhaseThrough(n) }
+                PlaceChip(phaseThrough <= 0, tr("Todas")) { onPhaseThrough(0) }
+                for (n in 1..4) PlaceChip(phaseThrough == n, n.toString()) { onPhaseThrough(n) }
             }
         }
         ChoiceRow {
-            Choice(false, tr("Editar")) { onEdit() }
-            Choice(moving, tr("Mover")) { onMove() }
-            Choice(false, tr("Apagar")) { onDelete() }
-            if (canUndo) Choice(false, tr("Desfazer")) { onUndo() }
-            Choice(false, tr("Fechar")) { onClose() }
+            PlaceChip(false, tr("Editar")) { onEdit() }
+            PlaceChip(moving, tr("Mover")) { onMove() }
+            PlaceChip(false, tr("Apagar")) { onDelete() }
+            if (canUndo) PlaceChip(false, tr("Desfazer")) { onUndo() }
+            PlaceChip(false, tr("Fechar")) { onClose() }
         }
     }
 }
@@ -491,7 +501,7 @@ private fun BasinLink(onLink: (String, String) -> Unit) {
     NumberField(tr("Área da bacia (m²)"), area) { area = it }
     NumberField(tr("Tempo de concentração (min)"), minutes) { minutes = it }
     ChoiceRow {
-        Choice(true, tr("Ligar bacia")) { onLink(area, minutes) }
+        PlaceChip(true, tr("Ligar bacia")) { onLink(area, minutes) }
     }
 }
 
@@ -499,19 +509,22 @@ private fun BasinLink(onLink: (String, String) -> Unit) {
 private fun TakeoffLines(title: String, row: DeviceTakeoff) {
     SpecHeader(title)
     if (row.length > 0.05) SpecRow(tr("Comprimento"), StationFormat.length(row.length, 2))
-    else SpecRow(tr("Unidades"), "1")
+    else SpecRow(tr("Pontual"), "1")
     if (row.concrete > 0.0) SpecRow(tr("Concreto"), StationFormat.volume(row.concrete, 3))
-    val dig = if (row.trench > 0.0) row.trench else row.excavation
+    val dig = row.earthMoved()
     if (dig > 0.0) SpecRow(tr("Escavação"), StationFormat.volume(dig, 3))
     if (row.backfill > 0.0) SpecRow(tr("Reaterro"), StationFormat.volume(row.backfill, 3))
     if (row.bedding > 0.0) SpecRow(tr("Berço"), StationFormat.volume(row.bedding, 3))
     if (row.spoil > 0.0) SpecRow(tr("Bota-fora"), StationFormat.volume(row.spoil, 3))
     if (row.fill > 0.0) SpecRow(tr("Aterro"), StationFormat.volume(row.fill, 3))
     if (row.formworkKnown) SpecRow(tr("Formas"), StationFormat.area(row.formwork, 3))
-    if (row.length > 0.05 && row.trench > 0.0) {
-        SpecRow(tr("Escavação por metro"), StationFormat.volume(row.trench / row.length, 3))
+    if (row.length > 0.05 && dig > 0.0) {
+        SpecRow(tr("Escavação por metro"), StationFormat.volume(dig / row.length, 3))
     }
-    if (row.shoring) FactLine(tr("Escoramento acima de 1,25 m"))
+    if (row.shoring) {
+        val depth = if (row.cutDepth.isFinite()) StationFormat.length(row.cutDepth, 2) else tr("sim")
+        SpecRow(tr("Escoramento acima de 1,25 m"), depth)
+    }
     if (row.tooDeep && row.cutDepth.isFinite()) {
         FactLine(tr("A vala passa de {0}: prever bombeamento ou queda.", StationFormat.length(row.cutDepth, 2)))
     }
@@ -532,11 +545,19 @@ private fun HydraulicBlock(
     val grade = profile.hydraulic
     Text(tr("Perfil hidráulico"), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     Text(
-        tr("Montante {0} · jusante {1}", StationFormat.length(grade.invertUpstream, 3), StationFormat.length(grade.invertDownstream, 3)),
+        tr(
+            "Montante {0} · jusante {1}",
+            if (grade.invertUpstream.isFinite()) StationFormat.length(grade.invertUpstream, 3) else "—",
+            if (grade.invertDownstream.isFinite()) StationFormat.length(grade.invertDownstream, 3) else "—",
+        ),
         maxLines = 2, overflow = TextOverflow.Ellipsis,
     )
-    Text(tr("Declividade {0} %", StationFormat.decimal(grade.actualSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
-    Text(tr("Mínima do trecho {0} %", StationFormat.decimal(grade.minSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    if (grade.actualSlope.isFinite()) {
+        Text(tr("Declividade {0} %", StationFormat.decimal(grade.actualSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+    if (grade.minSlope.isFinite()) {
+        Text(tr("Mínima do trecho {0} %", StationFormat.decimal(grade.minSlope * 100.0, 2)), maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
     if (grade.offSurface) {
         Text(tr("Fora da superfície: o trecho foi interpolado. Confira o terreno."), maxLines = 3, overflow = TextOverflow.Ellipsis)
     }
@@ -548,8 +569,8 @@ private fun HydraulicBlock(
         Text(alignment.name, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (onOpenProfile != null || onOpenSection != null) {
             ChoiceRow {
-                if (onOpenProfile != null) Choice(false, tr("Perfil")) { onOpenProfile() }
-                if (onOpenSection != null) Choice(false, tr("Seção")) { onOpenSection() }
+                if (onOpenProfile != null) PlaceChip(false, tr("Perfil")) { onOpenProfile() }
+                if (onOpenSection != null) PlaceChip(false, tr("Seção")) { onOpenSection() }
             }
         }
         if (onRename != null) {
@@ -560,9 +581,9 @@ private fun HydraulicBlock(
                 label = { Text(tr("Nome do eixo"), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 singleLine = true,
             )
-            Choice(false, tr("Nome do eixo")) { onRename(name) }
+            PlaceChip(false, tr("Nome do eixo")) { onRename(name) }
         }
-        if (onReverse != null) Choice(false, tr("Inverter sentido")) { onReverse() }
+        if (onReverse != null) PlaceChip(false, tr("Inverter sentido")) { onReverse() }
     }
     section?.let { cut ->
         Text(tr("Seção na estaca {0}", StationFormat.decimal(cut.station, 1)), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -573,10 +594,10 @@ private fun HydraulicBlock(
     }
     if (onExport != null) {
         ChoiceRow {
-            Choice(false, tr("CSV")) { onExport("csv") }
-            Choice(false, tr("PDF")) { onExport("pdf") }
-            Choice(false, tr("LandXML")) { onExport("xml") }
-            Choice(false, tr("IFC")) { onExport("ifc") }
+            PlaceChip(false, tr("CSV")) { onExport("csv") }
+            PlaceChip(false, tr("PDF")) { onExport("pdf") }
+            PlaceChip(false, tr("LandXML")) { onExport("xml") }
+            PlaceChip(false, tr("IFC")) { onExport("ifc") }
         }
     }
 }
@@ -647,19 +668,26 @@ private fun SectionChart(cut: DrainCrossSection) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ChoiceRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+internal fun ChoiceRow(content: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit) {
+    ActionWrap(content)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ActionWrap(content: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit) {
+    FlowRow(
+        Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content,
     )
 }
 
 @Composable
-private fun Choice(selected: Boolean, label: String, onClick: () -> Unit) {
-    GButton(label, onClick, primary = selected, outlined = !selected)
+internal fun PlaceChip(selected: Boolean, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+    GButton(label, onClick, primary = selected, outlined = !selected, enabled = enabled)
 }
 
 @Composable

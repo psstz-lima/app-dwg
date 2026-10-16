@@ -6,6 +6,7 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -184,6 +185,82 @@ class TabletFixesTest {
         val referred = Regex("#(\\d+)(?!=)").findAll(step).map { it.groupValues[1] }.toSet()
         assertTrue(referred.all { it in defined }, "dangling ${referred - defined}")
         assertTrue(Regex("'([0-9A-Za-z_$]{22})'").findAll(step).count() >= 6)
+    }
+
+    @Test
+    fun openChannelTopIsAWaterSurfaceAndABoxIsNot() {
+        val ditch = listOf(
+            SectionPoint(-1.0, 0.0), SectionPoint(-0.4, -0.3),
+            SectionPoint(0.4, -0.3), SectionPoint(1.0, 0.0),
+        )
+        val box = listOf(
+            SectionPoint(-0.5, 0.0), SectionPoint(0.5, 0.0),
+            SectionPoint(0.5, 0.5), SectionPoint(-0.5, 0.5),
+        )
+        assertTrue(DeviceLook.waterSurface(ditch))
+        assertFalse(DeviceLook.waterSurface(box))
+    }
+
+    @Test
+    fun projectEarthAddsSurfaceDevices() {
+        val surface = DeviceTakeoff("v", "VPCG", 100.0, 0.0, 10.0, 0.0, false)
+        val buried = DeviceTakeoff("b", "BSTC", 20.0, 0.0, 4.0, 0.0, false, trench = 3.0)
+        val total = DrainageTakeoff.total(listOf(surface, buried))
+        assertEquals(13.0, total.earthMoved(), 1e-9)
+        assertEquals(13.0 / 120.0, total.earthMoved() / total.length, 1e-6)
+        assertEquals(10.0, surface.earthMoved(), 1e-9)
+        assertEquals(3.0, buried.earthMoved(), 1e-9)
+    }
+
+    @Test
+    fun constantGradeIsOneReach() {
+        val samples = (0..12).map { i ->
+            DrainProfileSample(i.toDouble(), i.toDouble(), 0.0, 100.0, 100.0 - i * 0.005, 100.2, 0.3, -0.005, "d", false)
+        }
+        val pvis = DrainAlignments.gradePvis(samples)
+        assertEquals(2, pvis.size)
+        assertEquals(0.0, pvis.first().station, 1e-9)
+        assertEquals(12.0, pvis.last().station, 1e-9)
+        val bend = samples.toMutableList()
+        bend[6] = bend[6].copy(invert = 99.0)
+        assertTrue(DrainAlignments.gradePvis(bend).size >= 3)
+    }
+
+    @Test
+    fun ifcSweepsTheSectionOnEverySegment() {
+        val outer = listOf(
+            SectionPoint(-0.80, 0.0), SectionPoint(0.80, 0.0),
+            SectionPoint(0.80, 0.45), SectionPoint(-0.80, 0.45),
+        )
+        val hole = listOf(
+            SectionPoint(-0.60, 0.08), SectionPoint(0.60, 0.08),
+            SectionPoint(0.60, 0.35), SectionPoint(-0.60, 0.35),
+        )
+        val text = StringBuilder()
+        IfcDrainage.write(
+            "obra",
+            listOf(
+                IfcDevice(
+                    "g", "VPCG 160-30", "valeta", "valeta", 20.0, 100.0, 99.9, -0.005, 1,
+                    0.0, 0.0, 100.0, "", listOf(outer, hole),
+                    listOf(IfcPathPoint(0.0, 0.0, 100.0), IfcPathPoint(10.0, 0.0, 99.95), IfcPathPoint(20.0, 5.0, 99.9)),
+                ),
+                IfcDevice(
+                    "c", "CCT", "caixa", "caixa", 0.0, 100.0, 100.0, Double.NaN, 1,
+                    5.0, 5.0, 100.0, "", listOf(outer),
+                    listOf(IfcPathPoint(5.0, 5.0, 100.0)),
+                ),
+            ),
+            text,
+        )
+        val step = text.toString()
+        assertTrue("IFCARBITRARYPROFILEDEFWITHVOIDS" in step)
+        assertTrue("IFCARBITRARYCLOSEDPROFILEDEF" in step)
+        assertFalse(step.contains("0.6000,0.4000") || step.contains(",0.60,0.40"))
+        assertEquals(3, Regex("IFCEXTRUDEDAREASOLID").findAll(step).count())
+        val defined = Regex("#(\\d+)=").findAll(step).map { it.groupValues[1] }.toSet()
+        val referred = Regex("#(\\d+)(?!=)").findAll(step).map { it.groupValues[1] }.toSet()
+        assertTrue(referred.all { it in defined }, "dangling ${referred - defined}")
     }
 
     private fun ifc(id: String, code: String, name: String, classification: String) = IfcDevice(

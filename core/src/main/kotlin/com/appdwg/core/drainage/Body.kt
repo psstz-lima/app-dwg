@@ -1322,6 +1322,23 @@ object DeviceLook {
         return type.endsWith("_open") || type.endsWith("_lined") || "triangle" in type || "trapezoid" in type
     }
 
+    /**
+     * True when the edge that closes the ring is the free water surface, not a wall.
+     * An open ditch keeps that edge unstroked; a pipe or a box does not.
+     */
+    fun waterSurface(ring: List<SectionPoint>): Boolean {
+        if (ring.size < 3) return false
+        val a = ring.last()
+        val b = ring.first()
+        val dx = abs(b.x - a.x)
+        val dy = abs(b.y - a.y)
+        val top = ring.maxOf { it.y }
+        val mid = (a.y + b.y) / 2.0
+        val height = top - ring.minOf { it.y }
+        val nearTop = mid >= top - 0.02 || mid >= top - height * 0.15
+        return nearTop && dx > 1e-3 && dx >= dy
+    }
+
     /** Turns the ring so the free water surface is the edge that closes it. */
     fun withMouth(ring: List<SectionPoint>): List<SectionPoint> {
         if (ring.size < 3) return ring

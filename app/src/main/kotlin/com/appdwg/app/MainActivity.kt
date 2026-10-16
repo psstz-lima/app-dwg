@@ -708,7 +708,7 @@ private fun ProjectScreen(
             showExport = true
         }
     }
-    val ifcSaver = rememberLauncherForActivityResult(CreateDocumentAt("application/x-step", ::driveStart)) { uri ->
+    val ifcSaver = rememberLauncherForActivityResult(CreateIfcDocument(::driveStart)) { uri ->
         pendingExport = null
         if (uri != null) vm.exportDrainIfc(uri)
     }
@@ -902,24 +902,27 @@ private fun ProjectScreen(
                 "scene objects=${scene.glyphs.size} deviceTris=${scene.triangles.size / 9} trenchTris=${scene.trench.size / 9} " +
                     "backfillTris=${scene.backfillMesh.size / 9} beddingTris=${scene.beddingMesh.size / 9} fillTris=${scene.fillMesh.size / 9} waterTris=${scene.water.size / 9}",
             )
+            fun num(value: Double, digits: Int): String =
+                if (value.isFinite()) "%.${digits}f".format(java.util.Locale.US, value) else "—"
             for (row in scene.takeoff) {
-                val perM = if (row.length > 1e-6) (if (row.trench > 0.0) row.trench else row.excavation) / row.length else row.excavation
+                val earth = row.earthMoved()
+                val perM = if (row.length > 0.05) earth / row.length else Double.NaN
+                val length = if (row.length > 0.05) num(row.length, 2) else "ponto"
                 android.util.Log.i(
                     "GromaticDrain",
-                    "device ${row.code} tris=${row.drawnTriangles} L=${"%.2f".format(java.util.Locale.US, row.length)} " +
-                        "earthM3=${"%.3f".format(java.util.Locale.US, if (row.trench > 0.0) row.trench else row.excavation)} " +
-                        "earthPerM=${"%.4f".format(java.util.Locale.US, perM)} slope=${"%.4f".format(java.util.Locale.US, row.gradeSlope)}",
+                    "device ${row.code} tris=${row.drawnTriangles} L=$length " +
+                        "earthM3=${num(earth, 3)} earthPerM=${num(perM, 4)} slope=${num(row.gradeSlope, 4)}",
                 )
             }
             for (profile in scene.profiles) {
                 val grade = profile.hydraulic
-                val perM = if (grade.length > 1e-6) grade.excavation / grade.length else 0.0
+                val perM = if (grade.length > 1e-6 && grade.excavation.isFinite()) grade.excavation / grade.length else 0.0
                 android.util.Log.i(
                     "GromaticDrain",
-                    "profile ${profile.code} L=${"%.2f".format(java.util.Locale.US, grade.length)} up=${"%.3f".format(java.util.Locale.US, grade.invertUpstream)} " +
-                        "down=${"%.3f".format(java.util.Locale.US, grade.invertDownstream)} grade=${"%.4f".format(java.util.Locale.US, grade.actualSlope)} " +
-                        "minSlope=${"%.4f".format(java.util.Locale.US, grade.minSlope)} offSurface=${grade.offSurface} " +
-                        "tooDeep=${grade.tooDeep} cut=${"%.2f".format(java.util.Locale.US, grade.excavation)} earthPerM=${"%.4f".format(java.util.Locale.US, perM)} " +
+                    "profile ${profile.code} L=${num(grade.length, 2)} up=${num(grade.invertUpstream, 3)} " +
+                        "down=${num(grade.invertDownstream, 3)} grade=${num(grade.actualSlope, 4)} " +
+                        "minSlope=${num(grade.minSlope, 4)} offSurface=${grade.offSurface} " +
+                        "tooDeep=${grade.tooDeep} cut=${num(grade.excavation, 2)} earthPerM=${num(perM, 4)} " +
                         "deviceTris=${profile.deviceTriangles} trenchTris=${profile.trenchTriangles}",
                 )
             }
@@ -950,8 +953,20 @@ private fun ProjectScreen(
     var exaggeration by v::exaggeration
     val has3d = remember(project) { project.surfaces.isNotEmpty() || project.polylines.any { it.zs != null } || project.models.isNotEmpty() }
     // Back leaves the tool in use (one at a time) before it leaves the project.
-    androidx.activity.compose.BackHandler(enabled = addingNote || addingPoints || measuring || editing || showAr || show3d || showSection || showProfile) {
+    androidx.activity.compose.BackHandler(
+        enabled = addingNote || addingPoints || measuring || editing || showAr || show3d || showSection || showProfile ||
+            drainageSelected != null || drainageDraft != null || drainageMore,
+    ) {
         when {
+            drainageMore -> drainageMore = false
+            drainageDraft != null -> {
+                drainageDraft = null
+                drainageMoving = false
+            }
+            drainageSelected != null -> {
+                drainageSelected = null
+                drainageMoving = false
+            }
             addingNote -> addingNote = false
             addingPoints -> addingPoints = false
             measuring -> measuring = false
@@ -987,10 +1002,10 @@ private fun ProjectScreen(
             add(RailTool(GIcon.CONTOURS, tr("Curvas"), showContours, feature = ProFeature.CONTOURS) { showContourDialog = true })
             add(RailTool(GIcon.IMAGE, tr("Imagem"), vm.drape != null && vm.drapeVisible, feature = ProFeature.IMAGE) { if (vm.drape == null) drapePicker.launch(arrayOf("*/*")) else showDrape = true })
         }
-        add(RailTool(GIcon.COMPARE, tr("Comparar"), differenceOverlay != null, feature = ProFeature.COMPARE) { showCompare = true })
+        add(RailTool(GIcon.COMPARE, tr("Comparar"), showCompare, feature = ProFeature.COMPARE) { showCompare = true })
         if (project.surfaces.isNotEmpty()) {
             add(RailTool(GIcon.PLATFORM, tr("Plataforma"), drawingPlatform || vm.platform != null, feature = ProFeature.PLATFORM) { showPlatform = true })
-            add(RailTool(GIcon.ROAD, tr("Estrada"), drawingRoad || v.roadBuilt, feature = ProFeature.ROAD) { showRoad = true })
+            add(RailTool(GIcon.ROAD, tr("Estrada"), showRoad || drawingRoad, feature = ProFeature.ROAD) { showRoad = true })
         }
         if (vm.road != null || vm.stageProgress != null || v.bulletinItems.isNotEmpty()) add(RailTool(GIcon.BULLETIN, bulletinLabel, feature = ProFeature.BULLETIN) { showBulletin = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.EDIT_SURFACE, surfaceEditLabel, feature = ProFeature.SURFACE_EDIT) { showSurfaceEdit = true })
@@ -1470,7 +1485,7 @@ private fun ProjectScreen(
                     }
                     .widthIn(max = if (sideDock) 360.dp else 480.dp)
                     .then(if (sideDock) Modifier.width(320.dp) else Modifier.fillMaxWidth())
-                    .heightIn(max = if (drainageMore) 340.dp else 128.dp)
+                    .heightIn(max = if (drainageMore) 520.dp else 220.dp)
                     .pointerInput(Unit) { detectTapGestures { } }
                 if (drainageDraft != null) {
                     val draft = drainageDraft!!
@@ -1502,7 +1517,7 @@ private fun ProjectScreen(
                                 onMore = { drainageMore = true },
                             )
                         } else {
-                            Column(Modifier.verticalScroll(rememberScrollState())) {
+                            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
                                 GButton(tr("Recolher"), { drainageMore = false }, outlined = true, modifier = Modifier.padding(8.dp))
                                 DrainagePlaceCard(
                                     draft = draft,
@@ -1513,7 +1528,7 @@ private fun ProjectScreen(
                                     onUndoPoint = { drainageDraft = draft.copy(points = draft.points.dropLast(1)) },
                                     onCommit = commit,
                                     onCancel = { drainageDraft = null; drainageMore = false },
-                                    modifier = Modifier.fillMaxWidth().heightIn(max = if (sideDock) 460.dp else 240.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         }
@@ -1535,11 +1550,25 @@ private fun ProjectScreen(
                                 canUndo = false,
                                 onUndo = {},
                                 onFinish = { drainageSelected = null; drainageMoving = false },
-                                onCancel = { drainageSelected = null; drainageMoving = false },
+                                onCancel = {},
                                 onMore = { drainageMore = true },
                                 finishLabel = tr("Fechar"),
+                                onEdit = {
+                                    if (placed != null && device != null) {
+                                        drainageDraft = placed.toDraft(device.name)
+                                        drainageMoving = false
+                                        drainageSelected = null
+                                        drainageMore = false
+                                    }
+                                },
+                                onDelete = {
+                                    drainageSelected?.let { vm.deleteDrainage(it) }
+                                    drainageSelected = null
+                                    drainageMoving = false
+                                    drainageMore = false
+                                },
                             )
-                        } else Column(Modifier.verticalScroll(rememberScrollState())) {
+                        } else Column(Modifier.heightIn(max = 520.dp).verticalScroll(remember(drainageSelected) { androidx.compose.foundation.ScrollState(0) })) {
                             GButton(tr("Recolher"), { drainageMore = false }, outlined = true, modifier = Modifier.padding(8.dp))
                         DrainageSelectionCard(
                             code = placed?.code ?: "",
@@ -1566,7 +1595,7 @@ private fun ProjectScreen(
                             onUndo = { vm.undoDrainage() },
                             onPro = { vm.proRequested = true },
                             onClose = { drainageSelected = null; drainageMoving = false },
-                            modifier = Modifier.fillMaxWidth().heightIn(max = if (sideDock) 460.dp else 240.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             notes = drainageNotes(drainageNetwork, drainageSelected ?: ""),
                             basinSummary = drainageFlows[drainageSelected]?.let { flow ->
                                 tr(
@@ -1617,7 +1646,7 @@ private fun ProjectScreen(
                                 else {
                                     pendingExport = exportKind
                                     driveNext.set(exportToDrive)
-                                    if (exportKind == ExportKind.DRAIN_IFC) ifcSaver.launch(baseName + exportKind.suffix)
+                                    if (exportKind == ExportKind.DRAIN_IFC) ifcSaver.launch(DownloadNames.ifcName(baseName))
                                     else exportSaver.launch(baseName + exportKind.suffix)
                                 }
                             },
@@ -2350,7 +2379,7 @@ private fun ProjectScreen(
                 else {
                     pendingExport = kind
                     driveNext.set(exportToDrive)
-                    if (kind == ExportKind.DRAIN_IFC) ifcSaver.launch(baseName + kind.suffix)
+                    if (kind == ExportKind.DRAIN_IFC) ifcSaver.launch(DownloadNames.ifcName(baseName))
                     else exportSaver.launch(baseName + kind.suffix)
                 }
             },
@@ -2512,6 +2541,7 @@ private fun differenceAt(project: LandXmlProject, d: SurfaceDifference?, p: Poin
 }
 
 /** Results of the measurement being taken, with undo, clear and done. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MeasureCard(
     m: Measurement?, onUndo: () -> Unit, onClear: () -> Unit, onDone: () -> Unit, modifier: Modifier,
@@ -2555,7 +2585,11 @@ private fun MeasureCard(
                 else if (pending) Text(tr("Calculando na superfície…"), style = MaterialTheme.typography.bodySmall)
             }
             if (saved > 0) Text(tr("{0} medição(ões) salva(s) na planta (M1, M2…).", saved), style = MaterialTheme.typography.bodySmall)
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 if (m != null) {
                     OutlinedButton(onClick = onUndo, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Desfazer")) }
                     OutlinedButton(onClick = onClear, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Limpar")) }

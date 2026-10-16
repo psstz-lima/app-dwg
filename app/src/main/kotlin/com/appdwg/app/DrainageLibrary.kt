@@ -4,6 +4,8 @@ import com.appdwg.core.Display
 import com.appdwg.core.StationFormat
 import com.appdwg.core.drainage.CatalogAudit
 import com.appdwg.core.drainage.DeviceBody
+import com.appdwg.core.drainage.DeviceFinish
+import com.appdwg.core.drainage.DeviceLook
 import com.appdwg.core.drainage.CatalogFormatException
 import com.appdwg.core.drainage.CatalogLoader
 import com.appdwg.core.drainage.CatalogReport
@@ -21,7 +23,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -48,8 +54,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -77,14 +88,17 @@ fun DrainageLibraryDialog(
     onSuggestCulverts: (() -> Unit)? = null,
     suggestNote: String? = null,
 ) {
+    val ime = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val screen = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+    val listMax = (screen - ime - 200.dp).coerceIn(160.dp, 520.dp)
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.safeBars().fillMaxWidth(0.96f),
+        modifier = Modifier.safeBars().imePadding().fillMaxWidth(0.96f),
         title = { Text(tr("Biblioteca de dispositivos"), maxLines = 2, overflow = TextOverflow.Ellipsis) },
         text = {
             DrainageLibraryBody(
-                isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                isPro, onPro, Modifier.fillMaxWidth().heightIn(max = listMax),
                 catalog, catalogReady, catalogNote, onPlace, onImported,
             )
         },
@@ -266,7 +280,7 @@ private fun DeviceRow(device: DeviceDef, onOpen: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val rings = DeviceBody.previewRings(device)
-            if (rings.any { it.size >= 2 }) SectionSketch(rings, Modifier.size(48.dp))
+            if (rings.any { it.size >= 2 }) SectionSketch(rings, DeviceLook.finish(device), Modifier.size(48.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(device.code, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(device.name, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -370,7 +384,7 @@ private fun DeviceDetail(
     val drawn = DeviceBody.previewRings(device).ifEmpty { section?.rings.orEmpty() }
     if (drawn.none { it.size >= 2 }) Text(tr("Sem seção paramétrica"))
     else {
-        SectionSketch(drawn, Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = tr("Seção do dispositivo") })
+        SectionSketch(drawn, DeviceLook.finish(device), Modifier.fillMaxWidth().height(180.dp).semantics { contentDescription = tr("Seção do dispositivo") })
         val span = drawn.flatten()
         if (span.isNotEmpty()) {
             val width = span.maxOf { it.x } - span.minOf { it.x }
@@ -540,8 +554,9 @@ private fun ConnectionLine(point: ConnectionPoint) {
 }
 
 @Composable
-private fun SectionSketch(rings: List<List<SectionPoint>>, modifier: Modifier) {
-    val color = MaterialTheme.colorScheme.primary
+private fun SectionSketch(rings: List<List<SectionPoint>>, finish: DeviceFinish, modifier: Modifier) {
+    val fill = Color(DeviceLook.rgb(finish))
+    val ink = Color(0xFF1C1C1C)
     Canvas(modifier) {
         val points = rings.flatten()
         if (points.isEmpty()) return@Canvas
@@ -557,18 +572,36 @@ private fun SectionSketch(rings: List<List<SectionPoint>>, modifier: Modifier) {
             (pad + (point.x - minX) * scale).toFloat(),
             (size.height - pad - (point.y - minY) * scale).toFloat(),
         )
-        for (ring in rings) {
-            if (ring.size < 2) continue
-            val path = Path()
+        fun addRing(path: Path, ring: List<SectionPoint>, close: Boolean) {
+            if (ring.size < 2) return
             val first = at(ring.first())
             path.moveTo(first.x, first.y)
             for (point in ring.drop(1)) {
                 val next = at(point)
                 path.lineTo(next.x, next.y)
             }
-            path.close()
-            drawPath(path, color.copy(alpha = 0.22f))
-            drawPath(path, color, style = Stroke(width = 1.5.dp.toPx()))
+            if (close) path.close()
+        }
+        val solid = Path().apply { fillType = PathFillType.EvenOdd }
+        val openOnly = rings.size == 1 && DeviceLook.waterSurface(rings.first())
+        if (!openOnly) {
+            for (ring in rings) addRing(solid, ring, close = true)
+            drawPath(solid, fill.copy(alpha = 0.9f))
+            clipPath(solid) {
+                val step = 10.dp.toPx()
+                var x = 0f
+                while (x < size.width + size.height) {
+                    drawLine(ink.copy(alpha = if (finish == DeviceFinish.GRASS) 0.35f else 0.18f), Offset(x, 0f), Offset(x - size.height, size.height), strokeWidth = 1f)
+                    x += step
+                }
+            }
+        }
+        for (ring in rings) {
+            if (ring.size < 2) continue
+            val mouth = DeviceLook.waterSurface(ring)
+            val path = Path()
+            addRing(path, ring, close = !mouth)
+            drawPath(path, ink, style = Stroke(width = 1.6.dp.toPx()))
         }
     }
 }

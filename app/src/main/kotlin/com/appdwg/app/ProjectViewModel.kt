@@ -2183,13 +2183,20 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             roadMessage = if (rp.alignmentIndex >= 0) tr("Alinhamento escolhido não existe mais.") else tr("Desenhe o eixo com 2 PIs ou mais.")
             return
         }
+        val typed = if (rp.pvis.size >= 2) rp.pvis else null
+        val fromFile = if (typed == null) axis0.profile?.pvis?.takeIf { it.size >= 2 } else null
+        val pvis = typed ?: fromFile ?: terrainGradePvis(axis0) { terrain.elevationAt(it) }
+        if (pvis.size < 2) {
+            roadMessage = tr("Defina o greide: ao menos 2 PVIs (estaca e cota).")
+            return
+        }
         val profile = when {
-            rp.pvis.size >= 2 -> Profile(tr("Greide"), AlignmentBuilder.curvesFromK(rp.pvis.sortedBy { it.station }, rp.kValue).mapIndexed { i, p ->
+            typed != null -> Profile(tr("Greide"), AlignmentBuilder.curvesFromK(typed.sortedBy { it.station }, rp.kValue).mapIndexed { i, p ->
                 // A curve length typed by the user wins over K.
-                rp.pvis.sortedBy { it.station }[i].takeIf { it.curveLength > 0 } ?: p
+                typed.sortedBy { it.station }[i].takeIf { it.curveLength > 0 } ?: p
             })
-            axis0.profile != null -> axis0.profile
-            else -> { roadMessage = tr("Defina o greide: ao menos 2 PVIs (estaca e cota)."); return }
+            axis0.profile != null && fromFile != null -> axis0.profile
+            else -> Profile(tr("Greide"), pvis)
         }
         val axis = Alignment(axis0.name + ROAD_SUFFIX, axis0.startStation, axis0.elements, profile)
         try {
@@ -2205,7 +2212,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             }
             road = r
             v.roadBuilt = true
-            v.roadParams = rp.copy(terrain = terrain.name)
+            v.roadParams = rp.copy(terrain = terrain.name, pvis = if (rp.pvis.size >= 2) rp.pvis else pvis)
             addedFiles = addedFiles.filter { it.label != ROAD_LABEL } +
                 AddedFile(ROAD_LABEL, LandXmlProject(null, null, listOf(r.top, r.datum), listOf(r.alignment), emptyList(), emptyList()), null)
             refreshJob?.cancel(); refreshNow()
@@ -3198,10 +3205,29 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     is com.appdwg.core.drainage.PlacedDevice.Point -> placed.x to placed.y
                     else -> 0.0 to 0.0
                 }
+                val rings = if (def == null) emptyList() else com.appdwg.core.drainage.DeviceBody.previewRings(def).ifEmpty {
+                    com.appdwg.core.drainage.resolveSection(def, placed?.params.orEmpty())?.rings.orEmpty()
+                }
+                val path = when (placed) {
+                    is com.appdwg.core.drainage.PlacedDevice.Linear -> {
+                        val count = placed.xs.size
+                        val z0 = row.invertUp.takeIf { it.isFinite() } ?: 0.0
+                        val z1 = row.invertDown.takeIf { it.isFinite() } ?: z0
+                        placed.xs.indices.map { i ->
+                            val t = if (count <= 1) 0.0 else i.toDouble() / (count - 1)
+                            com.appdwg.core.drainage.IfcPathPoint(placed.xs[i], placed.ys[i], z0 + (z1 - z0) * t)
+                        }
+                    }
+                    is com.appdwg.core.drainage.PlacedDevice.Point -> listOf(
+                        com.appdwg.core.drainage.IfcPathPoint(placed.x, placed.y, row.invertUp.takeIf { it.isFinite() } ?: 0.0),
+                    )
+                    else -> emptyList()
+                }
                 com.appdwg.core.drainage.IfcDevice(
                     row.id, row.code, def?.name ?: row.code, def?.family ?: "DNIT IPR-736",
-                    row.length, row.invertUp, row.invertDown, row.gradeSlope, phaseOf[row.id] ?: 0,
+                    row.length, row.invertUp, row.invertDown, row.gradeSlope.takeIf { it.isFinite() } ?: 0.0, phaseOf[row.id] ?: 0,
                     x, y, if (row.invertUp.isNaN()) 0.0 else row.invertUp, connected,
+                    section = rings, path = path,
                 )
             }
             out.writer(Charsets.UTF_8).use { com.appdwg.core.drainage.IfcDrainage.write("Drenagem", ifc, it) }

@@ -5,7 +5,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,9 +33,50 @@ class TabletUiTest {
     }
 
     @Test
-    fun ifcFilesUseTheStepMime() {
-        assertEquals("application/x-step", DownloadNames.mime("rede.ifc"))
-        assertEquals("application/x-step", DownloadNames.mime("REDE.IFC"))
+    fun ifcFilesKeepAnIfcName() {
+        assertEquals("application/octet-stream", DownloadNames.mime("rede.ifc"))
+        assertEquals("application/octet-stream", DownloadNames.mime("REDE.IFC"))
+        assertEquals("PRIM - KM-drenagem.ifc", DownloadNames.ifcName("PRIM - KM.pdf"))
+        assertEquals("obra-drenagem.ifc", DownloadNames.ifcName("obra-drenagem.ifc"))
+        assertFalse(DownloadNames.ifcName("relatorio.pdf").contains("pdf"))
+    }
+
+    @Test
+    fun selectedDeviceBarOffersEditAndDelete() {
+        rule.setContent {
+            GromaticTheme(ThemeChoice.SUN) {
+                DrainagePickBar(
+                    title = "CCT",
+                    detail = "caixa",
+                    canUndo = false,
+                    onUndo = {},
+                    onFinish = {},
+                    onCancel = {},
+                    onMore = {},
+                    finishLabel = "Fechar",
+                    onEdit = {},
+                    onDelete = {},
+                )
+            }
+        }
+        rule.onNodeWithText("Fechar").assertIsDisplayed()
+        rule.onNodeWithText("Editar").assertIsDisplayed()
+        rule.onNodeWithText("Excluir").assertIsDisplayed()
+        rule.onNodeWithText("Mais").assertIsDisplayed()
+        rule.onAllNodesWithText("Cancelar").assertCountEquals(0)
+    }
+
+    @Test
+    fun launchBarKeepsUndoAndMore() {
+        rule.setContent {
+            GromaticTheme(ThemeChoice.SUN) {
+                DrainagePickBar("Lançar STC", "Pontos do caminho: 1", canUndo = true, onUndo = {}, onFinish = {}, onCancel = {}, onMore = {})
+            }
+        }
+        rule.onNodeWithText("Desfazer").assertIsDisplayed()
+        rule.onNodeWithText("Concluir").assertIsDisplayed()
+        rule.onNodeWithText("Cancelar").assertIsDisplayed()
+        rule.onNodeWithText("Mais").assertIsDisplayed()
     }
 
     @Test

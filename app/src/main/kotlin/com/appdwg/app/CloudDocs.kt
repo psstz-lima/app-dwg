@@ -51,3 +51,18 @@ class CreateDocumentAt(mime: String, private val start: () -> Uri?) : ActivityRe
     override fun createIntent(context: Context, input: String): Intent =
         super.createIntent(context, input).apply { start()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) } }
 }
+
+/**
+ * IFC save. The name always ends in `.ifc` and the type is a generic stream, so a tablet that
+ * does not know IFC does not reuse the previous PDF name (`….pdf (1)`).
+ */
+class CreateIfcDocument(private val start: () -> Uri?) : ActivityResultContracts.CreateDocument("application/octet-stream") {
+    override fun createIntent(context: Context, input: String): Intent {
+        val name = DownloadNames.ifcName(input)
+        return super.createIntent(context, name).apply {
+            type = "application/octet-stream"
+            putExtra(Intent.EXTRA_TITLE, name)
+            start()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
+        }
+    }
+}

@@ -3,6 +3,7 @@ package com.appdwg.app
 import com.appdwg.core.tr
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -182,11 +183,9 @@ fun RoadDialog(
                         FitRow() {
                             numField(rp.kValue, tr("K das curvas verticais")) { rp = rp.copy(kValue = it) }
                             OutlinedButton(enabled = axis != null, onClick = {
-                                // PVIs on the terrain every 100 m, a starting point to adjust.
                                 val a = axis!!
                                 val terrain = project.surfaces.firstOrNull { it.name == rp.terrain } ?: project.surfaces.firstOrNull { !it.name.startsWith(ROAD_LABEL) }
-                                val stas = (generateSequence(a.startStation) { it + 100.0 }.takeWhile { it < a.endStation } + a.endStation).toList()
-                                rp = rp.copy(pvis = stas.map { s -> Profile.Pvi(s, a.pointAt(s)?.let { terrain?.elevationAt(it) } ?: 0.0) })
+                                rp = rp.copy(pvis = terrainGradePvis(a) { terrain?.elevationAt(it) })
                             }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Gerar PVIs no terreno (a cada 100 m)")) }
                             if (axis?.profile != null) OutlinedButton(onClick = { rp = rp.copy(pvis = axis.profile!!.pvis) }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Copiar greide do arquivo")) }
                         }
@@ -198,7 +197,10 @@ fun RoadDialog(
                             }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Sugerir greide")) }
                         }
                         vm.gradeSuggestions.forEach { g ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { rp = rp.copy(pvis = g.pvis) },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(if (g.kind == com.appdwg.core.GradeSuggestion.Kind.BALANCED) tr("Corte igual ao aterro") else tr("Menor movimento de terra"),
                                         style = MaterialTheme.typography.bodyMedium)

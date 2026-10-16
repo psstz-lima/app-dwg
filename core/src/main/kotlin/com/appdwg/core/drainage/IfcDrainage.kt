@@ -2,6 +2,9 @@ package com.appdwg.core.drainage
 
 import java.security.MessageDigest
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.max
 
 /** One placed device as an IFC distribution element with a drainage property set. */
 data class IfcDevice(
@@ -18,7 +21,14 @@ data class IfcDevice(
     val y: Double,
     val z: Double,
     val connectedTo: String,
+    /** Real catalog rings, outer first or any order. A hole is every ring after the largest. */
+    val section: List<List<SectionPoint>> = emptyList(),
+    /** World vertices. Two or more sweep one solid per segment. One vertex is a point device. */
+    val path: List<IfcPathPoint> = emptyList(),
 )
+
+/** A vertex of the device axis, metres. */
+data class IfcPathPoint(val x: Double, val y: Double, val z: Double)
 
 /**
  * IFC4 property exchange for the drainage network. Geometry stays in the app's meshes;
@@ -78,21 +88,13 @@ object IfcDrainage {
             val place = n++
             add("#$place=IFCLOCALPLACEMENT(#12,#$axis);")
             val (entity, predefined) = ifcKind(device)
-            val length = device.length.coerceAtLeast(0.3)
-            val profilePoint = n++
-            add("#$profilePoint=IFCCARTESIANPOINT((0.,0.));")
-            val profileAxis = n++
-            add("#$profileAxis=IFCAXIS2PLACEMENT2D(#$profilePoint,$);")
-            val profile = n++
-            add("#$profile=IFCRECTANGLEPROFILEDEF(.AREA.,$,#$profileAxis,0.60,0.40);")
-            val direction = n++
-            add("#$direction=IFCDIRECTION((0.,1.,0.));")
-            val solidPlace = n++
-            add("#$solidPlace=IFCAXIS2PLACEMENT3D(#$point,$,$);")
-            val solid = n++
-            add("#$solid=IFCEXTRUDEDAREASOLID(#$profile,#$solidPlace,#$direction,${f(length)});")
+            val sink = IfcSink(b, n)
+            val profile = profileDef(sink, device.section)
+            val localZ = direction(sink, 0.0, 0.0, 1.0)
+            val solids = sweepSolids(sink, device, profile, localZ)
+            n = sink.n
             val shape = n++
-            add("#$shape=IFCSHAPEREPRESENTATION(#10,'Body','SweptSolid',(#$solid));")
+            add("#$shape=IFCSHAPEREPRESENTATION(#10,'Body','SweptSolid',(${solids.joinToString(",") { "#$it" }}));")
             val definition = n++
             add("#$definition=IFCPRODUCTDEFINITIONSHAPE($,$,(#$shape));")
             val element = n++
@@ -130,6 +132,124 @@ object IfcDrainage {
         add("ENDSEC;")
         add("END-ISO-10303-21;")
         out.append(b)
+    }
+
+    private class IfcSink(val b: StringBuilder, var n: Int) {
+        fun add(line: String) { b.append(line).append('\n') }
+        fun id(): Int = n++
+    }
+
+    private fun direction(sink: IfcSink, x: Double, y: Double, z: Double): Int {
+        val id = sink.id()
+        sink.add("#$id=IFCDIRECTION((${f(x)},${f(y)},${f(z)}));")
+        return id
+    }
+
+    private fun point3(sink: IfcSink, x: Double, y: Double, z: Double): Int {
+        val id = sink.id()
+        sink.add("#$id=IFCCARTESIANPOINT((${f(x)},${f(y)},${f(z)}));")
+        return id
+    }
+
+    private fun polyline(sink: IfcSink, ring: List<SectionPoint>): Int {
+        val ids = ring.map { point ->
+            val id = sink.id()
+            sink.add("#$id=IFCCARTESIANPOINT((${f(point.x)},${f(point.y)}));")
+            id
+        }
+        val id = sink.id()
+        sink.add("#$id=IFCPOLYLINE((${(ids + ids.first()).joinToString(",") { "#$it" }}));")
+        return id
+    }
+
+    private fun ringArea(ring: List<SectionPoint>): Double {
+        var area = 0.0
+        for (i in ring.indices) {
+            val a = ring[i]
+            val b = ring[(i + 1) % ring.size]
+            area += a.x * b.y - b.x * a.y
+        }
+        return abs(area) * 0.5
+    }
+
+    private fun profileDef(sink: IfcSink, rings: List<List<SectionPoint>>): Int {
+        val usable = rings.filter { it.size >= 3 }
+        if (usable.isEmpty()) {
+            return closedProfile(
+                sink,
+                listOf(SectionPoint(-0.50, 0.0), SectionPoint(0.50, 0.0), SectionPoint(0.50, 0.50), SectionPoint(-0.50, 0.50)),
+                emptyList(),
+            )
+        }
+        val outer = usable.maxBy { ringArea(it) }
+        return closedProfile(sink, outer, usable.filter { it !== outer })
+    }
+
+    private fun closedProfile(sink: IfcSink, outer: List<SectionPoint>, holes: List<List<SectionPoint>>): Int {
+        val outerCurve = polyline(sink, outer)
+        val inners = holes.map { polyline(sink, it) }
+        val id = sink.id()
+        if (inners.isEmpty()) sink.add("#$id=IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#$outerCurve);")
+        else sink.add("#$id=IFCARBITRARYPROFILEDEFWITHVOIDS(.AREA.,$,#$outerCurve,(${inners.joinToString(",") { "#$it" }}));")
+        return id
+    }
+
+    /** One extruded solid per path segment. A single vertex is a point device standing on its section. */
+    private fun sweepSolids(sink: IfcSink, device: IfcDevice, profile: Int, localZ: Int): List<Int> {
+        val path = device.path.filter { it.x.isFinite() && it.y.isFinite() && it.z.isFinite() }
+        if (path.size >= 2) {
+            val solids = ArrayList<Int>()
+            for (i in 0 until path.size - 1) {
+                val a = path[i]
+                val b = path[i + 1]
+                val dx = b.x - a.x
+                val dy = b.y - a.y
+                val dz = b.z - a.z
+                val len = hypot(dx, hypot(dy, dz))
+                if (len < 1e-4) continue
+                val (zx, zy, zz) = unit(dx, dy, dz, len)
+                val (xx, xy, xz) = across(zx, zy, zz)
+                solids += extrude(sink, profile, localZ, a, zx, zy, zz, xx, xy, xz, len)
+            }
+            if (solids.isNotEmpty()) return solids
+        }
+        val origin = path.firstOrNull() ?: IfcPathPoint(device.x, device.y, if (device.z.isFinite()) device.z else 0.0)
+        val rings = device.section.filter { it.size >= 3 }
+        val span = rings.maxOfOrNull { ring -> max(ring.maxOf { it.x } - ring.minOf { it.x }, ring.maxOf { it.y } - ring.minOf { it.y }) } ?: 0.50
+        val depth = if (device.length > 0.05 && path.size < 2) device.length else max(span, 0.30)
+        return listOf(extrude(sink, profile, localZ, origin, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, depth))
+    }
+
+    private fun extrude(
+        sink: IfcSink,
+        profile: Int,
+        localZ: Int,
+        origin: IfcPathPoint,
+        zx: Double,
+        zy: Double,
+        zz: Double,
+        xx: Double,
+        xy: Double,
+        xz: Double,
+        length: Double,
+    ): Int {
+        val at = point3(sink, origin.x, origin.y, origin.z)
+        val axis = direction(sink, zx, zy, zz)
+        val ref = direction(sink, xx, xy, xz)
+        val place = sink.id()
+        sink.add("#$place=IFCAXIS2PLACEMENT3D(#$at,#$axis,#$ref);")
+        val solid = sink.id()
+        sink.add("#$solid=IFCEXTRUDEDAREASOLID(#$profile,#$place,#$localZ,${f(length)});")
+        return solid
+    }
+
+    private fun unit(x: Double, y: Double, z: Double, len: Double) = Triple(x / len, y / len, z / len)
+
+    /** Horizontal perpendicular of the run, so the section stands upright. */
+    private fun across(zx: Double, zy: Double, zz: Double): Triple<Double, Double, Double> {
+        val len = hypot(zx, zy)
+        if (len < 1e-6 || abs(zz) > 0.999) return Triple(1.0, 0.0, 0.0)
+        return Triple(-zy / len, zx / len, 0.0)
     }
 
     private fun ifcKind(device: IfcDevice): Pair<String, String> {

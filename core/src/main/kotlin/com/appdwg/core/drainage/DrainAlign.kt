@@ -360,11 +360,34 @@ object DrainAlignments {
         }
         if (elements.isEmpty()) return null
         val grade = profile?.samples?.takeIf { it.size >= 2 }?.let { samples ->
-            val step = (samples.size / 40).coerceAtLeast(1)
-            val picked = samples.filterIndexed { index, _ -> index % step == 0 || index == samples.lastIndex }
-            com.appdwg.core.Profile(alignment.name, picked.map { com.appdwg.core.Profile.Pvi(it.station, it.invert) })
+            com.appdwg.core.Profile(alignment.name, gradePvis(samples))
         }
         return com.appdwg.core.Alignment(alignment.name, 0.0, elements, grade)
+    }
+
+    /**
+     * One PVI at each end of a constant slope. A sample every metre of a flat -0.50 % invert
+     * used to stamp a grade label on every vertex.
+     */
+    fun gradePvis(samples: List<DrainProfileSample>): List<com.appdwg.core.Profile.Pvi> {
+        if (samples.size < 2) return emptyList()
+        val out = ArrayList<com.appdwg.core.Profile.Pvi>()
+        fun pvi(sample: DrainProfileSample) = com.appdwg.core.Profile.Pvi(sample.station, sample.invert)
+        out += pvi(samples.first())
+        for (i in 1 until samples.lastIndex) {
+            val left = runSlope(samples[i - 1], samples[i])
+            val right = runSlope(samples[i], samples[i + 1])
+            if (!left.isFinite() || !right.isFinite() || abs(left - right) > 5e-4) out += pvi(samples[i])
+        }
+        val last = pvi(samples.last())
+        if (abs(out.last().station - last.station) > 1e-6) out += last
+        return out
+    }
+
+    private fun runSlope(a: DrainProfileSample, b: DrainProfileSample): Double {
+        val ds = b.station - a.station
+        if (abs(ds) < 1e-9) return Double.NaN
+        return (b.invert - a.invert) / ds
     }
 
     private fun densify(points: List<Point2>, step: Double): List<Point2> {
