@@ -143,6 +143,36 @@ fun drainageNotes(graph: DrainageGraph?, id: String): List<String> {
     return lines
 }
 
+/** Smallest DNIT barrel for [flow], with headwater and an overtopping note. Allowable head is 2 m. */
+fun culvertLine(device: PlacedDevice?, flow: Double): String? {
+    if (device == null || flow <= 0.0) return null
+    val length = when (device) {
+        is PlacedDevice.Linear -> {
+            var span = 0.0
+            for (i in 1 until device.xs.size) span += kotlin.math.hypot(device.xs[i] - device.xs[i - 1], device.ys[i] - device.ys[i - 1])
+            if (span > 1.0) span else 15.0
+        }
+        is PlacedDevice.Point -> 15.0
+    }
+    val slope = when (device) {
+        is PlacedDevice.Linear -> when (device.grade.mode) {
+            GradeMode.FIXED -> ((device.grade.z0 - device.grade.z1) / length).coerceAtLeast(0.001)
+            GradeMode.SLOPE -> device.grade.slope.coerceAtLeast(0.001)
+            else -> 0.01
+        }
+        is PlacedDevice.Point -> 0.01
+    }
+    val (barrel, head) = com.appdwg.core.drainage.Culvert.size(flow, length, slope, 0.0, 2.0)
+    val line = tr(
+        "Bueiro {0} m × {1} m, {2}: lâmina {3} m.",
+        StationFormat.decimal(barrel.span, 2),
+        StationFormat.decimal(barrel.rise, 2),
+        barrel.barrels,
+        StationFormat.decimal(head.headwater, 2),
+    )
+    return if (head.overtopped) line + " " + tr("Transbordamento da rodovia.") else line
+}
+
 @Composable
 fun DrainagePlaceCard(
     draft: PlaceDraft,

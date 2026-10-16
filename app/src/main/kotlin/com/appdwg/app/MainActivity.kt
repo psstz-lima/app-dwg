@@ -1410,7 +1410,8 @@ private fun ProjectScreen(
                                     StationFormat.decimal(flow.local, 3),
                                     StationFormat.decimal(flow.accumulated, 3),
                                     StationFormat.decimal(drainageNetwork?.capacity?.get(drainageSelected) ?: 0.0, 3),
-                                ) + if (flow.tooLarge) " " + tr("Bacia grande para o método racional.") else ""
+                                ) + (if (flow.tooLarge) " " + tr("Bacia grande para o método racional.") else "") +
+                                    (culvertLine(placed, flow.accumulated)?.let { " $it" } ?: "")
                             },
                             onLinkBasin = link@{ area, minutes ->
                                 val id = drainageSelected ?: return@link

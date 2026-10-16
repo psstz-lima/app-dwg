@@ -1464,3 +1464,5 @@ Ligar bacia	Link basin
 Vazão da bacia: {0} m³/s. Acumulada: {1} m³/s. Capacidade: {2} m³/s.	Basin flow: {0} m³/s. Accumulated: {1} m³/s. Capacity: {2} m³/s.
 Bacia grande para o método racional.	Basin is large for the rational method.
 Informe a equação de chuvas (K, a, b, c) nas bacias antes de ligar a vazão.	Enter the rainfall equation (K, a, b, c) in Basins before linking the flow.
+Bueiro {0} m × {1} m, {2}: lâmina {3} m.	Culvert {0} m × {1} m, {2}: headwater {3} m.
+Transbordamento da rodovia.	The road overtops.
