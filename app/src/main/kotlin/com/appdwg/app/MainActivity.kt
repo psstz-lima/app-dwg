@@ -576,6 +576,7 @@ private fun ProjectScreen(
     var showVolume by remember(fileName) { mutableStateOf(false) }
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
     var showBasin by remember(fileName) { mutableStateOf(false) }
+    var showDrainage by remember(fileName) { mutableStateOf(false) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
@@ -862,6 +863,7 @@ private fun ProjectScreen(
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.SLOPE, analysisLabel, vm.analysisMode != 0, feature = ProFeature.ANALYSIS) { showAnalysis = true })
         if (advice.isNotEmpty()) add(RailTool(GIcon.IDEA, tr("Sugestões"), feature = ProFeature.ADVICE) { showAdvice = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.BASIN, tr("Bacias"), vm.basin != null || vm.outlets.isNotEmpty() || v.pickingOutlet, feature = ProFeature.BASIN) { showBasin = true })
+        add(RailTool(GIcon.DRAINAGE, tr("Drenagem"), showDrainage, feature = ProFeature.DRAINAGE) { showDrainage = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.VOLUME, volumeLabel, vm.volume != null, feature = ProFeature.VOLUME) { showVolume = true })
         if (project.surfaces.isNotEmpty()) add(RailTool(GIcon.ASBUILT, asBuiltLabel, vm.asBuilt != null, feature = ProFeature.AS_BUILT) { showAsBuilt = true })
         add(RailTool(GIcon.MODELS, tr("Modelos"), feature = ProFeature.MODELS) { showModels = true })
@@ -882,9 +884,12 @@ private fun ProjectScreen(
     }
     // The free version shows every tool with a padlock; touching one opens the Gromatic Pro screen.
     // Pro leaves each tool on its own action: nothing on the rail stays locked.
+    // The drainage library stays open so the album can be browsed. Placement and calculations
+    // inside it are still ProFeature.DRAINAGE.
     fun railTools(): List<RailTool> = allTools().map { tool ->
         val feature = tool.feature ?: return@map tool
-        if (proOpen(feature)) tool else tool.copy(active = false, locked = true, onClick = { vm.proRequested = true })
+        if (feature == ProFeature.DRAINAGE || proOpen(feature)) tool
+        else tool.copy(active = false, locked = true, onClick = { vm.proRequested = true })
     }
     val current = info
     @Composable
@@ -1652,6 +1657,8 @@ private fun ProjectScreen(
             com.appdwg.core.Advice.Kind.SLOPES -> terrainSurface?.let { vm.analysisSurface = it.name; vm.analysisMode = 1; vm.runAnalysis(it) }
         }
     }, onDismiss = { showAdvice = false; adviceCard = false })
+
+    if (showDrainage) DrainageLibraryDialog(isPro, onPro = { vm.proRequested = true }, onDismiss = { showDrainage = false })
 
     if (showBasin) BasinDialog(vm, project, onPick = {
         showBasin = false; v.pickingOutlet = true; measuring = false; show3d = false; tapped = null

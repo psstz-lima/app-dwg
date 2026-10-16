@@ -1349,3 +1349,72 @@ Calibrado. RMS horizontal {0} m.	Calibrated. Horizontal RMS {0} m.
 Calibrar	Calibrate
 Você está sobre qual ponto?	Which point are you standing on?
 O projeto não tem pontos para calibrar.	The project has no points to calibrate on.
+Drenagem	Drainage
+Biblioteca de dispositivos	Device library
+Buscar por código ou nome	Search by code or name
+Capítulo	Chapter
+Capítulo {0}	Chapter {0}
+Categoria	Category
+Lineares	Linear
+Pontuais	Point
+Família	Family
+Em revisão	Under review
+Sem seção paramétrica	No parametric section
+Lançamento e cálculos bloqueados até a revisão.	Placement and calculations stay blocked until the review.
+Revisado por	Reviewed by
+Marcar como revisado	Mark as reviewed
+Informe o nome e a data.	Enter the name and the date.
+Revisado por {0} em {1}.	Reviewed by {0} on {1}.
+Lançar	Place
+Comprimento (m)	Length (m)
+O Pro libera o lançamento e os cálculos.	Pro unlocks placement and calculations.
+Disponível para lançamento.	Ready to place.
+Importar biblioteca	Import library
+Importar biblioteca (JSON)	Import library (JSON)
+Importar	Import
+A biblioteca do usuário foi incorporada ({0} dispositivos).	The user library was merged ({0} devices).
+Esquema {0} não é suportado.	Schema {0} is not supported.
+O JSON da biblioteca não pôde ser lido.	The library JSON could not be read.
+Nenhum dispositivo encontrado.	No devices found.
+Parâmetros	Parameters
+Materiais	Materials
+Consumos	Quantities
+Conexões	Connections
+Fonte	Source
+Fonte: {0}, página {1}, desenho {2}	Source: {0}, page {1}, drawing {2}
+Área da seção: {0} m² ({1} m³/m)	Section area: {0} m² ({1} m³/m)
+Área da seção: {0} m²	Section area: {0} m²
+Para {0} m	For {0} m
+Para {0} un	For {0} units
+Informe um número.	Enter a number.
+Catálogo {0} · {1}	Catalog {0} · {1}
+{0} dispositivos	{0} devices
+{0} dispositivos da biblioteca do usuário	{0} devices from the user library
+Drenagem superficial	Surface drainage
+Drenos profundos	Subsurface drains
+Drenos subsuperficiais	Shallow subsurface drains
+Drenos sub-horizontais	Horizontal drains
+Drenagem urbana	Urban drainage
+Bueiros tubulares	Pipe culverts
+Bueiros celulares	Box culverts
+Minitúneis	Microtunnels
+Canaletas com grelha	Grated channels
+Drenagem IPR-736: lançamento e cálculos	IPR-736 drainage: placement and calculations
+A biblioteca de drenagem pode ser consultada; o lançamento e os cálculos são do Pro.	The drainage library can be browsed; placement and calculations are part of Pro.
+Voltar	Back
+Montante	Upstream
+Jusante	Downstream
+Corpo	Barrel
+Ala	Wing wall
+Linear	Linear
+Pontual	Point
+Outro	Other
+Sem consumos tabelados.	No tabulated quantities.
+Problema: {0}	Issue: {0}
+Origem: {0}	Origin: {0}
+Seção do dispositivo	Device section
+Convencional	Conventional
+Extrusão	Extrusion
+Pré-moldado	Precast
+Linha simples	Single line
+sem valor	no value
