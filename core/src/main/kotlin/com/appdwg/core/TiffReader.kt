@@ -145,6 +145,78 @@ class TiffReader(
         return Raster(outW, outH, out)
     }
 
+    /** Byte length of one full-resolution block, or 0 when the index is missing. */
+    fun blockLength(index: Int): Long {
+        val b = blocks()
+        val ifd = b.ifd as Ifd
+        val tiled = ifd.tags.containsKey(322)
+        val counts = ifd.tags[if (tiled) 325 else 279] ?: return 0L
+        return counts.getOrElse(index) { 0L }
+    }
+
+    /**
+     * Uncompressed 8-bit window inside block [index]: the rectangle ([x], [y], [w], [h]) of that
+     * block, one sample out of [reduce] along each side. Reads those samples and not the rest of
+     * a strip. Null when the block is compressed, predicted, paletted, or not 8-bit, so the caller
+     * uses [readBlock] instead.
+     */
+    fun readRaw(index: Int, x: Int, y: Int, w: Int, h: Int, reduce: Int = 1): Raster? {
+        val b = blocks()
+        val ifd = b.ifd as Ifd
+        if (ifd.int(259, 1).toInt() != 1) return null
+        val bits = ifd.tags[258]?.first()?.toInt() ?: 1
+        if (bits != 8) return null
+        val samples = ifd.int(277, 1).toInt()
+        if (samples !in 1..4) return null
+        val predictor = ifd.int(317, 1).toInt()
+        if (predictor != 1 && predictor != 2) return null
+        val photometric = ifd.int(262, if (samples >= 3) 2 else 1).toInt()
+        if (photometric == 3) return null
+        val tiled = ifd.tags.containsKey(322)
+        val offsets = ifd.tags[if (tiled) 324 else 273] ?: return null
+        val counts = ifd.tags[if (tiled) 325 else 279] ?: return null
+        if (index !in offsets.indices) return null
+        val bx = (index % b.across) * b.blockWidth
+        val by = (index / b.across) * b.blockHeight
+        val cols = min(b.blockWidth, b.width - bx)
+        val rows = min(b.blockHeight, b.height - by)
+        val step = reduce.coerceAtLeast(1)
+        val x0 = x.coerceIn(0, cols)
+        val y0 = y.coerceIn(0, rows)
+        val x1 = min(cols, x0 + w.coerceAtLeast(0))
+        val y1 = min(rows, y0 + h.coerceAtLeast(0))
+        if (x1 <= x0 || y1 <= y0) return null
+        val outW = (x1 - x0 + step - 1) / step
+        val outH = (y1 - y0 + step - 1) / step
+        val pixelBytes = samples
+        val rowBytes = b.blockWidth * pixelBytes
+        val length = counts.getOrElse(index) { 0L }
+        // Predictor 2 stores each sample as a difference from the one to its left, so the row
+        // has to be read from column 0. It is still only the rows in the window, not the strip.
+        val readX = if (predictor == 2) 0 else x0
+        val span = (x1 - readX) * pixelBytes
+        if (span <= 0 || outW <= 0 || outH <= 0) return null
+        val out = IntArray(outW * outH)
+        val buf = ByteArray(span)
+        val origin = offsets[index]
+        for (yy in 0 until outH) {
+            val srcY = y0 + yy * step
+            if (srcY >= y1) break
+            val pos = origin + srcY.toLong() * rowBytes + readX.toLong() * pixelBytes
+            if (pos < origin || pos + span > origin + length) continue
+            input.read(pos, buf, 0, span)
+            if (predictor == 2) {
+                for (i in pixelBytes until span) buf[i] = (buf[i] + buf[i - pixelBytes]).toByte()
+            }
+            val skip = (x0 - readX) * pixelBytes
+            for (xx in 0 until outW) {
+                val p = skip + xx * step * pixelBytes
+                if (p + pixelBytes <= buf.size) out[yy * outW + xx] = argb(buf, p, samples, 1, photometric, null)
+            }
+        }
+        return Raster(outW, outH, out)
+    }
+
     /** Sizes of the full picture and its overviews, in file order: level 0 is the full picture. */
     fun levels(): List<Pair<Int, Int>> = images().filter { it.subfileType and 4 == 0 }.map { it.width to it.height }
 
