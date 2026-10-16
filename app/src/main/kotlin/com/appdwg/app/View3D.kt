@@ -381,6 +381,10 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     @Volatile private var height = 1
     private var program = 0
     private val meshBuffers = ArrayList<IntArray>()
+    /** Surface triangles by plan cell, so each picture tile draws only what lies under it. */
+    private val surfaceChunks: List<MeshChunks> by lazy {
+        scene.surfaces.map { MeshChunks.build(it.vertices, 9, it.indices) }
+    }
     private val lineBuffers = ArrayList<Int>()
     /** Per surface: element buffers of its edges and of its border. */
     private val edgeBuffers = ArrayList<IntArray>()
@@ -397,17 +401,17 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     var onNeedsFrame: (() -> Unit)? = null
     @Volatile private var streaming = false
     private var streamingPicture: TiledPicture? = null
-    private var uploadsBlocked = false
+    @Volatile private var uploadsBlocked = false
     @Volatile private var streamGeneration = 0
     @Volatile private var gpuTileSide = DrapeLod.STREAM_TILE
-    @Volatile private var decodeFailedGeneration = -1
     private val residents = HashMap<String, Resident>()
     /** The overview texture. It is drawn on the first frame and stays under the refined tiles. */
     private val baseTiles = ArrayList<GpuTile>()
     private val ready = ConcurrentLinkedQueue<PendingTile>()
     private val queuedKeys = ConcurrentHashMap.newKeySet<String>()
     private val failedKeys = ConcurrentHashMap.newKeySet<String>()
-    private val decoder = Executors.newFixedThreadPool(DrapeLod.DECODES_IN_FLIGHT) { runnable ->
+    // One more thread than decodes, so rebuilding the plan after an orbit never waits behind them.
+    private val decoder = Executors.newFixedThreadPool(DrapeLod.DECODES_IN_FLIGHT + 1) { runnable ->
         Thread(runnable, "drape-decode").apply { isDaemon = true }
     }
     private var useStamp = 0L
@@ -466,6 +470,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         if (sameTiles && !sameView) {
             planCache = null
             planStamp = FloatArray(6) { Float.NaN }
+            // A new quality starts clean: a texture refused at Máxima must not stop Alta from refining.
+            uploadsBlocked = false
+            failedKeys.clear()
         }
     }
 
@@ -669,19 +676,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val snapshot = drape
         val picture = snapshot?.tiles ?: return
         val generation = streamGeneration
+        // A plan whose near tiles do not all fit is still drawn: the budget keeps the farther ones
+        // coarser. Only the GPU refusing a texture steps the quality down, never the plan alone.
         val plan = planCache
-        if (plan != null && !plan.nearFits && steppedQuality != snapshot.quality) {
-            steppedQuality = snapshot.quality
-            onDrapeFailed?.invoke()
-        }
-        if (decodeFailedGeneration == generation) {
-            decodeFailedGeneration = -1
-            uploadsBlocked = true
-            if (steppedQuality != snapshot.quality) {
-                steppedQuality = snapshot.quality
-                onDrapeFailed?.invoke()
-            }
-        }
         var uploaded = 0
         var failed = false
         try {
@@ -747,7 +744,12 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val refined = if (plan == null) {
             residents.values.sortedBy { it.node.level }.take(DrapeLod.DRAW_REFINEMENTS).map { it.tile }
         } else {
-            plan.tiles.mapNotNull { residents[it.key] }.take(DrapeLod.DRAW_REFINEMENTS).map { it.tile }
+            // The plan's tiles, then any older tile still on the GPU (the previous quality, or
+            // the view before this one), finest first, so a change never drops back to the overview.
+            val planKeys = plan.tiles.mapTo(HashSet()) { it.key }
+            val current = plan.tiles.mapNotNull { residents[it.key] }
+            val older = residents.values.filter { it.node.key !in planKeys }.sortedBy { it.node.level }
+            (current + older).take(DrapeLod.DRAW_REFINEMENTS).map { it.tile }
         }
         // Finer tiles first. The base overview fills everything they do not cover.
         gpuTiles = refined + baseTiles
@@ -763,7 +765,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         )
         publishRefining(plan != null && tick.refining)
         if (!uploadsBlocked && plan != null) {
-            enqueueDecodes(picture, tick.request, generation, DrapeQuality.pyramidLevel(snapshot.quality))
+            enqueueDecodes(picture, tick.request, generation)
         }
         schedulePlan(snapshot, picture)
         if (!uploadsBlocked && (tick.refining || ready.isNotEmpty())) onNeedsFrame?.invoke()
@@ -945,7 +947,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     }
 
     /** Asks the decode thread for the nearest missing tiles. File reads stay off this thread. */
-    private fun enqueueDecodes(picture: TiledPicture, nodes: List<DrapeLod.Node>, generation: Int, finest: Int) {
+    private fun enqueueDecodes(picture: TiledPicture, nodes: List<DrapeLod.Node>, generation: Int) {
         val residentNodeKeys = residents.values.map { it.node.key }.toSet()
         val waiting = ready.map { it.node.key }.toSet()
         val planKeys = (planCache?.tiles ?: nodes).mapTo(HashSet()) { it.key }
@@ -972,10 +974,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                         if (bitmap != null && !bitmap.isRecycled) bitmap.recycle()
                         if (generation == streamGeneration) {
                             queuedKeys.remove(node.key)
+                            // A window that cannot be read stays on the coarser picture under it. It
+                            // is not asked again, and it no longer lowers the quality of the whole view.
                             if (bitmap == null) failedKeys.add(node.key)
-                            // Levels 0–3 are read from the file. A miss there is a real failure.
-                            // A coarser miss is a pyramid tile that is not written yet; the base stays.
-                            if (bitmap == null && node.level <= finest && node.level <= 3) decodeFailedGeneration = generation
                         }
                         onNeedsFrame?.invoke()
                         return@execute
@@ -987,7 +988,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     if (part == null) {
                         if (!bitmap.isRecycled) bitmap.recycle()
                         if (generation == streamGeneration) queuedKeys.remove(node.key)
-                        if (node.level <= finest) decodeFailedGeneration = generation
+                        failedKeys.add(node.key)
                         onNeedsFrame?.invoke()
                         return@execute
                     }
@@ -997,7 +998,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                         if (piece != null && !piece.isRecycled) piece.recycle()
                         if (generation == streamGeneration) {
                             queuedKeys.remove(node.key)
-                            if (piece == null && node.level <= finest) decodeFailedGeneration = generation
+                            if (piece == null) failedKeys.add(node.key)
                         }
                         onNeedsFrame?.invoke()
                         return@execute
@@ -1015,7 +1016,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                 } catch (_: Throwable) {
                     if (generation == streamGeneration) {
                         queuedKeys.remove(node.key)
-                        if (node.level <= finest) decodeFailedGeneration = generation
+                        failedKeys.add(node.key)
                     }
                     onNeedsFrame?.invoke()
                 }
@@ -1089,13 +1090,16 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         program = buildProgram()
         meshBuffers.clear()
         lineBuffers.clear()
-        for (m in scene.surfaces + scene.models) {
+        val chunks = surfaceChunks
+        for ((i, m) in (scene.surfaces + scene.models).withIndex()) {
+            // Surfaces upload their triangles in cell order; the set of triangles is the same.
+            val order = if (i < chunks.size) chunks[i].indices else m.indices
             val ids = IntArray(2)
             GLES30.glGenBuffers(2, ids, 0)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
             GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, m.vertices.size * 4, floats(m.vertices), GLES30.GL_STATIC_DRAW)
             GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
-            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, m.indices.size * 4, ints(m.indices), GLES30.GL_STATIC_DRAW)
+            GLES30.glBufferData(GLES30.GL_ELEMENT_ARRAY_BUFFER, order.size * 4, ints(order), GLES30.GL_STATIC_DRAW)
             meshBuffers += ids
         }
         edgeBuffers.clear()
@@ -1200,23 +1204,32 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glUniform1i(uTex, 0)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glPolygonOffset(-1f, -1f)
-            for (tile in tiles) {
-                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tile.id)
-                GLES30.glUniform4f(uRect, tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
-                scene.surfaces.forEachIndexed { i, m ->
-                    if (m.name in hidden) return@forEachIndexed
-                    val st = styles[m.name] ?: SurfaceStyle()
-                    if (st.elevation == ElevationPaint.NONE) return@forEachIndexed
-                    val ids = meshBuffers[i]
-                    GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
-                    GLES30.glEnableVertexAttribArray(0)
-                    GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
-                    GLES30.glEnableVertexAttribArray(1)
-                    GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
-                    GLES30.glEnableVertexAttribArray(2)
-                    GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
-                    GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
-                    GLES30.glDrawElements(GLES30.GL_TRIANGLES, m.indices.size, GLES30.GL_UNSIGNED_INT, 0)
+            val chunks = surfaceChunks
+            // Surface first, then its tiles: the vertex setup is bound once per surface.
+            scene.surfaces.forEachIndexed { i, m ->
+                if (m.name in hidden) return@forEachIndexed
+                val st = styles[m.name] ?: SurfaceStyle()
+                if (st.elevation == ElevationPaint.NONE) return@forEachIndexed
+                val ids = meshBuffers[i]
+                GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, ids[0])
+                GLES30.glEnableVertexAttribArray(0)
+                GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 36, 0)
+                GLES30.glEnableVertexAttribArray(1)
+                GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, 36, 12)
+                GLES30.glEnableVertexAttribArray(2)
+                GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, 36, 24)
+                GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ids[1])
+                // Finer tiles come first. Where they are drawn the coarser ones fail the depth test.
+                for (tile in tiles) {
+                    val ranges = chunks[i].ranges(tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
+                    if (ranges.isEmpty()) continue
+                    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tile.id)
+                    GLES30.glUniform4f(uRect, tile.rect[0], tile.rect[1], tile.rect[2], tile.rect[3])
+                    var r = 0
+                    while (r < ranges.size) {
+                        GLES30.glDrawElements(GLES30.GL_TRIANGLES, ranges[r + 1], GLES30.GL_UNSIGNED_INT, ranges[r] * 4)
+                        r += 2
+                    }
                 }
             }
             GLES30.glUniform1i(uDrape, 0)
@@ -1412,7 +1425,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             precision mediump float;
             in vec3 vColor;
             in float vShade;
-            in vec2 vUv;
+            // highp: at mediump (16 bits on Mali) a 2048 texture is read in steps of a whole texel,
+            // so every quality looked blocky in 3D.
+            in highp vec2 vUv;
             uniform int uDrape;
             uniform sampler2D uTex;
             uniform float uAlpha;

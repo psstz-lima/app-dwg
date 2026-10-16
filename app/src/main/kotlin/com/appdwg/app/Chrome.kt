@@ -100,11 +100,13 @@ fun AppMark(modifier: Modifier = Modifier, description: String = "Gromatic") {
 /** Button in the theme's style: filled with the accent, or outlined/tonal. */
 /** [outlined] keeps a border in every theme (Terra draws its buttons without one otherwise). */
 @Composable
-fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null, description: String? = null) {
+fun GButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, primary: Boolean = false, enabled: Boolean = true, outlined: Boolean = false, icon: GIcon? = null, description: String? = null, solid: Boolean = false) {
     val g = LocalG.current
     val shape = RoundedCornerShape(g.buttonRadius)
     val bg = when {
         primary -> g.accent
+        // Over the drawing or a picture: an opaque card, so the label stays readable.
+        solid -> g.card.copy(alpha = 1f)
         g.choice == ThemeChoice.EARTH -> g.chip
         else -> Color.Transparent
     }

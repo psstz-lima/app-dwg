@@ -15,7 +15,7 @@ import kotlin.math.sqrt
  * budget on a 4 GB or a 6 GB device, so the far tiles stay coarse.
  */
 internal object DrapeLod {
-    const val STREAM_TILE = 1024
+    const val STREAM_TILE = 512
     /**
      * Textures uploaded on the GL thread each frame, on a GPU that can take two.
      * A Mali-G57 MC2 (Redmi Note 14 Pro 4G, 8 GB) or a Mali-G615 uploads one: a second
@@ -24,10 +24,14 @@ internal object DrapeLod {
      * would delay the first frame, which has to match the old single-texture path.
      */
     const val UPLOADS_PER_FRAME = 2
-    /** Background decodes that may be in flight. The GL thread still uploads fewer. */
-    const val DECODES_IN_FLIGHT = 2
-    /** Refined tiles drawn on top of the base. The rest of the view stays the base texture. */
-    const val DRAW_REFINEMENTS = 6
+    /** Background decodes that may be in flight. Three keep a deflate orthophoto refining after an orbit. */
+    const val DECODES_IN_FLIGHT = 3
+    /**
+     * Refined tiles drawn on top of the base. Each one only draws the mesh chunks under it
+     * ([MeshChunks]), so this no longer multiplies the whole TIN. Six left most of a Máxima view
+     * on the overview.
+     */
+    const val DRAW_REFINEMENTS = 160
     /** Streamed tiles at most this side get a mipmap chain. Larger ones are already near screen size. */
     const val MIPMAP_SIDE = 512
 
@@ -174,33 +178,37 @@ internal object DrapeLod {
             return Selection(kept, used, nearFits = false, steps = start.size)
         }
 
-        val nodes = start.toMutableList()
-        val skipped = HashSet<String>()
-        var guard = 0
-        while (guard++ < 20000) {
-            val candidate = nodes
-                .filter { n -> n.key !in skipped && n.level > levelFor(distanceOf(n)) }
-                .minWithOrNull(compareBy<Node>({ distanceOf(it) }, { it.key }))
-                ?: break
+        // Nearest node that the screen wants finer, first. A queue keeps this linear in the tiles
+        // it touches: rescanning every node per split made a 512 tile plan take most of a second.
+        val order = compareBy<Pair<Node, Double>>({ it.second }, { it.first.level }, { it.first.fileY }, { it.first.fileX })
+        val queue = java.util.PriorityQueue(order)
+        val nodes = LinkedHashSet<Node>(start)
+        var used = total(start)
+        fun offer(n: Node) {
+            val d = distanceOf(n)
+            if (n.level > levelFor(d)) queue.add(n to d)
+        }
+        start.forEach(::offer)
+        var guard = 1
+        while (guard < 20000) {
+            val (candidate, _) = queue.poll() ?: break
+            guard++
             val parts = split(candidate, finest, side)
-            if (parts.isEmpty() || (parts.size == 1 && parts[0] == candidate)) {
-                skipped += candidate.key
-                continue
-            }
-            val nextBytes = total(nodes) - nodeBytes(candidate) + total(parts)
-            if (nextBytes > budgetBytes) {
-                skipped += candidate.key
-                continue
-            }
+            if (parts.isEmpty() || (parts.size == 1 && parts[0] == candidate)) continue
+            val nextBytes = used - nodeBytes(candidate) + total(parts)
+            if (nextBytes > budgetBytes) continue
             nodes.remove(candidate)
             nodes += parts
+            used = nextBytes
+            parts.forEach(::offer)
         }
-        val sorted = nodes.sortedWith(compareBy<Node>({ distanceOf(it) }, { it.key }))
+        val distances = nodes.associateWith { distanceOf(it) }
+        val sorted = nodes.sortedWith(compareBy<Node>({ distances.getValue(it) }, { it.level }, { it.fileY }, { it.fileX }))
         val nearFits = sorted.none { n ->
-            val want = levelFor(distanceOf(n))
+            val want = levelFor(distances.getValue(n))
             want == finest && n.level > want
         }
-        return Selection(sorted, total(sorted), nearFits, steps = guard)
+        return Selection(sorted, used, nearFits, steps = guard)
     }
 
     /**
