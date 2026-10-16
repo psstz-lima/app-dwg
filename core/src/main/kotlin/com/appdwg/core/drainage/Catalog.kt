@@ -117,6 +117,18 @@ data class DeviceDef(
     }
 }
 
+/** No devices yet. The album is read off the UI thread and replaces this. */
+fun emptyDeviceCatalog(): DeviceCatalog = DeviceCatalog(
+    schema = DRAINAGE_SCHEMA,
+    origin = "",
+    title = "",
+    generated = "",
+    unitsNote = "",
+    chapters = emptyMap(),
+    sources = emptyMap(),
+    devices = emptyList(),
+)
+
 data class DeviceCatalog(
     val schema: Int,
     val origin: String,

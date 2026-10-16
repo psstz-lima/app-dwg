@@ -1867,7 +1867,14 @@ private fun ProjectScreen(
         }
     }, onDismiss = { showAdvice = false; adviceCard = false })
 
-    if (showDrainage) DrainageLibraryDialog(isPro, onPro = { vm.proRequested = true }, onDismiss = { showDrainage = false }, onPlace = { catalog, device ->
+    if (showDrainage) DrainageLibraryDialog(
+        isPro,
+        onPro = { vm.proRequested = true },
+        onDismiss = { showDrainage = false },
+        catalog = vm.drainageCatalog,
+        catalogReady = vm.drainageCatalogReady,
+        catalogNote = vm.drainageCatalogNote,
+        onPlace = { catalog, device ->
         if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
         else {
             vm.useDrainageCatalog(catalog)

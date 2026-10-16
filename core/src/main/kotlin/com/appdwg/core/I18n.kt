@@ -18,7 +18,11 @@ object I18n {
     val english: Map<String, String> by lazy { load("i18n/en.tsv") }
 
     private fun load(name: String): Map<String, String> {
-        val stream = I18n::class.java.getResourceAsStream(name) ?: return emptyMap()
+        // Absolute path: R8 repackages this class, and a relative name would miss the catalogue.
+        val path = "com/appdwg/core/$name"
+        val stream = I18n::class.java.classLoader?.getResourceAsStream(path)
+            ?: I18n::class.java.getResourceAsStream("/$path")
+            ?: return emptyMap()
         val map = HashMap<String, String>(2048)
         stream.bufferedReader(Charsets.UTF_8).useLines { lines ->
             for (line in lines) {

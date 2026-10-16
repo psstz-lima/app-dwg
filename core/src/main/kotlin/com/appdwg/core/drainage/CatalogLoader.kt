@@ -6,9 +6,18 @@ package com.appdwg.core.drainage
  */
 object CatalogLoader {
     private val bundledCatalog: DeviceCatalog by lazy {
-        val stream = CatalogLoader::class.java.getResourceAsStream("ipr736.json")
+        openBundled().bufferedReader(Charsets.UTF_8).use { parse(it.readText()) }
+    }
+
+    /**
+     * The album sits at a fixed classpath path. R8 moves this class to another package, so a
+     * relative [Class.getResourceAsStream] looks beside the renamed class and misses the file.
+     */
+    private fun openBundled(): java.io.InputStream {
+        val path = "com/appdwg/core/drainage/ipr736.json"
+        return CatalogLoader::class.java.classLoader?.getResourceAsStream(path)
+            ?: CatalogLoader::class.java.getResourceAsStream("/$path")
             ?: throw CatalogFormatException(CatalogFormatException.Kind.SHAPE, "ipr736.json")
-        stream.bufferedReader(Charsets.UTF_8).use { parse(it.readText()) }
     }
 
     fun bundled(): DeviceCatalog = bundledCatalog

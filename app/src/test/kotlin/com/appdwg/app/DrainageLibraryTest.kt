@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.appdwg.core.Display
+import com.appdwg.core.drainage.CatalogLoader
 import java.util.Locale
 import org.junit.Rule
 import org.junit.Test
@@ -50,7 +51,14 @@ class DrainageLibraryTest {
                 GromaticTheme(ThemeChoice.FIELD_DARK) {
                     CompositionLocalProvider(LocalDensity provides Density(density = 2.75f, fontScale = scale)) {
                         Column(Modifier.width(320.dp).height(720.dp).testTag("drainage")) {
-                            DrainageLibraryBody(isPro = false, onPro = {}, Modifier.fillMaxSize())
+                            DrainageLibraryBody(
+                                isPro = false,
+                                onPro = {},
+                                modifier = Modifier.fillMaxSize(),
+                                catalog = CatalogLoader.bundled(),
+                                catalogReady = true,
+                                catalogNote = null,
+                            )
                         }
                     }
                 }

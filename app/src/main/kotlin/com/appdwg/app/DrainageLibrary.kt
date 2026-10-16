@@ -66,6 +66,9 @@ fun DrainageLibraryDialog(
     isPro: Boolean,
     onPro: () -> Unit,
     onDismiss: () -> Unit,
+    catalog: DeviceCatalog,
+    catalogReady: Boolean,
+    catalogNote: String?,
     onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
     onSuggestCulverts: (() -> Unit)? = null,
 ) {
@@ -74,7 +77,12 @@ fun DrainageLibraryDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().fillMaxWidth(0.96f),
         title = { Text(tr("Biblioteca de dispositivos"), maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        text = { DrainageLibraryBody(isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp), onPlace) },
+        text = {
+            DrainageLibraryBody(
+                isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                catalog, catalogReady, catalogNote, onPlace,
+            )
+        },
         confirmButton = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (onSuggestCulverts != null) GButton(tr("Sugerir bueiros"), onSuggestCulverts, outlined = true, modifier = Modifier.fillMaxWidth())
@@ -89,9 +97,20 @@ fun DrainageLibraryBody(
     isPro: Boolean,
     onPro: () -> Unit,
     modifier: Modifier = Modifier,
+    catalog: DeviceCatalog,
+    catalogReady: Boolean,
+    catalogNote: String?,
     onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
 ) {
-    var catalog by remember { mutableStateOf(CatalogLoader.bundled()) }
+    if (!catalogReady) {
+        Text(tr("Abrindo a biblioteca de drenagem…"), modifier, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        return
+    }
+    if (catalogNote != null && catalog.devices.isEmpty()) {
+        Text(catalogNote, modifier, maxLines = 4, overflow = TextOverflow.Ellipsis)
+        return
+    }
+    var current by remember(catalog) { mutableStateOf(catalog) }
     var query by remember { mutableStateOf("") }
     var chapter by remember { mutableStateOf<Int?>(null) }
     var category by remember { mutableStateOf<DeviceCategory?>(null) }
@@ -99,25 +118,25 @@ fun DrainageLibraryBody(
     var selected by remember { mutableStateOf<String?>(null) }
     val scroll = rememberScrollState()
     LaunchedEffect(selected) { scroll.scrollTo(0) }
-    val picked = selected?.let { catalog.device(it) }
+    val picked = selected?.let { current.device(it) }
     if (picked != null) {
         Column(
             modifier.verticalScroll(scroll).padding(horizontal = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            DeviceDetail(catalog, picked, isPro, onPro, onBack = { selected = null }, onCatalog = { catalog = it }, onPlace = onPlace)
+            DeviceDetail(current, picked, isPro, onPro, onBack = { selected = null }, onCatalog = { current = it }, onPlace = onPlace)
         }
     } else {
         // The album has hundreds of rows. A plain column composes every one and the
         // first open stops answering taps on a slow device.
         DeviceBrowser(
-            catalog, query, chapter, category, family, isPro, modifier,
+            current, query, chapter, category, family, isPro, modifier,
             onQuery = { query = it },
             onChapter = { chapter = it },
             onCategory = { category = it },
             onFamily = { family = it },
             onOpen = { selected = it },
-            onCatalog = { catalog = it },
+            onCatalog = { current = it },
         )
     }
 }

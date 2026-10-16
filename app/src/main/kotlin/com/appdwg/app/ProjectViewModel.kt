@@ -1121,8 +1121,29 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     /** Placed drainage devices, with their own undo. */
     var drainage by mutableStateOf<List<com.appdwg.core.drainage.PlacedDevice>>(emptyList())
         private set
-    var drainageCatalog by mutableStateOf(com.appdwg.core.drainage.CatalogLoader.bundled())
+    /** Empty until the album is parsed off the main thread. A failure leaves this empty and sets [drainageCatalogNote]. */
+    var drainageCatalog by mutableStateOf(com.appdwg.core.drainage.emptyDeviceCatalog())
         private set
+    var drainageCatalogReady by mutableStateOf(false)
+        private set
+    var drainageCatalogNote by mutableStateOf<String?>(null)
+        private set
+
+    init {
+        viewModelScope.launch {
+            val loaded = withContext(Dispatchers.Default) {
+                runCatching { com.appdwg.core.drainage.CatalogLoader.bundled() }
+            }
+            loaded.onSuccess {
+                drainageCatalog = it
+                android.util.Log.i("Gromatic", "biblioteca de drenagem: ${it.devices.size} dispositivos")
+            }.onFailure { error ->
+                android.util.Log.e("Gromatic", "biblioteca de drenagem", error)
+                drainageCatalogNote = tr("A biblioteca de drenagem não pôde ser aberta.")
+            }
+            drainageCatalogReady = true
+        }
+    }
     var drainageBasins by mutableStateOf<List<com.appdwg.core.drainage.DeviceBasin>>(emptyList())
         private set
     var drainagePhases by mutableStateOf<List<com.appdwg.core.drainage.DevicePhase>>(emptyList())
@@ -1133,6 +1154,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     fun useDrainageCatalog(catalog: com.appdwg.core.drainage.DeviceCatalog) {
         drainageCatalog = catalog
+        drainageCatalogReady = true
+        if (catalog.devices.isNotEmpty()) drainageCatalogNote = null
     }
 
     fun putDrainage(device: com.appdwg.core.drainage.PlacedDevice) {

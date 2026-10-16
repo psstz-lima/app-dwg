@@ -26,6 +26,11 @@
 -keep class com.appdwg.app.SubscriptionPurchase { *; }
 -keep class com.appdwg.app.EntitlementSession { *; }
 
+# Classpath catalogues (ipr736.json, i18n/en.tsv, idf/brasil.tsv) are opened by absolute
+# path. R8 full mode repackages the loader classes; a relative getResourceAsStream then
+# looks in the new package and the release build crashes on launch. Do not switch those
+# loads back to a name relative to the class.
+
 # File parsers and the binary project cache. They are called directly, but R8 full mode
 # must not drop a format branch or the cache layout that reopens a project.
 -keep class com.appdwg.core.LandXmlReader { *; }
