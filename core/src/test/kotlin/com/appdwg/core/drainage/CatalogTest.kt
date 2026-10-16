@@ -123,6 +123,21 @@ class CatalogTest {
     }
 
     @Test
+    fun anImportedLibraryRoundTripsAndAWiderPipeKeepsItsDiameter() {
+        val library = """
+            {"schema":1,"origin":"DER-SP","devices":[{"code":"DER V-01","name":"Valeta municipal","family":"DER","chapter":1,"category":"linear","page":{"source":"DER","pdf_page":1,"desenho":"V"}}]}
+        """.trimIndent()
+        val stored = CatalogLibraries.append(null, library)
+        val again = CatalogLibraries.append(stored, library)
+        val merged = CatalogLibraries.apply(catalog, again)
+        assertEquals("DER-SP", merged.device("DER V-01")!!.origin)
+        assertEquals("DNIT IPR-736", merged.device("VPCG 160-30")!!.origin)
+        val pipe = catalog.device("BSTC 150")!!
+        val widened = resolveSection(pipe, mapOf("DN_cm" to 200.0))!!
+        assertEquals(2.0, widened.points.maxOf { it.x } - widened.points.minOf { it.x }, 1e-6)
+    }
+
+    @Test
     fun userLibraryMergesAndCanReplaceACode() {
         val added = CatalogLoader.importUser(
             """

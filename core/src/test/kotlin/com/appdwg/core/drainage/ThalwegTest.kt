@@ -29,6 +29,21 @@ class ThalwegTest {
     }
 
     @Test
+    fun aSuggestedCulvertFollowsTheTerrainAndKeepsATwinCode() {
+        val road = listOf(Point2(0.0, 0.0), Point2(100.0, 0.0))
+        val barrel = CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 1.0, 1.0, 2)
+        val crossing = ThalwegCulvert(40.0, 0.0, 1_000.0, 1.0, barrel, CulvertHead(0.4, 0.3, 0.4, 1.0, false))
+        val placed = ThalwegCulverts.device(crossing, road, "c1")
+        assertEquals("BDTC 100", placed.code)
+        assertEquals(GradeMode.HYDRAULIC, placed.grade.mode)
+        assertTrue(placed.grade.buried)
+        val section = CrossSection("circular_barrels", "m", listOf(circle(1.0)))
+        val nodes = Sweep.polyline(placed.xs.toDoubleArray(), placed.ys.toDoubleArray(), null, null)
+        val mesh = Sweep.sweep(section, nodes, 0.0, placed.grade, { _, _ -> 120.0 })!!
+        assertTrue(mesh.frames.minOf { it.invertZ } > 110.0)
+    }
+
+    @Test
     fun theBarrelCrossesTheAlignment() {
         val road = listOf(Point2(0.0, 0.0), Point2(100.0, 0.0))
         val (a, b) = ThalwegCulverts.barrelAcross(road, 40.0, 0.0)

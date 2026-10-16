@@ -60,6 +60,27 @@ class NetworkTest {
     }
 
     @Test
+    fun aTwinLineCarriesTwiceTheSingleBarrel() {
+        val catalog = CatalogLoader.bundled()
+        val single = catalog.device("BSTC 100")!!
+        val twin = catalog.device("BDTC 100")!!
+        val device = line("a", 0.0, 20.0, 5.0, 4.8)
+        val one = DrainageNetwork.analyze(
+            listOf(device), { single.section }, { true }, { 0.015 },
+            cellsOf = { DrainageNetwork.parallelCells(single, emptyMap()) },
+        ).capacity.getValue("a")
+        val two = DrainageNetwork.analyze(
+            listOf(device), { twin.section }, { true }, { 0.015 },
+            cellsOf = { DrainageNetwork.parallelCells(twin, emptyMap()) },
+        ).capacity.getValue("a")
+        assertEquals(1, DrainageNetwork.parallelCells(single, emptyMap()))
+        assertEquals(2, DrainageNetwork.parallelCells(twin, emptyMap()))
+        assertEquals(one * 2.0, two, one * 0.02)
+        val box = catalog.device("BDCC 150x150 PM")!!
+        assertEquals(2, DrainageNetwork.parallelCells(box, emptyMap()))
+    }
+
+    @Test
     fun capacityFlagsAFlowTheSectionCannotCarry() {
         val device = line("a", 0.0, 10.0, 5.0, 4.9)
         val over = DrainageNetwork.analyze(listOf(device), { trench }, { true }, { 0.015 }, designFlow = { 50.0 })

@@ -177,10 +177,11 @@ class TiledPicture private constructor(
                 val up = min(2, topLevel - want)
                 if (up > 0) tile(want + up, tx shr up, ty shr up, load = true)
             }
-            // Finer tiles still in memory (the quality or zoom before this one) go on top.
-            if (want > 0) for (cy in 0..1) for (cx in 0..1) {
-                val c = tile(want - 1, 2 * tx + cx, 2 * ty + cy, load = false) ?: continue
-                out += Piece(c.image, Rect(0, 0, c.bitmap.width, c.bitmap.height), tileBounds(want - 1, 2 * tx + cx, 2 * ty + cy))
+            // Finer tiles still in memory go on top. A quality jump of two steps (Máxima to
+            // Normal) has to find the cache two levels down, not only the immediate children.
+            for ((k, cx, cy) in TileCache.finerKeys(want, tx, ty)) {
+                val c = tile(k, cx, cy, load = false) ?: continue
+                out += Piece(c.image, Rect(0, 0, c.bitmap.width, c.bitmap.height), tileBounds(k, cx, cy))
             }
         }
         return out

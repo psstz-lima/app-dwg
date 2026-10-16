@@ -1134,9 +1134,11 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             val loaded = withContext(Dispatchers.Default) {
                 runCatching { com.appdwg.core.drainage.CatalogLoader.bundled() }
             }
-            loaded.onSuccess {
-                drainageCatalog = it
-                android.util.Log.i("Gromatic", "biblioteca de drenagem: ${it.devices.size} dispositivos")
+            loaded.onSuccess { bundled ->
+                val saved = drainageUserLibrary
+                drainageCatalog = if (saved.isNullOrBlank()) bundled
+                else runCatching { com.appdwg.core.drainage.CatalogLibraries.apply(bundled, saved) }.getOrDefault(bundled)
+                android.util.Log.i("Gromatic", "biblioteca de drenagem: ${drainageCatalog.devices.size} dispositivos")
             }.onFailure { error ->
                 android.util.Log.e("Gromatic", "biblioteca de drenagem", error)
                 drainageCatalogNote = tr("A biblioteca de drenagem não pôde ser aberta.")
@@ -1155,10 +1157,39 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     var canUndoDrainage by mutableStateOf(false)
         private set
 
-    fun useDrainageCatalog(catalog: com.appdwg.core.drainage.DeviceCatalog) {
+    /** JSON of the user libraries merged into [drainageCatalog]. Saved inside the project. */
+    var drainageUserLibrary by mutableStateOf<String?>(null)
+        private set
+
+    fun useDrainageCatalog(catalog: com.appdwg.core.drainage.DeviceCatalog, userJson: String? = null) {
+        if (!userJson.isNullOrBlank()) {
+            drainageUserLibrary = com.appdwg.core.drainage.CatalogLibraries.append(drainageUserLibrary, userJson)
+        }
         drainageCatalog = catalog
         drainageCatalogReady = true
         if (catalog.devices.isNotEmpty()) drainageCatalogNote = null
+    }
+
+    /** Drops a project-specific library and returns to the bundled album. */
+    private fun clearDrainageLibrary() {
+        drainageUserLibrary = null
+        if (!drainageCatalogReady) return
+        val bundled = runCatching { com.appdwg.core.drainage.CatalogLoader.bundled() }.getOrNull() ?: return
+        drainageCatalog = bundled
+    }
+
+    /** Merges the library saved in the project. A blank value keeps the bundled album. */
+    private suspend fun applySavedDrainageLibrary(json: String?) {
+        val saved = json?.takeIf { it.isNotBlank() }
+        drainageUserLibrary = saved
+        val merged = withContext(Dispatchers.Default) {
+            val bundled = runCatching { com.appdwg.core.drainage.CatalogLoader.bundled() }.getOrNull() ?: return@withContext null
+            if (saved == null) bundled
+            else runCatching { com.appdwg.core.drainage.CatalogLibraries.apply(bundled, saved) }.getOrDefault(bundled)
+        } ?: return
+        drainageCatalog = merged
+        drainageCatalogReady = true
+        if (merged.devices.isNotEmpty()) drainageCatalogNote = null
     }
 
     fun putDrainage(device: com.appdwg.core.drainage.PlacedDevice) {
@@ -1207,18 +1238,8 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     com.appdwg.core.Hydrology.crossings(grid, line, minArea),
                     runoff, idf, years, minutes,
                 ).map { crossing ->
-                    val (start, end) = com.appdwg.core.drainage.ThalwegCulverts.barrelAcross(line, crossing.x, crossing.y)
-                    com.appdwg.core.drainage.PlacedDevice.Linear(
-                        java.util.UUID.randomUUID().toString(),
-                        bstcCode(crossing.barrel.rise),
-                        com.appdwg.core.drainage.PathSource.POLYLINE,
-                        null,
-                        listOf(start.x, end.x),
-                        listOf(start.y, end.y),
-                        com.appdwg.core.drainage.DeviceSide.AXIS,
-                        0.0, null, null,
-                        com.appdwg.core.drainage.GradeSpec(com.appdwg.core.drainage.GradeMode.HYDRAULIC, buried = true),
-                        null,
+                    com.appdwg.core.drainage.ThalwegCulverts.device(
+                        crossing, line, java.util.UUID.randomUUID().toString(),
                     )
                 }
             }
@@ -1289,13 +1310,6 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             else device.copy(grade = device.grade.copy(flowAuto = false, flowToStart = !currentlyDownstreamAtStart))
         }
         pushDrainage(next)
-    }
-
-    private fun bstcCode(rise: Double): String {
-        val cm = (rise * 100.0).toInt()
-        val sizes = intArrayOf(60, 80, 100, 120, 150)
-        val nearest = sizes.minBy { kotlin.math.abs(it - cm) }
-        return "BSTC $nearest"
     }
 
     private fun pushDrainage(
@@ -3137,12 +3151,16 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             )
             val circular = devices.associate { placed ->
                 val type = catalog.device(placed.code)?.section?.type.orEmpty()
-                placed.id to ("circular" in type || "barrel" in type)
+                placed.id to (type == "circular_barrels" || type.startsWith("circular"))
+            }
+            val bends = devices.associate { placed ->
+                val section = catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) }
+                placed.id to com.appdwg.core.drainage.PipeNetworkWriter.vertices(placed, section, terrain, alignmentOf)
             }
             val scene = buildDrainScene(devices, catalog, names, project)
             out.writer(Charsets.UTF_8).use { writer ->
                 com.appdwg.core.drainage.PipeNetworkWriter.write(
-                    "Drenagem", graph, { circular[it] == true }, writer, scene.runs, scene.runProfiles,
+                    "Drenagem", graph, { circular[it] == true }, writer, scene.runs, scene.runProfiles, bends,
                 )
             }
         }
@@ -3233,6 +3251,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
             terrain,
             alignmentOf,
+            cellsOf = { placed ->
+                com.appdwg.core.drainage.DrainageNetwork.parallelCells(catalog.device(placed.code), placed.params)
+            },
         )
     }
 
@@ -3452,6 +3473,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             drainageBasins = drainageBasins,
             drainagePhases = drainagePhases,
             drainageNames = drainageNames,
+            drainageCatalogJson = drainageUserLibrary,
             edited = addedFiles.filter { it.uri == null && it.label.endsWith(EDITED_SUFFIX) }
                 .flatMap { f -> f.project.surfaces }.map { s -> synchronized(encodedSurfaces) { encodedSurfaces.getOrPut(s) { SurfaceCodec.encode(s) } } },
         )
@@ -3484,6 +3506,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drainageNames = emptyMap()
         drainageUndo.clear()
         canUndoDrainage = false
+        clearDrainageLibrary()
     }
 
     fun isDirty(): Boolean {
@@ -3823,6 +3846,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drainageNames = doc.drainageNames
         drainageUndo.clear()
         canUndoDrainage = false
+        applySavedDrainageLibrary(doc.drainageCatalogJson)
         if (doc.pointsSurface) surfaceFromPointsNow()
         refreshJob?.cancel()
         refreshNow()
@@ -3921,6 +3945,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     drainageNames = emptyMap()
                     drainageUndo.clear()
                     canUndoDrainage = false
+                    clearDrainageLibrary()
                     keptOriginals = project.polylines.indices.toList()
                     undoStack.clear(); redoStack.clear(); canUndo = false; canRedo = false
                     platform = null

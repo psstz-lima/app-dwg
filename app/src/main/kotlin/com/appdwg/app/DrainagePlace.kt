@@ -192,11 +192,7 @@ fun culvertLine(device: PlacedDevice?, flow: Double): String? {
         is PlacedDevice.Point -> 15.0
     }
     val slope = when (device) {
-        is PlacedDevice.Linear -> when (device.grade.mode) {
-            GradeMode.FIXED -> ((device.grade.z0 - device.grade.z1) / length).coerceAtLeast(0.001)
-            GradeMode.SLOPE -> device.grade.slope.coerceAtLeast(0.001)
-            else -> 0.01
-        }
+        is PlacedDevice.Linear -> com.appdwg.core.drainage.Culvert.favorableSlope(device.grade, length)
         is PlacedDevice.Point -> 0.01
     }
     val (barrel, head) = com.appdwg.core.drainage.Culvert.size(flow, length, slope, 0.0, 2.0)

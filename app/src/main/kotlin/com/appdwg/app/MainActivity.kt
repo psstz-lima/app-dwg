@@ -882,6 +882,9 @@ private fun ProjectScreen(
                 { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
                 terrain,
                 alignmentOf,
+                cellsOf = { placed ->
+                    com.appdwg.core.drainage.DrainageNetwork.parallelCells(catalog.device(placed.code), placed.params)
+                },
             )
             val flows = rain.idf?.let { com.appdwg.core.drainage.DrainageFlow.linked(basins, graph.links, it, rain.years) }.orEmpty()
             Triple(scene, com.appdwg.core.drainage.DrainageFlow.applyCapacity(graph, flows), flows)
@@ -2105,6 +2108,8 @@ private fun ProjectScreen(
             drainageMore = false
             showDrainage = false
         }
+    }, onImported = { catalog, json ->
+        vm.useDrainageCatalog(catalog, json)
     }, suggestNote = suggestNote, onSuggestCulverts = {
         val axis = project.alignments.firstOrNull { it.name.endsWith(ROAD_SUFFIX) && it.vertices.size >= 2 }
             ?: project.alignments.firstOrNull { it.vertices.size >= 2 }

@@ -4,6 +4,7 @@ import com.appdwg.core.Alignment
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -77,6 +78,7 @@ object DrainageNetwork {
         terrain: (Double, Double) -> Double? = { _, _ -> null },
         alignmentOf: (String) -> Alignment? = { null },
         designFlow: (String) -> Double = { 0.0 },
+        cellsOf: (PlacedDevice) -> Int = { 1 },
     ): DrainageGraph {
         val sockets = ArrayList<Socket>()
         val capacity = HashMap<String, Double>()
@@ -90,7 +92,8 @@ object DrainageNetwork {
             if (fall < -0.001 && length > 0.05) issues += NetworkIssue(device.id, NetworkCheck.REVERSE_SLOPE)
             val water = section?.let { waterway(it) }
             val slope = if (length > 0.05 && fall > 0.0) fall / length else 0.0
-            val q = if (water == null) 0.0 else manning(water.area, water.radius, slope, roughness(device))
+            val cells = cellsOf(device).coerceIn(1, 6)
+            val q = if (water == null) 0.0 else manning(water.area * cells, water.radius, slope, roughness(device))
             capacity[device.id] = q
             val wanted = designFlow(device.id)
             if (wanted > 0.0 && wanted > q + 1e-6) {
@@ -110,6 +113,14 @@ object DrainageNetwork {
             if (device.id !in linkedDown) issues += NetworkIssue(device.id, NetworkCheck.NO_OUTLET)
         }
         return DrainageGraph(sockets, links, issues, capacity)
+    }
+
+    /** Parallel barrels or cells. One line is 1. The catalog count is used when the placement did not override it. */
+    fun parallelCells(device: DeviceDef?, overrides: Map<String, Double>): Int {
+        fun read(key: String) = overrides[key] ?: device?.parameters?.firstOrNull { it.key == key }?.number
+        val lines = read("n_linhas") ?: 1.0
+        val cells = read("n_celulas") ?: 1.0
+        return max(lines, cells).toInt().coerceIn(1, 6)
     }
 
     /** Manning discharge, m³/s. SI units: area m², hydraulic radius m, slope m/m, n s/m⅓. */

@@ -89,6 +89,11 @@ internal fun circle(diameter: Double): List<SectionPoint> {
 
 /** Section of [device] after numeric parameter edits. An empty override map keeps the catalog section. */
 fun resolveSection(device: DeviceDef, overrides: Map<String, Double>): CrossSection? {
+    val dn = overrides["DN_cm"]
+    val circular = device.section?.type == "circular_barrels" || device.outlineType == "circular_barrels"
+    if (dn != null && dn > 0.0 && circular) {
+        return CrossSection("circular_barrels", "m", listOf(circle(dn / 100.0)))
+    }
     if (overrides.isEmpty() || device.outline.isEmpty()) return device.section
     val env = HashMap<String, Double>()
     for (parameter in device.parameters) {

@@ -1,7 +1,9 @@
 package com.appdwg.core.drainage
 
 import kotlin.math.acos
+import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -153,6 +155,20 @@ object Culvert {
         return (dc + velocityHead) / diameter
     }
 
+    /**
+     * Downhill grade used for sizing, as a positive rise over run.
+     * A slope that rises along the path is not treated as a favorable fall.
+     */
+    fun favorableSlope(grade: GradeSpec, length: Double): Double {
+        val span = length.coerceAtLeast(1e-6)
+        val fall = when (grade.mode) {
+            GradeMode.FIXED -> (grade.z0 - grade.z1) / span
+            GradeMode.SLOPE -> -grade.slope
+            else -> 0.01
+        }
+        return if (fall > 0.0) fall else 0.0
+    }
+
     /** Area and free-surface width of a partly full circular pipe. */
     fun circleSection(diameter: Double, depth: Double): Pair<Double, Double> {
         val r = diameter / 2.0
@@ -163,5 +179,76 @@ object Culvert {
         val area = 0.5 * r * r * (theta - sin(theta))
         val top = 2.0 * sqrt((2.0 * r * h - h * h).coerceAtLeast(0.0))
         return area to top
+    }
+}
+
+/**
+ * Album code for a sized barrel. A twin pipe stays BDTC and a twin box stays BDCC.
+ * The opening is the smallest album size that still fits; a larger barrel keeps its diameter in [params].
+ */
+object CulvertCodes {
+    private val PIPES = arrayOf(
+        intArrayOf(60, 80, 100, 120, 150),
+        intArrayOf(80, 100, 120, 150),
+        intArrayOf(100, 120, 150),
+    )
+    private val BOXES = arrayOf(
+        150 to 150, 200 to 150, 200 to 200, 250 to 150, 250 to 200, 250 to 250,
+        300 to 150, 300 to 200, 300 to 250, 300 to 300,
+    )
+
+    fun code(barrel: CulvertBarrel): String {
+        val count = barrel.barrels.coerceIn(1, 3)
+        return if (barrel.shape == CulvertBarrel.Shape.CIRCLE) {
+            val sizes = PIPES[count - 1]
+            val need = (max(barrel.span, barrel.rise) * 100.0).roundToInt()
+            val chosen = sizes.firstOrNull { it >= need } ?: sizes.last()
+            "${pipeFamily(count)} $chosen"
+        } else {
+            val fit = boxFit(barrel)
+            "${boxFamily(count)} ${fit.first}x${fit.second} PM"
+        }
+    }
+
+    fun params(barrel: CulvertBarrel): Map<String, Double> {
+        val count = barrel.barrels.coerceAtLeast(1)
+        if (barrel.shape == CulvertBarrel.Shape.CIRCLE) {
+            val family = barrel.barrels.coerceIn(1, 3)
+            val sizes = PIPES[family - 1]
+            val need = max(barrel.span, barrel.rise) * 100.0
+            val chosen = (sizes.firstOrNull { it >= need.roundToInt() } ?: sizes.last()).toDouble()
+            val out = linkedMapOf("n_linhas" to count.coerceAtMost(4).toDouble())
+            if (need > chosen + 0.5) out["DN_cm"] = need
+            return out
+        }
+        val fit = boxFit(barrel)
+        val span = barrel.span * 100.0
+        val rise = barrel.rise * 100.0
+        val out = linkedMapOf("n_celulas" to count.coerceAtMost(6).toDouble())
+        if (span > fit.first + 0.5 || rise > fit.second + 0.5) {
+            out["L_cm"] = span
+            out["H_cm"] = rise
+        }
+        return out
+    }
+
+    private fun boxFit(barrel: CulvertBarrel): Pair<Int, Int> {
+        val span = (barrel.span * 100.0).roundToInt()
+        val rise = (barrel.rise * 100.0).roundToInt()
+        return BOXES.filter { (length, height) ->
+            (length >= span && height >= rise) || (height >= span && length >= rise)
+        }.minWithOrNull(compareBy({ it.first * it.second }, { it.first })) ?: BOXES.last()
+    }
+
+    private fun pipeFamily(count: Int) = when (count) {
+        1 -> "BSTC"
+        2 -> "BDTC"
+        else -> "BTTC"
+    }
+
+    private fun boxFamily(count: Int) = when (count) {
+        1 -> "BSCC"
+        2 -> "BDCC"
+        else -> "BTCC"
     }
 }

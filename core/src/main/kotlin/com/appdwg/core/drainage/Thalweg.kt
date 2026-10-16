@@ -62,4 +62,27 @@ object ThalwegCulverts {
         }
         return Point2(x - nx * half, y - ny * half) to Point2(x + nx * half, y + ny * half)
     }
+
+    /**
+     * A culvert across [line]. The grade follows the terrain; the code keeps the barrel count
+     * (a twin is not stored as a single BSTC).
+     */
+    fun device(crossing: ThalwegCulvert, line: List<Point2>, id: String): PlacedDevice.Linear {
+        val (start, end) = barrelAcross(line, crossing.x, crossing.y)
+        return PlacedDevice.Linear(
+            id,
+            CulvertCodes.code(crossing.barrel),
+            PathSource.POLYLINE,
+            null,
+            listOf(start.x, end.x),
+            listOf(start.y, end.y),
+            DeviceSide.AXIS,
+            0.0,
+            null,
+            null,
+            GradeSpec(GradeMode.HYDRAULIC, buried = true),
+            null,
+            CulvertCodes.params(crossing.barrel),
+        )
+    }
 }

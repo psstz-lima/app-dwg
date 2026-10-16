@@ -221,6 +221,11 @@ class ProjectDoc(
     val drainagePhases: List<com.appdwg.core.drainage.DevicePhase> = emptyList(),
     /** Edited names of drainage alignments. Absent from older project files. */
     val drainageNames: Map<String, String> = emptyMap(),
+    /**
+     * User drainage libraries merged onto the album, as a JSON list of library texts.
+     * Absent from older project files. The bundled album is not copied into the project.
+     */
+    val drainageCatalogJson: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -263,6 +268,7 @@ class ProjectDoc(
             JSONObject().put("id", phase.deviceId).put("phase", phase.phase)
         }))
         if (drainageNames.isNotEmpty()) put("drainageNames", JSONObject(drainageNames as Map<*, *>))
+        if (!drainageCatalogJson.isNullOrBlank()) put("drainageCatalog", drainageCatalogJson)
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -340,6 +346,11 @@ class ProjectDoc(
                 drainageNames = o.optJSONObject("drainageNames")?.let { e ->
                     e.keys().asSequence().associateWith { e.getString(it) }
                 }.orEmpty(),
+                drainageCatalogJson = when (val saved = if (o.has("drainageCatalog")) o.get("drainageCatalog") else null) {
+                    is String -> saved.takeIf { it.isNotBlank() }
+                    is JSONObject, is JSONArray -> saved.toString()
+                    else -> null
+                },
             )
         }
 

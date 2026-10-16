@@ -36,6 +36,32 @@ class CulvertTest {
     }
 
     @Test
+    fun aDownhillSlopeKeepsItsMagnitudeAndAnUphillOneIsNotFavorable() {
+        assertEquals(0.01, Culvert.favorableSlope(GradeSpec(GradeMode.SLOPE, slope = -0.01), 15.0), 1e-12)
+        assertEquals(0.0, Culvert.favorableSlope(GradeSpec(GradeMode.SLOPE, slope = 0.01), 15.0), 1e-12)
+        assertEquals(0.02, Culvert.favorableSlope(GradeSpec(GradeMode.FIXED, z0 = 10.0, z1 = 9.7), 15.0), 1e-9)
+        assertEquals(0.0, Culvert.favorableSlope(GradeSpec(GradeMode.FIXED, z0 = 9.0, z1 = 10.0), 15.0), 1e-12)
+        val barrel = CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 1.0, 1.0, 1)
+        val onePercent = Culvert.headwater(barrel, 1.5, 40.0, 0.01, 0.0, 2.0)
+        val tenth = Culvert.headwater(barrel, 1.5, 40.0, 0.001, 0.0, 2.0)
+        assertTrue(tenth.headwater > onePercent.headwater + 0.001)
+    }
+
+    @Test
+    fun aTwinBarrelAndASquareBoxKeepTheirOwnCodes() {
+        assertEquals("BDTC 100", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 1.0, 1.0, 2)))
+        assertEquals("BTTC 100", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 1.0, 1.0, 3)))
+        assertEquals("BSTC 60", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 0.40, 0.40, 1)))
+        assertEquals("BDTC 150", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 2.0, 2.0, 2)))
+        assertEquals(200.0, CulvertCodes.params(CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 2.0, 2.0, 2))["DN_cm"]!!, 1e-6)
+        assertEquals(2.0, CulvertCodes.params(CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 2.0, 2.0, 2))["n_linhas"]!!, 1e-9)
+        assertEquals("BSCC 150x150 PM", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.BOX, 1.5, 1.5, 1)))
+        assertEquals("BDCC 150x150 PM", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.BOX, 1.5, 1.5, 2)))
+        assertEquals("BTCC 200x200 PM", CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.BOX, 2.0, 2.0, 3)))
+        assertFalse(CulvertCodes.code(CulvertBarrel(CulvertBarrel.Shape.BOX, 1.5, 1.5, 1)).startsWith("BSTC"))
+    }
+
+    @Test
     fun noFlowHasNoHeadwater() {
         val barrel = CulvertBarrel(CulvertBarrel.Shape.CIRCLE, 1.0, 1.0, 1)
         val head = Culvert.headwater(barrel, 0.0, 30.0, 0.02, 0.4, allowable = 2.0)

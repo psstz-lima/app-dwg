@@ -73,6 +73,7 @@ fun DrainageLibraryDialog(
     catalogReady: Boolean,
     catalogNote: String?,
     onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
+    onImported: (DeviceCatalog, String) -> Unit = { _, _ -> },
     onSuggestCulverts: (() -> Unit)? = null,
     suggestNote: String? = null,
 ) {
@@ -84,7 +85,7 @@ fun DrainageLibraryDialog(
         text = {
             DrainageLibraryBody(
                 isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp),
-                catalog, catalogReady, catalogNote, onPlace,
+                catalog, catalogReady, catalogNote, onPlace, onImported,
             )
         },
         confirmButton = {
@@ -106,6 +107,7 @@ fun DrainageLibraryBody(
     catalogReady: Boolean,
     catalogNote: String?,
     onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
+    onImported: (DeviceCatalog, String) -> Unit = { _, _ -> },
 ) {
     if (!catalogReady) {
         Text(tr("Abrindo a biblioteca de drenagem…"), modifier, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -142,6 +144,7 @@ fun DrainageLibraryBody(
             onFamily = { family = it },
             onOpen = { selected = it },
             onCatalog = { current = it },
+            onImported = onImported,
         )
     }
 }
@@ -161,6 +164,7 @@ private fun DeviceBrowser(
     onFamily: (String?) -> Unit,
     onOpen: (String) -> Unit,
     onCatalog: (DeviceCatalog) -> Unit,
+    onImported: (DeviceCatalog, String) -> Unit,
 ) {
     val chapters = remember(catalog) { catalog.devices.map { it.chapter }.filter { it > 0 }.distinct().sorted() }
     val families = remember(catalog, chapter, category) {
@@ -225,7 +229,7 @@ private fun DeviceBrowser(
                 if (catalog.unitsNote.isNotBlank()) {
                     Text(catalog.unitsNote, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
                 }
-                ImportBlock(catalog, onCatalog)
+                ImportBlock(catalog, onCatalog, onImported)
                 if (!isPro) {
                     Text(tr("O Pro libera o lançamento e os cálculos."), style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 }
@@ -288,7 +292,11 @@ private fun Chip(label: String) {
 }
 
 @Composable
-private fun ImportBlock(catalog: DeviceCatalog, onCatalog: (DeviceCatalog) -> Unit) {
+private fun ImportBlock(
+    catalog: DeviceCatalog,
+    onCatalog: (DeviceCatalog) -> Unit,
+    onImported: (DeviceCatalog, String) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
@@ -309,7 +317,9 @@ private fun ImportBlock(catalog: DeviceCatalog, onCatalog: (DeviceCatalog) -> Un
     GButton(tr("Importar"), {
         try {
             val user = CatalogLoader.parse(text)
-            onCatalog(catalog.merge(user))
+            val merged = catalog.merge(user)
+            onCatalog(merged)
+            onImported(merged, text)
             text = ""
             message = tr("A biblioteca do usuário foi incorporada ({0} dispositivos).", user.devices.size)
             open = false

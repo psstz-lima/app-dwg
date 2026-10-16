@@ -49,6 +49,16 @@ class DrapeQualityTest {
     }
 
     @Test
+    fun aQualityJumpOfTwoStepsStillFindsTheSharperTiles() {
+        val keys = TileCache.finerKeys(2, 3, 4)
+        assertTrue(keys.any { it.first == 1 })
+        assertTrue(keys.any { it.first == 0 && it.second == 12 && it.third == 16 })
+        assertEquals(0, TileCache.finerKeys(0, 1, 1).size)
+        val cached = setOf("0/12/16")
+        assertEquals(1, keys.count { "${it.first}/${it.second}/${it.third}" in cached })
+    }
+
+    @Test
     fun anisotropyIsAskedOnlyWhenTheExtensionExists() {
         assertEquals(1f, GlTexture.anisotropy(emptyList(), 16f), 0f)
         assertEquals(1f, GlTexture.anisotropy(listOf("GL_OES_something"), 16f), 0f)
