@@ -64,6 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -584,7 +585,7 @@ private fun ProjectScreen(
     var drainageNetwork by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageGraph?>(null) }
     var drainageFlows by remember(fileName) { mutableStateOf<Map<String, com.appdwg.core.drainage.ReachFlow>>(emptyMap()) }
     var outletSoil by remember(fileName) { mutableStateOf(com.appdwg.core.drainage.OutletSoil.CLAY) }
-    var drainagePhaseThrough by remember(fileName) { mutableStateOf(0) }
+    var drainagePhaseThrough by remember(fileName) { mutableIntStateOf(0) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
