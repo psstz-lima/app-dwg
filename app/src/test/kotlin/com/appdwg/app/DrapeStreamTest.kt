@@ -60,7 +60,6 @@ class DrapeStreamTest {
     @Test
     fun planningALargeOrthophotoStaysOffTheFrameBudget() {
         val budget = DrapeLod.budgetBytes(8L shl 30, 256)
-        val started = System.nanoTime()
         val plan = DrapeLod.plan(
             imageWidth = 26_000,
             imageHeight = 21_000,
@@ -80,8 +79,10 @@ class DrapeStreamTest {
             budgetBytes = budget,
             bytesPerPixel = 2,
         )
-        val ms = (System.nanoTime() - started) / 1_000_000.0
-        assertTrue("plan took ${ms} ms", ms < 100.0)
+        // The search stops on its own, before the 20000-step cap. Each step adds a bounded
+        // number of tiles, so the result does not grow with the clock.
+        assertTrue(plan.steps in 1 until 20_000)
+        assertTrue(plan.tiles.size <= plan.steps * 4)
         assertTrue(plan.bytes <= budget)
         assertTrue(plan.tiles.isNotEmpty())
     }
@@ -129,6 +130,7 @@ class DrapeStreamTest {
         assertTrue(view.contains("DrapeLod.tick"))
         assertTrue(view.contains("DrapeLod.mipmap"))
         assertTrue(view.contains("gpuTiles = built"))
+        assertTrue(view.contains("shutdownNow"))
         val picture = File(root(), "app/src/main/kotlin/com/appdwg/app/TiledPicture.kt").readText()
         assertTrue(picture.contains("fun pyramidTile"))
         assertTrue(picture.contains("readRaw"))

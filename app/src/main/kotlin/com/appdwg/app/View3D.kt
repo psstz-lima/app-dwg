@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -126,6 +127,9 @@ fun View3D(
     val scope = rememberCoroutineScope()
     renderer.onDrapeFailed = { scope.launch(Dispatchers.Main.immediate) { failState.value() } }
     renderer.onRefining = { refining -> scope.launch(Dispatchers.Main.immediate) { refiningState.value(refining) } }
+    DisposableEffect(renderer) {
+        onDispose { renderer.close() }
+    }
     val density = LocalDensity.current.density
     fun pick(x: Float, y: Float) {
         val tap = tapState.value ?: return
@@ -189,7 +193,12 @@ fun View3D(
             }
         },
         factory = { context ->
-            GLSurfaceView(context).apply {
+            object : GLSurfaceView(context) {
+                override fun onDetachedFromWindow() {
+                    renderer.close()
+                    super.onDetachedFromWindow()
+                }
+            }.apply {
                 setEGLContextClientVersion(3)
                 setEGLConfigChooser(8, 8, 8, 8, 24, 0)
                 setRenderer(renderer)
@@ -425,6 +434,16 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     private var overlayTriBuf = 0
     private var overlayLineCount = 0
     private var overlayTriCount = 0
+
+    /** Stops background decodes and planning. Safe to call again after the view is already gone. */
+    fun close() {
+        if (decoder.isShutdown) return
+        streamGeneration++
+        onNeedsFrame = null
+        onDrapeFailed = null
+        onRefining = null
+        decoder.shutdownNow()
+    }
 
     fun setDrape(drape: Drape?) {
         val previous = this.drape
@@ -755,17 +774,25 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         val tx0 = tx
         val ty0 = ty
         val tz0 = tz
-        decoder.execute {
-            try {
-                if (generation != streamGeneration) return@execute
-                val stamp = floatArrayOf(yaw0, pitch0, distance0, tx0, ty0, tz0)
-                if (planCache != null && DrapeLod.cameraSettled(planStamp, stamp)) return@execute
-                planCache = cameraPlan(snapshot, picture, side, budget, yaw0, pitch0, distance0, tx0, ty0, tz0)
-                planStamp = stamp
-            } finally {
-                planBusy = false
-                onNeedsFrame?.invoke()
+        if (decoder.isShutdown) {
+            planBusy = false
+            return
+        }
+        try {
+            decoder.execute {
+                try {
+                    if (generation != streamGeneration) return@execute
+                    val stamp = floatArrayOf(yaw0, pitch0, distance0, tx0, ty0, tz0)
+                    if (planCache != null && DrapeLod.cameraSettled(planStamp, stamp)) return@execute
+                    planCache = cameraPlan(snapshot, picture, side, budget, yaw0, pitch0, distance0, tx0, ty0, tz0)
+                    planStamp = stamp
+                } finally {
+                    planBusy = false
+                    onNeedsFrame?.invoke()
+                }
             }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            planBusy = false
         }
     }
 
@@ -922,6 +949,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             if (bytes > textureBudget) continue
             if (!DrapeLod.admits(used, bytes, credit, textureBudget)) break
             if (!queuedKeys.add(node.key)) continue
+            if (decoder.isShutdown) {
+                queuedKeys.remove(node.key)
+                return
+            }
+            try {
             decoder.execute {
                 if (generation != streamGeneration) return@execute
                 try {
@@ -977,6 +1009,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
                     }
                     onNeedsFrame?.invoke()
                 }
+            }
+            } catch (_: java.util.concurrent.RejectedExecutionException) {
+                queuedKeys.remove(node.key)
             }
         }
     }

@@ -58,6 +58,8 @@ internal object DrapeLod {
         val bytes: Long,
         /** False when the tiles that need the finest allowed level do not fit. */
         val nearFits: Boolean,
+        /** Tiles considered while choosing [tiles]. The search stops at 20000. */
+        val steps: Int = 0,
     )
 
     data class CacheEntry(
@@ -169,7 +171,7 @@ internal object DrapeLod {
                     used += b
                 }
             }
-            return Selection(kept, used, nearFits = false)
+            return Selection(kept, used, nearFits = false, steps = start.size)
         }
 
         val nodes = start.toMutableList()
@@ -198,7 +200,7 @@ internal object DrapeLod {
             val want = levelFor(distanceOf(n))
             want == finest && n.level > want
         }
-        return Selection(sorted, total(sorted), nearFits)
+        return Selection(sorted, total(sorted), nearFits, steps = guard)
     }
 
     /**
