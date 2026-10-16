@@ -1140,23 +1140,17 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         pushDrainage(drainage.filter { it.id != id })
     }
 
-    fun moveDrainage(id: String, to: com.appdwg.core.Point2) {
-        val next = drainage.map { device ->
-            when {
-                device.id != id -> device
-                device is com.appdwg.core.drainage.PlacedDevice.Point -> device.copy(x = to.x, y = to.y)
-                device is com.appdwg.core.drainage.PlacedDevice.Linear -> {
-                    if (device.xs.isEmpty()) device
-                    else {
-                        val dx = to.x - device.xs.average()
-                        val dy = to.y - device.ys.average()
-                        device.copy(xs = device.xs.map { it + dx }, ys = device.ys.map { it + dy }, source = com.appdwg.core.drainage.PathSource.POLYLINE)
-                    }
-                }
-                else -> device
-            }
-        }
+    fun replaceDrainage(next: List<com.appdwg.core.drainage.PlacedDevice>) {
         pushDrainage(next)
+    }
+
+    fun moveDrainage(id: String, to: com.appdwg.core.Point2, links: List<com.appdwg.core.drainage.NetworkLink> = emptyList()) {
+        val device = drainage.find { it.id == id } ?: return
+        val from = when (device) {
+            is com.appdwg.core.drainage.PlacedDevice.Point -> com.appdwg.core.Point2(device.x, device.y)
+            is com.appdwg.core.drainage.PlacedDevice.Linear -> if (device.xs.isEmpty()) return else com.appdwg.core.Point2(device.xs.average(), device.ys.average())
+        }
+        pushDrainage(com.appdwg.core.drainage.DrainageNetwork.chainTranslate(drainage, links, id, to.x - from.x, to.y - from.y))
     }
 
     fun undoDrainage() {

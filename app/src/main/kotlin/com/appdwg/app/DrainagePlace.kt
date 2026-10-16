@@ -5,8 +5,10 @@ import com.appdwg.core.StationFormat
 import com.appdwg.core.drainage.DeviceDef
 import com.appdwg.core.drainage.DeviceSide
 import com.appdwg.core.drainage.DeviceTakeoff
+import com.appdwg.core.drainage.DrainageGraph
 import com.appdwg.core.drainage.GradeMode
 import com.appdwg.core.drainage.GradeSpec
+import com.appdwg.core.drainage.NetworkCheck
 import com.appdwg.core.drainage.Parameter
 import com.appdwg.core.drainage.PathSource
 import com.appdwg.core.drainage.PlacedDevice
@@ -113,6 +115,29 @@ fun PlaceDraft.placed(): PlacedDevice? {
 }
 
 private fun num(value: Double) = StationFormat.decimal(value, 3)
+
+/** Network checks for one placed device, already in the display language. */
+fun drainageNotes(graph: DrainageGraph?, id: String): List<String> {
+    if (graph == null) return emptyList()
+    val lines = ArrayList<String>()
+    for (issue in graph.issues) {
+        if (issue.deviceId != id) continue
+        lines += when (issue.check) {
+            NetworkCheck.REVERSE_SLOPE -> tr("Contracaída no trecho.")
+            NetworkCheck.DROP -> tr("Queda de {0} m na conexão.", StationFormat.decimal(issue.drop ?: 0.0, 2))
+            NetworkCheck.NO_OUTLET -> tr("Sem dispositivo de saída.")
+            NetworkCheck.CAPACITY -> tr(
+                "Vazão {0} m³/s acima da capacidade {1} m³/s.",
+                StationFormat.decimal(issue.flow ?: 0.0, 3),
+                StationFormat.decimal(issue.capacity ?: 0.0, 3),
+            )
+        }
+    }
+    if (graph.links.any { it.sectionChange && (it.upstreamId == id || it.downstreamId == id) }) {
+        lines += tr("Transição de seção na conexão.")
+    }
+    return lines
+}
 
 @Composable
 fun DrainagePlaceCard(
@@ -235,6 +260,7 @@ fun DrainageSelectionCard(
     onPro: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    notes: List<String> = emptyList(),
 ) {
     Column(modifier.verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(code, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -251,6 +277,7 @@ fun DrainageSelectionCard(
         }
         row?.let { TakeoffLines(tr("Este dispositivo"), it) }
         total?.let { TakeoffLines(tr("Total do projeto"), it) }
+        for (note in notes) Text(note, maxLines = 3, overflow = TextOverflow.Ellipsis)
         ChoiceRow {
             Choice(false, tr("Editar")) { onEdit() }
             Choice(moving, tr("Mover")) { onMove() }

@@ -223,6 +223,8 @@ fun PlanView(
     /** Placed drainage: plan footprint, invert and flow arrows. */
     drainage: List<com.appdwg.core.drainage.DrainageGlyph> = emptyList(),
     selectedDrainage: String? = null,
+    /** Devices whose network check failed. Drawn in red. */
+    drainageAlerts: Set<String> = emptySet(),
 ) {
     val bounds = project.bounds ?: fallbackBounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -669,7 +671,7 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
-        if (drainage.isNotEmpty()) drawDrainage(drainage, selectedDrainage) { toScreen(it, cam) }
+        if (drainage.isNotEmpty()) drawDrainage(drainage, selectedDrainage, drainageAlerts) { toScreen(it, cam) }
         if (measure.isNotEmpty()) {
             if (measureIsAxis) drawMeasure(measure, false, lines = AxisInfo.TANGENTS !in axisHidden, lengths = AxisInfo.LENGTHS !in axisHidden,
                 vertices = AxisInfo.PIS !in axisHidden) { toScreen(it, cam) }
@@ -1142,6 +1144,7 @@ private val DRAINAGE_COLOR = Color(0xFF1565C0)
 private fun DrawScope.drawDrainage(
     glyphs: List<com.appdwg.core.drainage.DrainageGlyph>,
     selected: String?,
+    alerts: Set<String>,
     toScreen: (Point2) -> Offset,
 ) {
     val label = Paint().apply {
@@ -1152,6 +1155,12 @@ private fun DrawScope.drawDrainage(
     }
     for (glyph in glyphs) {
         val on = glyph.id == selected
+        val bad = glyph.id in alerts
+        val stroke = when {
+            on -> Color(0xFFFF6D00)
+            bad -> Color(0xFFC62828)
+            else -> DRAINAGE_COLOR
+        }
         if (glyph.footprint.size >= 3) {
             val fill = Path().apply {
                 val first = toScreen(glyph.footprint.first())
@@ -1162,11 +1171,11 @@ private fun DrawScope.drawDrainage(
                 }
                 close()
             }
-            drawPath(fill, DRAINAGE_COLOR.copy(alpha = if (on) 0.35f else 0.18f))
-            drawPath(fill, if (on) Color(0xFFFF6D00) else DRAINAGE_COLOR, style = Stroke(width = if (on) 4f else 2f))
+            drawPath(fill, stroke.copy(alpha = if (on) 0.35f else if (bad) 0.28f else 0.18f))
+            drawPath(fill, stroke, style = Stroke(width = if (on || bad) 4f else 2f))
         }
         val invert = glyph.invert.map(toScreen)
-        for (i in 1 until invert.size) drawLine(if (on) Color(0xFFFF6D00) else Color(0xFF0D47A1), invert[i - 1], invert[i], strokeWidth = 3f)
+        for (i in 1 until invert.size) drawLine(if (bad && !on) Color(0xFFC62828) else if (on) Color(0xFFFF6D00) else Color(0xFF0D47A1), invert[i - 1], invert[i], strokeWidth = 3f)
         val len = 8.sp.toPx()
         for ((point, angle) in glyph.arrows) {
             val c = toScreen(point)

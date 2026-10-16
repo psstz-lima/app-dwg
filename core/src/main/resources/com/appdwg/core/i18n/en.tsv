@@ -1453,3 +1453,8 @@ Concreto: {0} m³	Concrete: {0} m³
 Escavação: {0} m³	Excavation: {0} m³
 Formas: {0} m²	Formwork: {0} m²
 {0} (simplificado)	{0} (simplified)
+Contracaída no trecho.	Adverse slope on this reach.
+Queda de {0} m na conexão.	Connection drop of {0} m.
+Sem dispositivo de saída.	No outlet device.
+Vazão {0} m³/s acima da capacidade {1} m³/s.	Flow {0} m³/s above the capacity of {1} m³/s.
+Transição de seção na conexão.	Section transition at the connection.

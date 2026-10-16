@@ -581,6 +581,7 @@ private fun ProjectScreen(
     var drainageSelected by remember(fileName) { mutableStateOf<String?>(null) }
     var drainageMoving by remember(fileName) { mutableStateOf(false) }
     var drainageBuilt by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageBuilt?>(null) }
+    var drainageNetwork by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageGraph?>(null) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
@@ -811,17 +812,24 @@ private fun ProjectScreen(
             s.name !in frozenLayers && s.triangleCount > 0 && project.surfaces.none { it.name == s.name + EDITED_SUFFIX }
         }
         val alignments = project.alignments
-        drainageBuilt = withContext(Dispatchers.Default) {
-            com.appdwg.core.drainage.DrainageScene.build(
-                shown,
-                { catalog.device(it) },
-                { x, y ->
-                    val p = Point2(x, y)
-                    surfaces.firstNotNullOfOrNull { it.elevationAt(p) }
-                },
-                { name -> alignments.firstOrNull { it.name == name } },
-            )
+        val terrain: (Double, Double) -> Double? = { x, y ->
+            val p = Point2(x, y)
+            surfaces.firstNotNullOfOrNull { it.elevationAt(p) }
         }
+        val alignmentOf: (String) -> com.appdwg.core.Alignment? = { name -> alignments.firstOrNull { it.name == name } }
+        val built = withContext(Dispatchers.Default) {
+            com.appdwg.core.drainage.DrainageScene.build(shown, { catalog.device(it) }, terrain, alignmentOf) to
+                com.appdwg.core.drainage.DrainageNetwork.analyze(
+                    shown,
+                    { placed -> catalog.device(placed.code)?.let { com.appdwg.core.drainage.resolveSection(it, placed.params) } },
+                    { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::isOutlet) == true },
+                    { placed -> catalog.device(placed.code)?.let(com.appdwg.core.drainage.DrainageNetwork::roughnessOf) ?: 0.015 },
+                    terrain,
+                    alignmentOf,
+                )
+        }
+        drainageBuilt = built.first
+        drainageNetwork = built.second
     }
     LaunchedEffect(vm.drainage, drainageSelected) {
         if (drainageSelected != null && vm.drainage.none { it.id == drainageSelected }) drainageSelected = null
@@ -1028,7 +1036,7 @@ private fun ProjectScreen(
                                 }
                             }
                             drainageMoving && drainageSelected != null -> {
-                                vm.moveDrainage(drainageSelected!!, it)
+                                vm.moveDrainage(drainageSelected!!, it, drainageNetwork?.links.orEmpty())
                                 drainageMoving = false
                             }
                             v.pickingOutlet -> {
@@ -1180,6 +1188,7 @@ private fun ProjectScreen(
                     basemapCrs = crs,
                     drainage = drainageBuilt?.glyphs.orEmpty(),
                     selectedDrainage = drainageSelected,
+                    drainageAlerts = drainageNetwork?.issues?.map { it.deviceId }?.toSet().orEmpty(),
                     onLineSelected = { ref ->
                         if (drainageDraft?.let { !it.point && it.source == com.appdwg.core.drainage.PathSource.LINE } == true) {
                             applyDrainageLine(ref)
@@ -1342,8 +1351,10 @@ private fun ProjectScreen(
                                 val placed = drainageDraft?.placed() ?: return@commit
                                 if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
                                 else {
-                                    vm.putDrainage(placed)
-                                    drainageSelected = placed.id
+                                    val snapped = com.appdwg.core.drainage.DrainageNetwork.snap(placed, drainageNetwork?.sockets.orEmpty())
+                                    val base = vm.drainage.filter { it.id != snapped.id } + snapped
+                                    vm.replaceDrainage(com.appdwg.core.drainage.DrainageNetwork.propagate(base, drainageNetwork?.links.orEmpty(), snapped.id))
+                                    drainageSelected = snapped.id
                                     drainageDraft = null
                                 }
                             },
@@ -1386,6 +1397,7 @@ private fun ProjectScreen(
                             onPro = { vm.proRequested = true },
                             onClose = { drainageSelected = null; drainageMoving = false },
                             modifier = Modifier.fillMaxWidth(),
+                            notes = drainageNotes(drainageNetwork, drainageSelected ?: ""),
                         )
                     }
                 } else if (show3d && !measuring && !drawingPlatform && genPick == null) {
