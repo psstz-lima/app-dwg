@@ -259,11 +259,15 @@ fun PlanView(
     var frame by remember { mutableStateOf(0) }
     // A picture that is already one bitmap (no tiles) is scaled here for Alta and Normal.
     // Máxima, and any tiled picture, keeps the bitmap it was opened with.
-    val drapePicture = remember(drape?.image, drape?.tiles, imageQuality) {
+    // Scaling a 16 MP picture took long enough on the UI thread to freeze a quality change.
+    val drapePicture by androidx.compose.runtime.produceState(drape?.image, drape?.image, drape?.tiles, imageQuality) {
         val base = drape?.image
         val src = base?.asAndroidBitmap()
-        if (base == null || drape?.tiles != null || src == null || src.isRecycled) base
-        else scaledForQuality(src, imageQuality)?.asImageBitmap() ?: base
+        value = base
+        if (base == null || drape?.tiles != null || src == null || src.isRecycled) return@produceState
+        value = withContext(Dispatchers.Default) {
+            runCatching { scaledForQuality(src, imageQuality)?.asImageBitmap() }.getOrNull()
+        } ?: base
     }
 
     // Sharper terrain for the visible area once zoomed past the overview image's resolution.

@@ -1360,10 +1360,13 @@ private fun ProjectScreen(
 
             if (vm.timelineShown && vm.states.size > 1) TimelineBar(vm, Modifier.align(Alignment.TopCenter).padding(top = 80.dp, start = 8.dp, end = 8.dp).widthIn(max = 900.dp))
             else if (adviceCard && advice.isNotEmpty() && vm.projectMessage == null) Card(Modifier.align(Alignment.TopCenter).padding(top = 80.dp).widthIn(max = 480.dp)) {
-                FitRow(Modifier.padding(start = 12.dp)) {
-                    Text(tr("Sugestão: {0}", advice.first().title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyMedium)
-                    OutlinedButton(onClick = { showAdvice = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Ver sugestões")) }
-                    OutlinedButton(onClick = { adviceCard = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
+                // The text on top and the buttons on their own line, with room to the card's edges.
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(tr("Sugestão: {0}", advice.first().title), style = MaterialTheme.typography.bodyMedium)
+                    FitRow(Modifier.align(Alignment.End)) {
+                        OutlinedButton(onClick = { adviceCard = false }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Fechar")) }
+                        OutlinedButton(onClick = { showAdvice = true }, modifier = Modifier.heightIn(min = 48.dp)) { Text(tr("Ver sugestões")) }
+                    }
                 }
             }
             if (vm.taskViewers == 0) BackgroundTasks(vm.tasks, Modifier.align(Alignment.TopEnd).padding(top = 80.dp, end = 64.dp).widthIn(max = 360.dp))
