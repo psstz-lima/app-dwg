@@ -60,6 +60,12 @@ class TiledPicture private constructor(
         const val PYRAMID_DIR = "pyramid2"
         /** Levels up to this one are read from the file's blocks; coarser ones come from the pyramid. */
         private const val DIRECT = 3
+        /**
+         * A compressed block bigger than this is skipped. A striped 1.6 GB orthophoto can put the
+         * whole file in one strip; reading it to paint one tile freezes the phone. Uncompressed
+         * strips are read by [TiffReader.readRaw], which never loads the rest of the strip.
+         */
+        private const val MAX_BLOCK_BYTES = 32L * 1024 * 1024
 
         /** Opens [fd] as a tiled picture whose cache lives in [cacheRoot]/[key]; null when the file has no plan position. */
         fun open(name: String, fd: ParcelFileDescriptor, cacheRoot: File, key: String, placement: Bounds?): TiledPicture? {
@@ -186,8 +192,29 @@ class TiledPicture private constructor(
         val w = min(TILE, ceil((width - x0) / f.toDouble()).toInt()); val h = min(TILE, ceil((height - y0) / f.toDouble()).toInt())
         val bmp = createBitmap(w, h, config)
         val bw = layout.blockWidth; val bh = layout.blockHeight
-        for (by in y0 / bh..min(layout.down - 1, (y0 + TILE * f - 1) / bh)) for (bx in x0 / bw..min(layout.across - 1, (x0 + TILE * f - 1) / bw)) {
-            val r = reader.readBlock(by * layout.across + bx, f) ?: continue
+        val x1 = min(width, x0 + TILE * f)
+        val y1 = min(height, y0 + TILE * f)
+        for (by in y0 / bh..min(layout.down - 1, (y1 - 1) / bh)) for (bx in x0 / bw..min(layout.across - 1, (x1 - 1) / bw)) {
+            val index = by * layout.across + bx
+            val blockX = bx * bw
+            val blockY = by * bh
+            val ix0 = max(x0, blockX)
+            val iy0 = max(y0, blockY)
+            val ix1 = min(x1, min(width, blockX + bw))
+            val iy1 = min(y1, min(height, blockY + bh))
+            if (ix1 <= ix0 || iy1 <= iy0) continue
+            val raw = reader.readRaw(index, ix0 - blockX, iy0 - blockY, ix1 - ix0, iy1 - iy0, f)
+            if (raw != null) {
+                val dx = (ix0 - x0) / f
+                val dy = (iy0 - y0) / f
+                val cw = min(raw.width, w - dx)
+                val ch = min(raw.height, h - dy)
+                if (cw > 0 && ch > 0) bmp.setPixels(raw.pixels, 0, raw.width, dx, dy, cw, ch)
+                continue
+            }
+            // A compressed block still has to be read whole. Skip one that is the entire file.
+            if (reader.blockLength(index) > MAX_BLOCK_BYTES) continue
+            val r = reader.readBlock(index, f) ?: continue
             // Where this block's reduced pixels fall in the tile.
             val dx = (bx * bw - x0) / f; val dy = (by * bh - y0) / f
             val sx = max(0, -dx); val sy = max(0, -dy)
@@ -195,6 +222,13 @@ class TiledPicture private constructor(
             if (cw > 0 && ch > 0) bmp.setPixels(r.pixels, sy * r.width + sx, r.width, max(0, dx), max(0, dy), cw, ch)
         }
         return bmp
+    }
+
+    /** A pyramid JPEG for level [k] > [DIRECT]. Missing files are not replaced by a full-file read. */
+    private fun pyramidTile(k: Int, tx: Int, ty: Int): Bitmap? {
+        val file = File(dir, "$k-$tx-$ty.jpg")
+        if (!file.exists()) return null
+        return BitmapDecode.decodeFile(file.path, config)
     }
 
     /** Whether the pyramid was built before (then every level is ready at once). */
@@ -404,17 +438,24 @@ class TiledPicture private constructor(
             val tx1 = (x1 - 1) / span
             val ty0 = y0 / span
             val ty1 = (y1 - 1) / span
+            var painted = false
             for (ty in ty0..ty1) for (tx in tx0..tx1) {
-                val t = runCatching { direct(k, tx, ty) }.getOrNull() ?: continue
+                // Coarse levels are the pyramid the plan view already built. Reading them from the
+                // TIFF walks the whole file when the window is the overview of a 1.6 GB picture.
+                val t = runCatching { if (k > DIRECT) pyramidTile(k, tx, ty) else direct(k, tx, ty) }.getOrNull() ?: continue
                 try {
                     val destX = (tx.toLong() * span - x0).toFloat() / f
                     val destY = (ty.toLong() * span - y0).toFloat() / f
                     canvas.drawBitmap(t, destX, destY, null)
+                    painted = true
                 } finally {
                     if (!t.isRecycled) t.recycle()
                 }
             }
-            bmp
+            if (!painted) {
+                if (!bmp.isRecycled) bmp.recycle()
+                null
+            } else bmp
         } catch (_: OutOfMemoryError) {
             if (!bmp.isRecycled) bmp.recycle()
             null

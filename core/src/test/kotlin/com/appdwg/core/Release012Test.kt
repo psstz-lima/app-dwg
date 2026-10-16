@@ -14,8 +14,8 @@ class Release012Test {
     @Test
     fun versionAndOptimizedShrinking() {
         val app = File(root(), "app/build.gradle.kts").readText()
-        assertTrue(app.contains("versionCode = 8"))
-        assertTrue(app.contains("versionName = \"0.1.7\""))
+        assertTrue(app.contains("versionCode = 9"))
+        assertTrue(app.contains("versionName = \"0.1.8\""))
         assertTrue(app.contains("enableSplit = false"))
         assertTrue(app.contains("isMinifyEnabled = true"))
         assertTrue(app.contains("isShrinkResources = true"))

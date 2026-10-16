@@ -1,5 +1,6 @@
 package com.appdwg.app
 
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -15,8 +16,28 @@ import kotlin.math.sqrt
  */
 internal object DrapeLod {
     const val STREAM_TILE = 1024
-    /** Textures uploaded on the GL thread each frame. Decoding happens elsewhere. */
+    /**
+     * Textures uploaded on the GL thread each frame, on a GPU that can take two.
+     * A Mali-G57 MC2 (Redmi Note 14 Pro 4G, 8 GB) or a Mali-G615 uploads one: a second
+     * texImage2D plus a mipmap chain drops the frame under 30 fps. Decoding stays ahead of that.
+     * RGB_565 stays the upload format. ETC2 or ASTC would be smaller, but encoding on the CPU
+     * would delay the first frame, which has to match the old single-texture path.
+     */
     const val UPLOADS_PER_FRAME = 2
+    /** Background decodes that may be in flight. The GL thread still uploads fewer. */
+    const val DECODES_IN_FLIGHT = 2
+    /** Refined tiles drawn on top of the base. The rest of the view stays the base texture. */
+    const val DRAW_REFINEMENTS = 6
+    /** Streamed tiles at most this side get a mipmap chain. Larger ones are already near screen size. */
+    const val MIPMAP_SIDE = 512
+
+    /** One upload on Mali, [UPLOADS_PER_FRAME] on anything else. */
+    fun uploadsPerFrame(renderer: String?): Int =
+        if (renderer != null && renderer.contains("Mali", ignoreCase = true)) 1 else UPLOADS_PER_FRAME
+
+    /** The base overview is mipmapped once, like the single texture from 0.1.5. Large streamed tiles are not. */
+    fun mipmap(width: Int, height: Int, base: Boolean): Boolean =
+        base || max(width, height) <= MIPMAP_SIDE
 
     const val KEEP = 0
     const val DROP_REPLACED = 1
@@ -178,6 +199,98 @@ internal object DrapeLod {
             want == finest && n.level > want
         }
         return Selection(sorted, total(sorted), nearFits)
+    }
+
+    /**
+     * Orbit noise below this does not build a new tile set. A new set every frame evicts tiles
+     * that the next frame asks for again, so the cover never stays resident.
+     * [previous] and [next] are yaw, pitch, distance, target x, y, z.
+     */
+    fun cameraSettled(previous: FloatArray, next: FloatArray): Boolean {
+        if (previous.size < 6 || next.size < 6 || !previous[0].isFinite() || !next[2].isFinite()) return false
+        val dist = abs(previous[2]).coerceAtLeast(1f)
+        if (abs(next[2] - previous[2]) / dist > 0.08f) return false
+        if (abs(next[0] - previous[0]) > 0.04f) return false
+        if (abs(next[1] - previous[1]) > 0.03f) return false
+        val dx = next[3] - previous[3]
+        val dy = next[4] - previous[4]
+        val dz = next[5] - previous[5]
+        return sqrt(dx * dx + dy * dy + dz * dz) <= dist * 0.06f
+    }
+
+    data class StreamTick(
+        /** The base overview or a refined tile is already on the GPU. */
+        val hasDrape: Boolean,
+        /** Missing plan tiles to decode this step, nearest first. */
+        val request: List<Node>,
+        /** A plan tile is still missing and not given up. */
+        val refining: Boolean,
+    )
+
+    /**
+     * One frame of the stream. [baseReady] is the overview texture already uploaded, the same
+     * picture 0.1.5 put on the GPU before any tile decode. The plan is only requested on top of
+     * that. A tile in [blocked] failed (the pyramid file is not there yet) and is not asked again.
+     */
+    fun tick(
+        baseReady: Boolean,
+        residents: Set<String>,
+        plan: List<Node>,
+        queued: Set<String>,
+        slots: Int,
+        blocked: Set<String> = emptySet(),
+    ): StreamTick {
+        val missing = plan.filter { it.key !in residents && it.key !in queued && it.key !in blocked }
+        val request = if (slots <= 0) emptyList() else missing.take(slots)
+        val refining = plan.any { it.key !in residents && it.key !in blocked }
+        return StreamTick(baseReady || residents.isNotEmpty(), request, refining)
+    }
+
+    data class Settle(
+        val steps: Int,
+        val converged: Boolean,
+        val hasDrapeOnFirst: Boolean,
+        /** Keys that were dropped and then requested again. */
+        val readded: List<String>,
+    )
+
+    /**
+     * Runs the stream until [plan] is resident or until it cannot admit another tile.
+     * A stable plan only grows: a key that leaves is not asked again. The first step already
+     * has the base drape, before any refined tile is added.
+     */
+    fun settle(plan: List<Node>, budget: Long, bytesOf: (Node) -> Long, slots: Int): Settle {
+        val resident = LinkedHashMap<String, Long>()
+        val removed = HashSet<String>()
+        val readded = ArrayList<String>()
+        var hasFirst = false
+        var steps = 0
+        val bound = plan.size.coerceAtLeast(1) + 2
+        while (steps < bound) {
+            val tick = tick(baseReady = true, residents = resident.keys, plan = plan, queued = emptySet(), slots = slots)
+            if (steps == 0) hasFirst = tick.hasDrape
+            if (!tick.hasDrape) return Settle(steps, converged = false, hasDrapeOnFirst = false, readded = readded)
+            if (!tick.refining && tick.request.isEmpty()) return Settle(steps, converged = true, hasDrapeOnFirst = hasFirst, readded = readded)
+            var added = 0
+            for (node in tick.request) {
+                val bytes = bytesOf(node)
+                val used = resident.values.sum()
+                if (!admits(used, bytes, 0L, budget)) continue
+                if (node.key in removed) readded += node.key
+                resident[node.key] = bytes
+                added++
+            }
+            val wanted = plan.mapTo(HashSet()) { it.key }
+            val gone = resident.keys.filter { it !in wanted }
+            for (key in gone) {
+                resident.remove(key)
+                removed += key
+            }
+            if (added == 0 && gone.isEmpty()) break
+            steps++
+        }
+        val done = plan.all { it.key in resident }
+        return Settle(steps, done, hasFirst, readded)
     }
 
     /**
