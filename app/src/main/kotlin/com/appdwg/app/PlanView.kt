@@ -220,6 +220,9 @@ fun PlanView(
     surfaceStyle: (String) -> SurfaceStyle = { SurfaceStyle() },
     /** Area to show while the project has nothing in it yet. */
     fallbackBounds: Bounds? = null,
+    /** Placed drainage: plan footprint, invert and flow arrows. */
+    drainage: List<com.appdwg.core.drainage.DrainageGlyph> = emptyList(),
+    selectedDrainage: String? = null,
 ) {
     val bounds = project.bounds ?: fallbackBounds ?: return
     // Origin and camera follow the opened drawing, not each rebuild of it (files added, a design),
@@ -666,6 +669,7 @@ fun PlanView(
                 drawCircle(Color(0xFF00E5FF), radius = r, center = sp)
             }
         }
+        if (drainage.isNotEmpty()) drawDrainage(drainage, selectedDrainage) { toScreen(it, cam) }
         if (measure.isNotEmpty()) {
             if (measureIsAxis) drawMeasure(measure, false, lines = AxisInfo.TANGENTS !in axisHidden, lengths = AxisInfo.LENGTHS !in axisHidden,
                 vertices = AxisInfo.PIS !in axisHidden) { toScreen(it, cam) }
@@ -1130,6 +1134,55 @@ private fun snapTarget(project: LandXmlProject, cogo: List<CogoPoint>, p: Point2
     }
     for (a in project.alignments) for (v in a.vertices) consider(v.x, v.y)
     return best
+}
+
+private val DRAINAGE_COLOR = Color(0xFF1565C0)
+
+/** Footprint, invert and flow arrows of the placed drainage devices. */
+private fun DrawScope.drawDrainage(
+    glyphs: List<com.appdwg.core.drainage.DrainageGlyph>,
+    selected: String?,
+    toScreen: (Point2) -> Offset,
+) {
+    val label = Paint().apply {
+        isAntiAlias = true
+        textSize = 12.sp.toPx()
+        color = DRAINAGE_COLOR.toArgb()
+        setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK)
+    }
+    for (glyph in glyphs) {
+        val on = glyph.id == selected
+        if (glyph.footprint.size >= 3) {
+            val fill = Path().apply {
+                val first = toScreen(glyph.footprint.first())
+                moveTo(first.x, first.y)
+                for (point in glyph.footprint.drop(1)) {
+                    val sp = toScreen(point)
+                    lineTo(sp.x, sp.y)
+                }
+                close()
+            }
+            drawPath(fill, DRAINAGE_COLOR.copy(alpha = if (on) 0.35f else 0.18f))
+            drawPath(fill, if (on) Color(0xFFFF6D00) else DRAINAGE_COLOR, style = Stroke(width = if (on) 4f else 2f))
+        }
+        val invert = glyph.invert.map(toScreen)
+        for (i in 1 until invert.size) drawLine(if (on) Color(0xFFFF6D00) else Color(0xFF0D47A1), invert[i - 1], invert[i], strokeWidth = 3f)
+        val len = 8.sp.toPx()
+        for ((point, angle) in glyph.arrows) {
+            val c = toScreen(point)
+            val d = Offset(kotlin.math.cos(angle).toFloat(), -kotlin.math.sin(angle).toFloat())
+            val tip = c + d * len
+            val n = Offset(-d.y, d.x) * (len * 0.4f)
+            val back = tip - d * (len * 0.7f)
+            drawLine(DRAINAGE_COLOR, c - d * len, tip, strokeWidth = 2f)
+            drawLine(DRAINAGE_COLOR, tip, back + n, strokeWidth = 2f)
+            drawLine(DRAINAGE_COLOR, tip, back - n, strokeWidth = 2f)
+        }
+        if (glyph.simplified && glyph.label != null && invert.isNotEmpty()) {
+            val sp = invert.first()
+            drawContext.canvas.nativeCanvas.drawText(tr("{0} (simplificado)", glyph.label), sp.x + 6f, sp.y - 6f, label)
+        }
+    }
 }
 
 /** Measurement line, its closing edge and fill from 3 points on, vertices and leg lengths. */

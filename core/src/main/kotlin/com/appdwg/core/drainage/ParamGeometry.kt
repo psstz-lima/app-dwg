@@ -73,7 +73,27 @@ internal fun crossSection(geometry: Jv.Obj?, env: Map<String, Double>): CrossSec
     return CrossSection(type, units, rings)
 }
 
-private fun ring(texts: List<String>, env: Map<String, Double>, units: String): List<SectionPoint>? {
+/** Section of [device] after numeric parameter edits. An empty override map keeps the catalog section. */
+fun resolveSection(device: DeviceDef, overrides: Map<String, Double>): CrossSection? {
+    if (overrides.isEmpty() || device.outline.isEmpty()) return device.section
+    val env = HashMap<String, Double>()
+    for (parameter in device.parameters) {
+        val number = parameter.number ?: continue
+        env.putIfAbsent(parameter.key, number)
+        if ((parameter.key.endsWith("_cm") || parameter.key.endsWith("_m")) && parameter.key.length > 3) {
+            env.putIfAbsent(parameter.key.dropLast(3), number)
+        }
+    }
+    for ((key, value) in overrides) {
+        env[key] = value
+        if ((key.endsWith("_cm") || key.endsWith("_m")) && key.length > 3) env[key.dropLast(3)] = value
+    }
+    val ring = ring(device.outline, env, device.outlineUnits) ?: return device.section
+    val type = device.outlineType.ifEmpty { device.section?.type ?: "" }
+    return CrossSection(type, device.outlineUnits, listOf(ring))
+}
+
+internal fun ring(texts: List<String>, env: Map<String, Double>, units: String): List<SectionPoint>? {
     val points = ArrayList<SectionPoint>(texts.size)
     for (raw in texts) {
         val pair = coordinate(raw) ?: return null

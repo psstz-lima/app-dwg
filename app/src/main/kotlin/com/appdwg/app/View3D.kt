@@ -78,6 +78,8 @@ fun View3D(
     overlayLines: DoubleArray = DoubleArray(0),
     /** World xyz of the highlighted polygon facets, nine doubles per triangle. */
     overlayTris: DoubleArray = DoubleArray(0),
+    /** Placed drainage solids, world xyz, nine doubles per triangle. Drawn opaque in the draped view. */
+    solidTris: DoubleArray = DoubleArray(0),
     /** The GPU refused the picture. The caller steps the quality down and tries again. */
     onDrapeFailed: () -> Unit = {},
     /** True while tiles sharper than the overview are still loading. */
@@ -115,6 +117,10 @@ fun View3D(
     }
     LaunchedEffect(overlayLines, overlayTris) {
         renderer.setOverlay(sceneFloats(overlayLines, scene), sceneFloats(overlayTris, scene))
+        holder[0]?.requestRender()
+    }
+    LaunchedEffect(solidTris) {
+        renderer.setSolid(sceneFloats(solidTris, scene))
         holder[0]?.requestRender()
     }
     val failState = rememberUpdatedState(onDrapeFailed)
@@ -429,11 +435,15 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
     )
     @Volatile private var pendingLines = FloatArray(0)
     @Volatile private var pendingTris = FloatArray(0)
+    @Volatile private var pendingSolid = FloatArray(0)
     @Volatile private var overlayDirty = false
+    @Volatile private var solidDirty = false
     private var overlayLineBuf = 0
     private var overlayTriBuf = 0
     private var overlayLineCount = 0
     private var overlayTriCount = 0
+    private var solidBuf = 0
+    private var solidCount = 0
 
     /** Stops background decodes and planning. Safe to call again after the view is already gone. */
     fun close() {
@@ -1070,6 +1080,11 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         overlayDirty = true
     }
 
+    fun setSolid(tris: FloatArray) {
+        pendingSolid = tris
+        solidDirty = true
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         program = buildProgram()
         meshBuffers.clear()
@@ -1113,7 +1128,9 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         drapeDirty = true
         overlayLineBuf = 0
         overlayTriBuf = 0
+        solidBuf = 0
         overlayDirty = true
+        solidDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -1141,6 +1158,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         if (drapeDirty) uploadDrape()
         streamDrape()
         if (overlayDirty) uploadOverlay()
+        if (solidDirty) uploadSolid()
         GLES30.glUseProgram(program)
         GLES30.glUniformMatrix4fv(GLES30.glGetUniformLocation(program, "uMvp"), 1, false, mvp, 0)
         GLES30.glUniform1f(GLES30.glGetUniformLocation(program, "uZScale"), zScale)
@@ -1261,6 +1279,7 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, b.vertices.size / 3)
         }
         drawOverlay(uAlpha, uBias, uColor, uLit, uDrape)
+        drawSolid(uAlpha, uBias, uColor, uLit, uDrape)
     }
 
     /** Highlight draped on the surface. Uploaded when the polygon changes, drawn as one batch. */
@@ -1302,6 +1321,30 @@ private class Renderer3D(private val scene: Scene3D) : GLSurfaceView.Renderer {
         overlayTriCount = tris.size / 3
         // A polygon that arrived while this uploaded stays dirty for the next frame.
         if (pendingLines === lines && pendingTris === tris) overlayDirty = false
+    }
+
+    /** Opaque drainage solid in the same view as the orthophoto drape. */
+    private fun drawSolid(uAlpha: Int, uBias: Int, uColor: Int, uLit: Int, uDrape: Int) {
+        if (solidCount == 0) return
+        GLES30.glUniform1i(uLit, 0)
+        GLES30.glUniform1i(uDrape, 0)
+        GLES30.glDisableVertexAttribArray(1)
+        GLES30.glDisableVertexAttribArray(2)
+        GLES30.glUniform3f(uColor, 0.45f, 0.62f, 0.55f)
+        GLES30.glUniform1f(uAlpha, 1f)
+        GLES30.glUniform1f(uBias, 0.003f)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, solidBuf)
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, solidCount)
+        GLES30.glUniform1f(uBias, 0f)
+    }
+
+    private fun uploadSolid() {
+        val tris = pendingSolid
+        solidBuf = replaceBuffer(solidBuf, tris)
+        solidCount = tris.size / 3
+        if (pendingSolid === tris) solidDirty = false
     }
 
     private fun replaceBuffer(old: Int, data: FloatArray): Int {

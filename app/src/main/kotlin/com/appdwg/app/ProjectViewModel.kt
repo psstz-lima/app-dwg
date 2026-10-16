@@ -1118,6 +1118,60 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     var canRedo by mutableStateOf(false)
         private set
 
+    /** Placed drainage devices, with their own undo. */
+    var drainage by mutableStateOf<List<com.appdwg.core.drainage.PlacedDevice>>(emptyList())
+        private set
+    var drainageCatalog by mutableStateOf(com.appdwg.core.drainage.CatalogLoader.bundled())
+        private set
+    private val drainageUndo = ArrayDeque<List<com.appdwg.core.drainage.PlacedDevice>>()
+    var canUndoDrainage by mutableStateOf(false)
+        private set
+
+    fun useDrainageCatalog(catalog: com.appdwg.core.drainage.DeviceCatalog) {
+        drainageCatalog = catalog
+    }
+
+    fun putDrainage(device: com.appdwg.core.drainage.PlacedDevice) {
+        val next = if (drainage.any { it.id == device.id }) drainage.map { if (it.id == device.id) device else it } else drainage + device
+        pushDrainage(next)
+    }
+
+    fun deleteDrainage(id: String) {
+        pushDrainage(drainage.filter { it.id != id })
+    }
+
+    fun moveDrainage(id: String, to: com.appdwg.core.Point2) {
+        val next = drainage.map { device ->
+            when {
+                device.id != id -> device
+                device is com.appdwg.core.drainage.PlacedDevice.Point -> device.copy(x = to.x, y = to.y)
+                device is com.appdwg.core.drainage.PlacedDevice.Linear -> {
+                    if (device.xs.isEmpty()) device
+                    else {
+                        val dx = to.x - device.xs.average()
+                        val dy = to.y - device.ys.average()
+                        device.copy(xs = device.xs.map { it + dx }, ys = device.ys.map { it + dy }, source = com.appdwg.core.drainage.PathSource.POLYLINE)
+                    }
+                }
+                else -> device
+            }
+        }
+        pushDrainage(next)
+    }
+
+    fun undoDrainage() {
+        val prev = drainageUndo.removeLastOrNull() ?: return
+        drainage = prev
+        canUndoDrainage = drainageUndo.isNotEmpty()
+    }
+
+    private fun pushDrainage(next: List<com.appdwg.core.drainage.PlacedDevice>) {
+        drainageUndo.addLast(drainage)
+        if (drainageUndo.size > 50) drainageUndo.removeFirst()
+        drainage = next
+        canUndoDrainage = true
+    }
+
     /** Shown line at [index] (as [LineRef.Drawing] numbers them). */
     fun shownLine(index: Int): Polyline? = (state as? ProjectState.Loaded)?.project?.polylines?.getOrNull(index)
 
@@ -3045,6 +3099,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
             hiddenLines = hiddenOriginals.toList(),
             models = models.map { m -> m.uris.map { it.toString() } to m.placement },
             notes = notes,
+            drainage = drainage,
             edited = addedFiles.filter { it.uri == null && it.label.endsWith(EDITED_SUFFIX) }
                 .flatMap { f -> f.project.surfaces }.map { s -> synchronized(encodedSurfaces) { encodedSurfaces.getOrPut(s) { SurfaceCodec.encode(s) } } },
         )
@@ -3071,6 +3126,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         drape = null
         drapeUris = emptyList()
         encodedSurfaces.clear()
+        drainage = emptyList()
+        drainageUndo.clear()
+        canUndoDrainage = false
     }
 
     fun isDirty(): Boolean {
@@ -3404,6 +3462,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         notes = doc.notes
         userLines = doc.userLines
         hiddenOriginals = doc.hiddenLines.toSet()
+        drainage = doc.drainage
+        drainageUndo.clear()
+        canUndoDrainage = false
         if (doc.pointsSurface) surfaceFromPointsNow()
         refreshJob?.cancel()
         refreshNow()
@@ -3496,6 +3557,9 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
                     notes = emptyList()
                     userLines = emptyList()
                     hiddenOriginals = emptySet()
+                    drainage = emptyList()
+                    drainageUndo.clear()
+                    canUndoDrainage = false
                     keptOriginals = project.polylines.indices.toList()
                     undoStack.clear(); redoStack.clear(); canUndo = false; canRedo = false
                     platform = null

@@ -69,7 +69,25 @@ object CatalogLoader {
             note = readText(obj.fields["notes"]),
             variantsNote = obj.str("variants_note"),
             origin = obj.str("origin")?.takeIf { it.isNotBlank() } ?: origin,
+            outline = outlineOf(geometry),
+            outlineUnits = geometry?.str("units") ?: "cm",
+            outlineType = geometry?.str("type") ?: "",
         )
+    }
+
+    private fun outlineOf(geometry: Jv.Obj?): List<String> {
+        if (geometry == null) return emptyList()
+        val keys = LinkedHashSet<String>()
+        keys.add("vertices")
+        keys.add("inner")
+        keys.add("outer")
+        keys.addAll(geometry.fields.keys)
+        for (key in keys) {
+            val array = geometry.fields[key] as? Jv.Arr ?: continue
+            val texts = array.items.mapNotNull { (it as? Jv.Str)?.text }
+            if (texts.size >= 3 && texts.any { '(' in it && ',' in it }) return texts
+        }
+        return emptyList()
     }
 
     private fun category(text: String?): DeviceCategory = when (text?.trim()?.lowercase()) {

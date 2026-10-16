@@ -577,6 +577,10 @@ private fun ProjectScreen(
     var showAnalysis by remember(fileName) { mutableStateOf(false) }
     var showBasin by remember(fileName) { mutableStateOf(false) }
     var showDrainage by remember(fileName) { mutableStateOf(false) }
+    var drainageDraft by remember(fileName) { mutableStateOf<PlaceDraft?>(null) }
+    var drainageSelected by remember(fileName) { mutableStateOf<String?>(null) }
+    var drainageMoving by remember(fileName) { mutableStateOf(false) }
+    var drainageBuilt by remember(fileName) { mutableStateOf<com.appdwg.core.drainage.DrainageBuilt?>(null) }
     var showAdvice by remember(fileName) { mutableStateOf(false) }
     var adviceCard by remember(fileName) { mutableStateOf(true) }
     var roadOnGrade by remember(fileName) { mutableStateOf(false) }
@@ -759,11 +763,13 @@ private fun ProjectScreen(
         if (measurePoints.isEmpty()) null
         else Measure.of(measurePoints, measurePoints.map { PointQuery.at(project, it, frozenLayers.toSet()).terrainElevation })
     }
-    // The polygon being drawn: measure, a platform outline, or a grid area. The same points in plan and 3D.
+    // The polygon being drawn: measure, a platform outline, a grid area, or a drainage path. The same points in plan and 3D.
+    val draftPath = drainageDraft?.takeIf { !it.point && it.source != com.appdwg.core.drainage.PathSource.ALIGNMENT }?.points ?: emptyList()
     val areaPoly = when {
         measuring -> measurePoints
         drawingPlatform -> platformOutline
         genPick == GenPick.AREA_DRAW -> gen.drawnArea
+        draftPath.size >= 2 -> draftPath
         else -> emptyList()
     }
     val areaClosed = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
@@ -794,6 +800,31 @@ private fun ProjectScreen(
         drapeLines = built.lines
         drapeTris = built.tris
         surfacePending = false
+    }
+    LaunchedEffect(vm.drainage, drainageDraft, project, frozenLayers, vm.drainageCatalog) {
+        val draft = drainageDraft
+        val preview = draft?.placed()
+        val committed = vm.drainage
+        val shown = if (preview == null) committed else committed.filter { it.id != preview.id } + preview
+        val catalog = vm.drainageCatalog
+        val surfaces = project.surfaces.filter { s ->
+            s.name !in frozenLayers && s.triangleCount > 0 && project.surfaces.none { it.name == s.name + EDITED_SUFFIX }
+        }
+        val alignments = project.alignments
+        drainageBuilt = withContext(Dispatchers.Default) {
+            com.appdwg.core.drainage.DrainageScene.build(
+                shown,
+                { catalog.device(it) },
+                { x, y ->
+                    val p = Point2(x, y)
+                    surfaces.firstNotNullOfOrNull { it.elevationAt(p) }
+                },
+                { name -> alignments.firstOrNull { it.name == name } },
+            )
+        }
+    }
+    LaunchedEffect(vm.drainage, drainageSelected) {
+        if (drainageSelected != null && vm.drainage.none { it.id == drainageSelected }) drainageSelected = null
     }
     val g = LocalG.current
     val colors = PlanColors(
@@ -960,9 +991,46 @@ private fun ProjectScreen(
         }
     }
 
+    fun drainageRadius(): Double {
+        val box = viewport
+        val span = if (box == null) 200.0 else maxOf(box.maxX - box.minX, box.maxY - box.minY)
+        return (span / 40.0).coerceIn(3.0, 80.0)
+    }
+    fun applyDrainageLine(ref: com.appdwg.core.LineRef) {
+        val draft = drainageDraft ?: return
+        when (ref) {
+            is com.appdwg.core.LineRef.Drawing -> {
+                val path = com.appdwg.core.PointGen.path(project, ref) ?: return
+                if (path.xs.size < 2) return
+                val layer = project.polylines.getOrNull(ref.index)?.layer ?: ref.index.toString()
+                drainageDraft = draft.copy(
+                    points = List(path.xs.size) { Point2(path.xs[it], path.ys[it]) },
+                    lineName = layer,
+                )
+            }
+            is com.appdwg.core.LineRef.Axis -> {
+                val name = project.alignments.getOrNull(ref.index)?.name ?: return
+                drainageDraft = draft.copy(source = com.appdwg.core.drainage.PathSource.ALIGNMENT, alignment = name, profile = draft.profile ?: name)
+            }
+        }
+    }
     val onPlanTap: (Point2) -> Unit = {
                         // Tapping the same snapped point twice would add a zero-length leg.
                         when {
+                            drainageDraft != null -> {
+                                val draft = drainageDraft!!
+                                when {
+                                    draft.point -> drainageDraft = draft.copy(x = it.x, y = it.y)
+                                    draft.source == com.appdwg.core.drainage.PathSource.POLYLINE ->
+                                        if (it != draft.points.lastOrNull()) drainageDraft = draft.copy(points = draft.points + it)
+                                    draft.source == com.appdwg.core.drainage.PathSource.LINE ->
+                                        com.appdwg.core.PointGen.nearestLine(project, it, drainageRadius(), hidden)?.let { ref -> applyDrainageLine(ref) }
+                                }
+                            }
+                            drainageMoving && drainageSelected != null -> {
+                                vm.moveDrainage(drainageSelected!!, it)
+                                drainageMoving = false
+                            }
                             v.pickingOutlet -> {
                                 v.pickingOutlet = false
                                 val name = vm.analysisSurface ?: project.surfaces.firstOrNull()?.name
@@ -1009,8 +1077,17 @@ private fun ProjectScreen(
                             showProfile && sectionAxis != null -> sectionAxis.stationOffset(it)?.let { so -> profileCursor = so.station }
                             !proOpen(ProFeature.TAP_INFO) -> {}
                             else -> {
-                                tapped = it; selectedPoint = null
-                                modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
+                                val glyphs = drainageBuilt?.glyphs.orEmpty()
+                                val hitId = if (glyphs.isEmpty()) null else com.appdwg.core.drainage.DrainageScene.hit(glyphs, it.x, it.y, drainageRadius())
+                                if (hitId != null) {
+                                    drainageSelected = hitId
+                                    drainageMoving = false
+                                    tapped = null
+                                    selectedPoint = null
+                                } else {
+                                    tapped = it; selectedPoint = null
+                                    modelHit = if (project.models.isEmpty()) null else com.appdwg.core.ModelPick.at(project.models, it, offLayers.toSet() + frozenLayers)
+                                }
                             }
                         }
     }
@@ -1025,6 +1102,9 @@ private fun ProjectScreen(
                 .onSizeChanged { planWidthPx = it.width },
         ) {
                 val pickingArea = measuring || drawingPlatform || genPick == GenPick.AREA_DRAW
+                val placingDrainage = drainageMoving || drainageDraft?.let { draft ->
+                    draft.point || draft.source != com.appdwg.core.drainage.PathSource.ALIGNMENT
+                } == true
                 if (showAr) ArScreen(
                     project = project,
                     userPoints = vm.userPoints,
@@ -1044,11 +1124,12 @@ private fun ProjectScreen(
                         drape = drape3d,
                         modifier = Modifier.fillMaxSize(),
                         surfaceStyle = { v.styleOf(it) },
-                        onTap = if (pickingArea) onPlanTap else null,
-                        snap = pickingArea,
+                        onTap = if (pickingArea || placingDrainage || drainageBuilt?.glyphs?.isNotEmpty() == true) onPlanTap else null,
+                        snap = pickingArea || drainageMoving || drainageDraft?.let { it.point || it.source != com.appdwg.core.drainage.PathSource.ALIGNMENT } == true,
                         userPoints = vm.userPoints,
                         overlayLines = drapeLines,
                         overlayTris = if (areaClosed && areaPoly.size >= 3) drapeTris else DoubleArray(0),
+                        solidTris = drainageBuilt?.triangles ?: DoubleArray(0),
                         onDrapeFailed = {
                             val lower = GlTexture.nextQuality(v.drapeQuality) ?: return@View3D
                             v.drapeQuality = lower
@@ -1072,8 +1153,9 @@ private fun ProjectScreen(
                     onTap = onPlanTap, // defined above; 3D uses the same vertex flow
                     modifier = Modifier.fillMaxSize(),
                     measure = if (measuring) measurePoints else if (editing && edit.pick == EditPick.DRAW) edit.picked else if (drawingRoad) v.roadParams.pis else if (drawingPlatform) platformOutline
+                        else if (draftPath.isNotEmpty()) draftPath
                         else if (genPick == GenPick.AREA_DRAW || (showGen && gen.grid && gen.area == GridArea.DRAWN)) gen.drawnArea else emptyList(),
-                    measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW)),
+                    measureClosed = measuring || !(drawingRoad || (editing && edit.pick == EditPick.DRAW) || draftPath.isNotEmpty()),
                     extraAlignments = listOfNotNull(vm.previewAlignment(v.roadParams)),
                     axisHidden = v.axisHidden,
                     measureIsAxis = drawingRoad && !measuring,
@@ -1082,8 +1164,10 @@ private fun ProjectScreen(
                     onHandleDrag = if (drawingRoad) { i, p -> v.roadParams.let { rp -> if (i in rp.pis.indices) v.roadParams = rp.copy(pis = rp.pis.toMutableList().apply { set(i, p) }) } } else null,
                     onHandleTap = { i -> selectedPi = if (selectedPi == i) null else i },
                     snap = measuring || drawingPlatform || drawingRoad || genPick == GenPick.AREA_DRAW || modelPickFor != null ||
+                        drainageMoving || drainageDraft?.let { it.point || it.source != com.appdwg.core.drainage.PathSource.ALIGNMENT } == true ||
                         (editing && edit.pick in setOf(EditPick.FROM_TO, EditPick.CENTER, EditPick.AXIS, EditPick.DRAW)),
                     selectLine = genPick == GenPick.LINE || genPick == GenPick.AREA_LINE || genPick == GenPick.ROTATION || roadTargetPick != null ||
+                        drainageDraft?.let { !it.point && it.source == com.appdwg.core.drainage.PathSource.LINE } == true ||
                         (editing && edit.pick == EditPick.SELECT),
                     selectedLines = if (editing) edit.selected else emptyList(),
                     previewLines = if (editing) edit.preview else emptyList(),
@@ -1094,7 +1178,13 @@ private fun ProjectScreen(
                     onNoteTap = if (measuring || addingPoints || editing || !proOpen(ProFeature.NOTE_OPEN)) null else { n -> openNote = n; tapped = null; selectedPoint = null },
                     basemap = vm.basemap.takeIf { it.enabled && !crs.isGeographic && !crs.local },
                     basemapCrs = crs,
+                    drainage = drainageBuilt?.glyphs.orEmpty(),
+                    selectedDrainage = drainageSelected,
                     onLineSelected = { ref ->
+                        if (drainageDraft?.let { !it.point && it.source == com.appdwg.core.drainage.PathSource.LINE } == true) {
+                            applyDrainageLine(ref)
+                            return@PlanView
+                        }
                         roadTargetPick?.let { (i, side) ->
                             com.appdwg.core.PointGen.path(project, ref)?.let { pth ->
                                 val line = List(pth.xs.size) { k -> Point2(pth.xs[k], pth.ys[k]) }
@@ -1234,7 +1324,71 @@ private fun ProjectScreen(
                         strokeWidth = 2.dp,
                     )
                 }
-                if (show3d && !measuring && !drawingPlatform && genPick == null) {
+                if (drainageDraft != null) {
+                    val draft = drainageDraft!!
+                    val device = vm.drainageCatalog.device(draft.code)
+                    Card(
+                        Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 420.dp).fillMaxWidth().heightIn(max = 360.dp)
+                            .pointerInput(Unit) { detectTapGestures { } },
+                    ) {
+                        DrainagePlaceCard(
+                            draft = draft,
+                            alignments = project.alignments.map { it.name },
+                            profiles = project.alignments.filter { it.profile != null }.map { it.name },
+                            parameters = device?.parameters.orEmpty(),
+                            onChange = { drainageDraft = it },
+                            onUndoPoint = { drainageDraft = draft.copy(points = draft.points.dropLast(1)) },
+                            onCommit = commit@{
+                                val placed = drainageDraft?.placed() ?: return@commit
+                                if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
+                                else {
+                                    vm.putDrainage(placed)
+                                    drainageSelected = placed.id
+                                    drainageDraft = null
+                                }
+                            },
+                            onCancel = { drainageDraft = null },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                } else if (drainageSelected != null) {
+                    val placed = vm.drainage.find { it.id == drainageSelected }
+                    val device = placed?.let { vm.drainageCatalog.device(it.code) }
+                    val rows = drainageBuilt?.takeoff.orEmpty()
+                    val glyph = drainageBuilt?.glyphs?.find { it.id == drainageSelected }
+                    Card(
+                        Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 420.dp).fillMaxWidth().heightIn(max = 320.dp)
+                            .pointerInput(Unit) { detectTapGestures { } },
+                    ) {
+                        DrainageSelectionCard(
+                            code = placed?.code ?: "",
+                            name = device?.name ?: placed?.code.orEmpty(),
+                            simplified = glyph?.simplified == true,
+                            row = rows.find { it.id == drainageSelected },
+                            total = if (rows.isEmpty()) null else com.appdwg.core.drainage.DrainageTakeoff.total(rows),
+                            moving = drainageMoving,
+                            canUndo = vm.canUndoDrainage,
+                            isPro = proOpen(ProFeature.DRAINAGE),
+                            onEdit = {
+                                if (placed != null && device != null) {
+                                    drainageDraft = placed.toDraft(device.name)
+                                    drainageMoving = false
+                                    drainageSelected = null
+                                }
+                            },
+                            onMove = { drainageMoving = !drainageMoving },
+                            onDelete = {
+                                drainageSelected?.let { vm.deleteDrainage(it) }
+                                drainageSelected = null
+                                drainageMoving = false
+                            },
+                            onUndo = { vm.undoDrainage() },
+                            onPro = { vm.proRequested = true },
+                            onClose = { drainageSelected = null; drainageMoving = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                } else if (show3d && !measuring && !drawingPlatform && genPick == null) {
                     Text(
                         tr("1 dedo gira · 2 dedos movem · pinça aproxima"),
                         modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
@@ -1658,7 +1812,27 @@ private fun ProjectScreen(
         }
     }, onDismiss = { showAdvice = false; adviceCard = false })
 
-    if (showDrainage) DrainageLibraryDialog(isPro, onPro = { vm.proRequested = true }, onDismiss = { showDrainage = false })
+    if (showDrainage) DrainageLibraryDialog(isPro, onPro = { vm.proRequested = true }, onDismiss = { showDrainage = false }, onPlace = { catalog, device ->
+        if (!proOpen(ProFeature.DRAINAGE)) vm.proRequested = true
+        else {
+            vm.useDrainageCatalog(catalog)
+            measuring = false
+            drawingPlatform = false
+            drawingRoad = false
+            genPick = null
+            addingNote = false
+            editing = false
+            addingPoints = false
+            showSection = false
+            showProfile = false
+            tapped = null
+            selectedPoint = null
+            drainageMoving = false
+            drainageSelected = null
+            drainageDraft = draftFor(device)
+            showDrainage = false
+        }
+    })
 
     if (showBasin) BasinDialog(vm, project, onPick = {
         showBasin = false; v.pickingOutlet = true; measuring = false; show3d = false; tapped = null

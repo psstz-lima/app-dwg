@@ -82,6 +82,10 @@ data class DeviceDef(
     val note: String?,
     val variantsNote: String?,
     val origin: String,
+    /** Vertex expressions of the outline, so a placed device can be rebuilt after a parameter edit. */
+    val outline: List<String> = emptyList(),
+    val outlineUnits: String = "cm",
+    val outlineType: String = "",
     val review: DeviceReview? = null,
 ) {
     /** Visible in the library, but placement and calculations stay closed until someone signs the review. */

@@ -213,6 +213,8 @@ class ProjectDoc(
     /** Survey states of the works timeline, in date order, and the one shown (−1: all). */
     val states: List<SurveyState> = emptyList(),
     val activeState: Int = -1,
+    /** Placed drainage. Absent from older project files, which still open. */
+    val drainage: List<com.appdwg.core.drainage.PlacedDevice> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("app", APP_TAG)
@@ -247,6 +249,7 @@ class ProjectDoc(
         if (edited.isNotEmpty()) put("edited", JSONArray(edited))
         if (hiddenFiles.isNotEmpty()) put("hiddenFiles", JSONArray(hiddenFiles))
         if (states.isNotEmpty()) { put("states", JSONArray(states.map { it.toJson() })); put("activeState", activeState) }
+        if (drainage.isNotEmpty()) put("drainage", JSONArray(com.appdwg.core.drainage.DrainageIo.toJson(drainage)))
         put("models", JSONArray(models.map { (uris, p) ->
             JSONObject().put("uris", JSONArray(uris)).put("east", p.east).put("north", p.north).put("elevation", p.elevation)
                 .put("rotation", p.rotationDeg).put("scale", p.scale).put("unit", p.unitScale)
@@ -308,6 +311,7 @@ class ProjectDoc(
                 hiddenFiles = strings("hiddenFiles"),
                 states = o.optJSONArray("states")?.let { a -> List(a.length()) { SurveyState.fromJson(a.getJSONObject(it)) } }.orEmpty(),
                 activeState = o.optInt("activeState", -1),
+                drainage = o.optJSONArray("drainage")?.let { com.appdwg.core.drainage.DrainageIo.fromJson(it.toString()) }.orEmpty(),
             )
         }
 

@@ -56,19 +56,29 @@ import kotlin.math.roundToInt
 
 /** IPR-736 device library. Browsing is open; placement and calculations ask for Pro. */
 @Composable
-fun DrainageLibraryDialog(isPro: Boolean, onPro: () -> Unit, onDismiss: () -> Unit) {
+fun DrainageLibraryDialog(
+    isPro: Boolean,
+    onPro: () -> Unit,
+    onDismiss: () -> Unit,
+    onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.safeBars().fillMaxWidth(0.96f),
         title = { Text(tr("Biblioteca de dispositivos"), maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        text = { DrainageLibraryBody(isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp)) },
+        text = { DrainageLibraryBody(isPro, onPro, Modifier.fillMaxWidth().heightIn(max = 520.dp), onPlace) },
         confirmButton = { GButton(tr("Fechar"), onDismiss) },
     )
 }
 
 @Composable
-fun DrainageLibraryBody(isPro: Boolean, onPro: () -> Unit, modifier: Modifier = Modifier) {
+fun DrainageLibraryBody(
+    isPro: Boolean,
+    onPro: () -> Unit,
+    modifier: Modifier = Modifier,
+    onPlace: (DeviceCatalog, DeviceDef) -> Unit = { _, _ -> },
+) {
     var catalog by remember { mutableStateOf(CatalogLoader.bundled()) }
     var query by remember { mutableStateOf("") }
     var chapter by remember { mutableStateOf<Int?>(null) }
@@ -83,7 +93,7 @@ fun DrainageLibraryBody(isPro: Boolean, onPro: () -> Unit, modifier: Modifier = 
     ) {
         val picked = selected?.let { catalog.device(it) }
         if (picked != null) {
-            DeviceDetail(catalog, picked, isPro, onPro, onBack = { selected = null }, onCatalog = { catalog = it })
+            DeviceDetail(catalog, picked, isPro, onPro, onBack = { selected = null }, onCatalog = { catalog = it }, onPlace = onPlace)
         } else {
             DeviceBrowser(
                 catalog, query, chapter, category, family, isPro,
@@ -223,6 +233,7 @@ private fun DeviceDetail(
     onPro: () -> Unit,
     onBack: () -> Unit,
     onCatalog: (DeviceCatalog) -> Unit,
+    onPlace: (DeviceCatalog, DeviceDef) -> Unit,
 ) {
     GButton(tr("Voltar"), onBack, outlined = true)
     Text(device.code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -289,7 +300,7 @@ private fun DeviceDetail(
     catalog.sources[device.page.source]?.title?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 4, overflow = TextOverflow.Ellipsis)
     }
-    PlaceRow(device, isPro, onPro)
+    PlaceRow(catalog, device, isPro, onPro, onPlace)
 }
 
 @Composable
@@ -348,16 +359,20 @@ private fun CalculateRow(device: DeviceDef, isPro: Boolean, onPro: () -> Unit) {
 }
 
 @Composable
-private fun PlaceRow(device: DeviceDef, isPro: Boolean, onPro: () -> Unit) {
-    var notice by remember(device.code, device.review) { mutableStateOf<String?>(null) }
+private fun PlaceRow(
+    catalog: DeviceCatalog,
+    device: DeviceDef,
+    isPro: Boolean,
+    onPro: () -> Unit,
+    onPlace: (DeviceCatalog, DeviceDef) -> Unit,
+) {
     GButton(tr("Lançar"), enabled = device.placeable, onClick = {
         when (device.access(isPro)) {
-            DeviceAccess.OPEN -> notice = tr("Disponível para lançamento.")
+            DeviceAccess.OPEN -> onPlace(catalog, device)
             DeviceAccess.NEEDS_PRO -> onPro()
             DeviceAccess.NEEDS_REVIEW -> Unit
         }
     })
-    notice?.let { Text(it, maxLines = 3, overflow = TextOverflow.Ellipsis) }
 }
 
 @Composable

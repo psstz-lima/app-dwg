@@ -1418,3 +1418,38 @@ Extrusão	Extrusion
 Pré-moldado	Precast
 Linha simples	Single line
 sem valor	no value
+Lançar {0}	Place {0}
+Toque na planta ou no 3D para marcar o ponto. O toque encaixa em pontos e vértices próximos.	Tap the plan or the 3D view to mark the point. Taps snap to nearby points and vertices.
+Ponto marcado.	Point marked.
+Caminho	Path
+Desenhar	Draw
+Linha existente	Existing line
+Toque na planta ou no 3D para marcar o caminho. O toque encaixa em pontos e vértices próximos.	Tap the plan or the 3D view to mark the path. Taps snap to nearby points and vertices.
+Pontos do caminho: {0}	Path points: {0}
+Nenhum eixo no projeto.	No alignment in the project.
+Linha: {0}	Line: {0}
+Toque numa linha existente.	Tap an existing line.
+No eixo	On the alignment
+Esconsidade (°)	Skew (°)
+Afastamento (m)	Offset (m)
+Estaca inicial	Start station
+Estaca final	End station
+Terreno (topo)	Terrain (top)
+Fundo no terreno	Invert below terrain
+Greide fixo	Fixed grade
+Declividade constante	Constant slope
+Acompanhar greide	Follow the road grade
+Profundidade (m)	Depth (m)
+Cota inicial	Start elevation
+Cota final	End elevation
+Declividade (%)	Slope (%)
+Nenhum greide no projeto.	No profile in the project.
+Geometria simplificada	Simplified geometry
+Toque o novo lugar.	Tap the new position.
+Este dispositivo	This device
+Total do projeto	Project total
+Comprimento: {0} m	Length: {0} m
+Concreto: {0} m³	Concrete: {0} m³
+Escavação: {0} m³	Excavation: {0} m³
+Formas: {0} m²	Formwork: {0} m²
+{0} (simplificado)	{0} (simplified)
